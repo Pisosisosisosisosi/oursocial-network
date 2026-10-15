@@ -75,9 +75,7 @@ function initSocket(server) {
         };
 
         // Сохранить в MongoDB
-        // Пока MongoDB не установлена — закомментируй строку ниже
-        // const messageId = await saveMessage(message);
-        const messageId = null; // временно
+        const messageId = await saveMessage(message);
 
         // Отправить всем в чате, включая отправителя
         io.to(`chat:${chatId}`).emit('receive_message', {

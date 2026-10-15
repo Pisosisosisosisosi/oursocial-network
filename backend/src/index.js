@@ -8,9 +8,8 @@ const PORT = process.env.PORT || 3001;
 
 async function start() {
   try {
-    // await connectDB();
-    // console.log('✅ MongoDB connected');
-    console.log('⚠️ Skipping MongoDB for now');
+    await connectDB();
+    console.log('✅ MongoDB connected');
 
     const app = createApp();
     const server = http.createServer(app);
