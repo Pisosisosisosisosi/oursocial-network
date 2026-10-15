@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 
 const authRoutes = require('./routes/auth');
+const chatsRoutes = require('./routes/chats');
+const messagesRoutes = require('./routes/messages');
 const errorMiddleware = require('./middleware/errors');
 
 function createApp() {
@@ -19,8 +21,10 @@ function createApp() {
     res.json({ status: 'ok', service: 'node-backend' });
   });
 
-  // 4. Подключение маршрутов авторизации
+  // 4. Подключение маршрутов
   app.use('/api/auth', authRoutes);
+  app.use('/api/chats', chatsRoutes);
+  app.use('/api/messages', messagesRoutes);
 
   // 5. 404-обработчик для несуществующих путей
   app.use((req, res, next) => {
