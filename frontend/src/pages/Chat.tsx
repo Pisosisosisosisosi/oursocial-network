@@ -69,7 +69,7 @@ export default function Chat() {
 
   // TODO: заменить на реальный recipientId из API чата
   // Пока — временная заглушка: ID второго пользователя
-  const recipientId = '6ad20f8e95279239674ac1c3';
+  const recipientId = new URLSearchParams(window.location.search).get('to') || user.id;
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
