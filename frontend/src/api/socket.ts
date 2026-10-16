@@ -10,6 +10,7 @@ export function connectSocket(token: string): Socket {
   socket = io(SOCKET_URL, {
     auth: { token },
     autoConnect: true,
+    reconnection: true,
   });
 
   socket.on('connect', () => {
