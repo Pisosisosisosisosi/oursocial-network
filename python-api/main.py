@@ -39,12 +39,16 @@ class UploadKeyRequest(BaseModel):
     publicKey: str
 
 
+class ExchangeRequest(BaseModel):
+    targetUserId: str
+
+
 # ---------- Startup ----------
 
 @app.on_event("startup")
 def startup():
     connect_db()
-    print("✅ MongoDB connected (python-api)")
+    print("DEBUG startup: MongoDB connected (python-api)")
 
 
 # ---------- Health ----------
@@ -191,12 +195,58 @@ def upload_key(payload: UploadKeyRequest, current=Depends(get_current_user)):
     keys = keys_collection()
     user_id = current["userId"]
 
+    print("DEBUG keys/upload: user_id=" + str(user_id))
+
     keys.update_one(
         {"userId": user_id},
         {"$set": make_key_document(user_id, payload.publicKey)},
         upsert=True,
     )
     return {"status": "ok"}
+
+
+@app.get("/keys/me")
+def get_my_key(current=Depends(get_current_user)):
+    keys = keys_collection()
+    user_id = current["userId"]
+
+    print("DEBUG keys/me: user_id=" + str(user_id))
+    print("DEBUG keys/me: count=" + str(keys.count_documents({})))
+    all_ids = [k.get("userId") for k in keys.find({}, {"userId": 1})]
+    print("DEBUG keys/me: all_ids=" + str(all_ids))
+
+    doc = keys.find_one({"userId": user_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Key not found for userId=" + str(user_id))
+    return {
+        "userId": doc["userId"],
+        "publicKey": doc["publicKey"],
+        "createdAt": doc.get("createdAt"),
+    }
+
+
+@app.post("/keys/exchange")
+def exchange_keys(payload: ExchangeRequest, current=Depends(get_current_user)):
+    target_user_id = payload.targetUserId
+    if not target_user_id:
+        raise HTTPException(status_code=400, detail="targetUserId required")
+    if target_user_id == current["userId"]:
+        raise HTTPException(status_code=400, detail="Cannot exchange with yourself")
+
+    keys = keys_collection()
+
+    my_key = keys.find_one({"userId": current["userId"]})
+    if not my_key:
+        raise HTTPException(status_code=404, detail="Your key not found. Upload it first.")
+
+    target_key = keys.find_one({"userId": target_user_id})
+    if not target_key:
+        raise HTTPException(status_code=404, detail="Target user has no public key")
+
+    return {
+        "myKey": my_key["publicKey"],
+        "targetKey": target_key["publicKey"],
+    }
 
 
 @app.get("/keys/{user_id}")
