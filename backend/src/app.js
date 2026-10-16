@@ -26,6 +26,12 @@ function createApp() {
   app.use('/api/chats', chatsRoutes);
   app.use('/api/messages', messagesRoutes);
 
+// Онлайн-пользователи (для отладки)
+app.get('/api/online', (req, res) => {
+  const { getOnlineUsers } = require('./socket');
+  res.json({ online: getOnlineUsers() });
+});
+
   // 5. 404-обработчик для несуществующих путей
   app.use((req, res, next) => {
     res.status(404).json({ error: 'Not Found' });

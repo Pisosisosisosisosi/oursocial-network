@@ -1,23 +1,24 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const { saveMessage } = require('./services/messages');
+const {
+  saveMessage,
+  markAsRead,
+  markAsDelivered,
+  deleteMessage,
+} = require('./services/messages');
 
 let io = null;
 
+const onlineUsers = new Map();
+
 function initSocket(server) {
   io = new Server(server, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST'],
-    },
+    cors: { origin: '*', methods: ['GET', 'POST'] },
   });
 
-  // JWT-аутентификация при подключении
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
-    if (!token) {
-      return next(new Error('No token provided'));
-    }
+    if (!token) return next(new Error('No token provided'));
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -32,24 +33,28 @@ function initSocket(server) {
   io.on('connection', (socket) => {
     console.log(`✅ User connected: ${socket.userId}`);
 
-    // Каждый пользователь заходит в свой личный room
+    if (!onlineUsers.has(socket.userId)) {
+      onlineUsers.set(socket.userId, new Set());
+      io.emit('user_online', {
+        userId: socket.userId,
+        username: socket.username,
+      });
+    }
+    onlineUsers.get(socket.userId).add(socket.id);
+
     socket.join(`user:${socket.userId}`);
 
-    // Присоединиться к чату
     socket.on('join_chat', ({ chatId }) => {
       if (!chatId) return;
       socket.join(`chat:${chatId}`);
       console.log(`User ${socket.userId} joined chat ${chatId}`);
     });
 
-    // Выйти из чата
     socket.on('leave_chat', ({ chatId }) => {
       if (!chatId) return;
       socket.leave(`chat:${chatId}`);
-      console.log(`User ${socket.userId} left chat ${chatId}`);
     });
 
-    // Отправка сообщения
     socket.on('send_message', async (data, callback) => {
       try {
         const {
@@ -60,7 +65,9 @@ function initSocket(server) {
         } = data || {};
 
         if (!chatId || !encryptedText) {
-          if (callback) callback({ status: 'error', error: 'chatId and encryptedText required' });
+          if (callback) {
+            callback({ status: 'error', error: 'chatId and encryptedText required' });
+          }
           return;
         }
 
@@ -71,27 +78,62 @@ function initSocket(server) {
           encryptedText,
           type,
           giftId,
-          createdAt: new Date(),
         };
 
-        // Сохранить в MongoDB
         const messageId = await saveMessage(message);
 
-        // Отправить всем в чате, включая отправителя
         io.to(`chat:${chatId}`).emit('receive_message', {
           ...message,
           _id: messageId,
+          createdAt: new Date(),
+          deliveredTo: [socket.userId],
+          readBy: [socket.userId],
+          deleted: false,
         });
 
-        // Подтверждение отправителю
-        if (callback) callback({ status: 'ok', messageId });
+        if (callback) callback({ status: 'ok', messageId: String(messageId) });
       } catch (err) {
         console.error('❌ send_message error:', err);
         if (callback) callback({ status: 'error', error: err.message });
       }
     });
 
-    // Индикатор "печатает..."
+    socket.on('mark_read', async ({ messageId }) => {
+      try {
+        if (!messageId) return;
+        const ok = await markAsRead(messageId, socket.userId);
+        if (ok) {
+          io.emit('message_read', { messageId, userId: socket.userId });
+        }
+      } catch (err) {
+        console.error('❌ mark_read error:', err);
+      }
+    });
+
+    socket.on('mark_delivered', async ({ messageId }) => {
+      try {
+        if (!messageId) return;
+        const ok = await markAsDelivered(messageId, socket.userId);
+        if (ok) {
+          io.emit('message_delivered', { messageId, userId: socket.userId });
+        }
+      } catch (err) {
+        console.error('❌ mark_delivered error:', err);
+      }
+    });
+
+    socket.on('delete_message', async ({ messageId }) => {
+      try {
+        if (!messageId) return;
+        const ok = await deleteMessage(messageId, socket.userId);
+        if (ok) {
+          io.emit('message_deleted', { messageId, userId: socket.userId });
+        }
+      } catch (err) {
+        console.error('❌ delete_message error:', err);
+      }
+    });
+
     socket.on('typing', ({ chatId }) => {
       if (!chatId) return;
       socket.to(`chat:${chatId}`).emit('user_typing', {
@@ -101,9 +143,17 @@ function initSocket(server) {
       });
     });
 
-    // Отключение
     socket.on('disconnect', () => {
       console.log(`❌ User disconnected: ${socket.userId}`);
+
+      const sockets = onlineUsers.get(socket.userId);
+      if (sockets) {
+        sockets.delete(socket.id);
+        if (sockets.size === 0) {
+          onlineUsers.delete(socket.userId);
+          io.emit('user_offline', { userId: socket.userId });
+        }
+      }
     });
   });
 
@@ -115,4 +165,8 @@ function getIO() {
   return io;
 }
 
-module.exports = { initSocket, getIO };
+function getOnlineUsers() {
+  return Array.from(onlineUsers.keys());
+}
+
+module.exports = { initSocket, getIO, getOnlineUsers };
