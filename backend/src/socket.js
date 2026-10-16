@@ -6,6 +6,7 @@ const {
   markAsDelivered,
   deleteMessage,
 } = require('./services/messages');
+const { getChatById, markChatAsRead } = require('./services/chats');
 
 let io = null;
 
@@ -16,14 +17,21 @@ function initSocket(server) {
     cors: { origin: '*', methods: ['GET', 'POST'] },
   });
 
+  // JWT-аутентификация при подключении
   io.use((socket, next) => {
-    const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error('No token provided'));
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, '');
+
+    if (!token) {
+      return next(new Error('No token provided'));
+    }
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.userId = decoded.userId;
-      socket.username = decoded.username;
+      const secret = process.env.JWT_SECRET || 'secret';
+      const decoded = jwt.verify(token, secret);
+      socket.userId = String(decoded.userId || decoded.id || decoded._id);
+      socket.username = decoded.username || decoded.name || 'Anonymous';
       next();
     } catch (err) {
       next(new Error('Invalid token'));
@@ -31,8 +39,9 @@ function initSocket(server) {
   });
 
   io.on('connection', (socket) => {
-    console.log(`✅ User connected: ${socket.userId}`);
+    console.log(`✅ User connected: ${socket.userId} (${socket.username})`);
 
+    // Отслеживание онлайн-статуса
     if (!onlineUsers.has(socket.userId)) {
       onlineUsers.set(socket.userId, new Set());
       io.emit('user_online', {
@@ -42,62 +51,103 @@ function initSocket(server) {
     }
     onlineUsers.get(socket.userId).add(socket.id);
 
+    // Личная комната пользователя для персональных событий
     socket.join(`user:${socket.userId}`);
 
+    // Присоединиться к комнате чата
     socket.on('join_chat', ({ chatId }) => {
       if (!chatId) return;
       socket.join(`chat:${chatId}`);
       console.log(`User ${socket.userId} joined chat ${chatId}`);
     });
 
+    // Выйти из комнаты чата
     socket.on('leave_chat', ({ chatId }) => {
       if (!chatId) return;
       socket.leave(`chat:${chatId}`);
+      console.log(`User ${socket.userId} left chat ${chatId}`);
     });
 
+    // Отправка сообщения
     socket.on('send_message', async (data, callback) => {
       try {
         const {
           chatId,
           encryptedText,
+          text,
           type = 'text',
           giftId = null,
+          replyTo = null,
         } = data || {};
 
-        if (!chatId || !encryptedText) {
+        const content = encryptedText !== undefined ? encryptedText : text;
+        if (!chatId || (content === undefined || content === null || content === '')) {
           if (callback) {
-            callback({ status: 'error', error: 'chatId and encryptedText required' });
+            callback({ status: 'error', error: 'chatId and encryptedText/text required' });
           }
           return;
         }
 
+        // Проверяем существование чата и членство (если сервис доступен)
+        let chat = null;
+        try {
+          if (typeof getChatById === 'function') {
+            chat = await getChatById(chatId);
+            if (chat && chat.participants) {
+              const isMember = chat.participants.map(String).includes(socket.userId);
+              if (!isMember) {
+                if (callback) callback({ status: 'error', error: 'Access denied: not a member of this chat' });
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          // Игнорируем проверку чата, если сервис недоступен
+        }
+
         const message = {
-          chatId,
+          chatId: String(chatId),
           senderId: socket.userId,
           senderName: socket.username,
-          encryptedText,
+          encryptedText: String(content),
           type,
-          giftId,
+          giftId: giftId ? String(giftId) : null,
+          replyTo: replyTo ? String(replyTo) : null,
+          createdAt: new Date(),
         };
 
         const messageId = await saveMessage(message);
 
-        io.to(`chat:${chatId}`).emit('receive_message', {
+        const broadcastMessage = {
           ...message,
           _id: messageId,
-          createdAt: new Date(),
           deliveredTo: [socket.userId],
           readBy: [socket.userId],
           deleted: false,
-        });
+        };
 
-        if (callback) callback({ status: 'ok', messageId: String(messageId) });
+        // Отправить всем в комнате чата, включая отправителя
+        io.to(`chat:${chatId}`).emit('receive_message', broadcastMessage);
+
+        // Оповестить участников об обновлении списка чатов
+        if (chat && chat.participants) {
+          chat.participants.forEach((pId) => {
+            io.to(`user:${pId}`).emit('chat_updated', {
+              chatId: String(chatId),
+              lastMessage: broadcastMessage,
+              updatedAt: broadcastMessage.createdAt,
+            });
+          });
+        }
+
+        if (callback) callback({ status: 'ok', messageId: String(messageId), message: broadcastMessage });
       } catch (err) {
         console.error('❌ send_message error:', err);
         if (callback) callback({ status: 'error', error: err.message });
       }
     });
 
+    // Отметка сообщения как прочитанного
     socket.on('mark_read', async ({ messageId }) => {
       try {
         if (!messageId) return;
@@ -110,6 +160,31 @@ function initSocket(server) {
       }
     });
 
+    // Отметка чата как прочитанного (пакетно)
+    socket.on('mark_as_read', async ({ chatId }, callback) => {
+      try {
+        if (!chatId) return;
+        if (typeof markChatAsRead === 'function') {
+          await markChatAsRead(chatId, socket.userId);
+        }
+
+        io.to(`chat:${chatId}`).emit('messages_read', {
+          chatId,
+          userId: socket.userId,
+        });
+
+        io.to(`user:${socket.userId}`).emit('unread_updated', {
+          chatId,
+          unreadCount: 0,
+        });
+
+        if (callback) callback({ status: 'ok', chatId });
+      } catch (err) {
+        if (callback) callback({ status: 'error', error: err.message });
+      }
+    });
+
+    // Отметка сообщения как доставленного
     socket.on('mark_delivered', async ({ messageId }) => {
       try {
         if (!messageId) return;
@@ -122,6 +197,7 @@ function initSocket(server) {
       }
     });
 
+    // Удаление сообщения
     socket.on('delete_message', async ({ messageId }) => {
       try {
         if (!messageId) return;
@@ -134,6 +210,7 @@ function initSocket(server) {
       }
     });
 
+    // Индикатор набора текста
     socket.on('typing', ({ chatId }) => {
       if (!chatId) return;
       socket.to(`chat:${chatId}`).emit('user_typing', {
@@ -143,6 +220,7 @@ function initSocket(server) {
       });
     });
 
+    // Отключение
     socket.on('disconnect', () => {
       console.log(`❌ User disconnected: ${socket.userId}`);
 
