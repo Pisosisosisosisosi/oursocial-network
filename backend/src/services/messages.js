@@ -3,9 +3,25 @@ const { ObjectId } = require('mongodb');
 const { updateLastMessage, recalculateLastMessage, toObjectId } = require('./chats');
 
 /**
+ * Безопасное преобразование в ObjectId MongoDB
+ */
+function safeObjectId(id) {
+  if (!id) return null;
+  if (id instanceof ObjectId) return id;
+  if (typeof id === 'string' && ObjectId.isValid(id) && id.length === 24) {
+    try {
+      return new ObjectId(id);
+    } catch (e) {
+      return id;
+    }
+  }
+  return id;
+}
+
+/**
  * Сохранить новое сообщение в базе данных и обновить статус чата
  * @param {object} messageData - { chatId, senderId, senderName, encryptedText, type, giftId, replyTo }
- * @returns {Promise<object>} сохраненное сообщение с _id
+ * @returns {Promise<ObjectId>} сохраненный идентификатор сообщения
  */
 async function saveMessage(messageData) {
   const db = getDB();
@@ -21,11 +37,9 @@ async function saveMessage(messageData) {
     replyTo = null,
   } = messageData;
 
+  const content = encryptedText !== undefined ? encryptedText : messageData.text;
   if (!chatId) throw new Error('chatId is required');
   if (!senderId) throw new Error('senderId is required');
-  if (!encryptedText && encryptedText !== '') {
-    throw new Error('encryptedText or text is required');
-  }
 
   const senderIdStr = String(senderId);
   const chatIdStr = String(chatId);
@@ -34,95 +48,62 @@ async function saveMessage(messageData) {
     chatId: chatIdStr,
     senderId: senderIdStr,
     senderName: senderName || 'Anonymous',
-    encryptedText: String(encryptedText),
+    encryptedText: content !== undefined && content !== null ? String(content) : '',
     type: type || 'text',
     giftId: giftId ? String(giftId) : null,
     replyTo: replyTo ? String(replyTo) : null,
     readBy: [senderIdStr],
+    deliveredTo: [senderIdStr],
+    deleted: false,
     isEdited: false,
     createdAt: messageData.createdAt ? new Date(messageData.createdAt) : new Date(),
   };
 
   const result = await db.collection('messages').insertOne(newDoc);
-  const savedMessage = {
-    _id: String(result.insertedId),
-    ...newDoc,
-  };
+  const insertedId = result.insertedId;
 
-  // Обновляем последнее сообщение и счетчик непрочитанных в документе чата
-  await updateLastMessage(chatIdStr, savedMessage);
+  // Обновить lastMessage в чате
+  try {
+    if (typeof updateLastMessage === 'function') {
+      await updateLastMessage(chatIdStr, {
+        _id: insertedId,
+        ...newDoc,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to update chat lastMessage:', err.message);
+  }
 
-  return savedMessage;
+  return insertedId;
 }
 
 /**
- * Получить историю сообщений для чата с поддержкой пагинации и курсоров
+ * Получить список сообщений чата с пагинацией (не удаленные)
  * @param {string} chatId
- * @param {object} options - { limit, before, after, skip, order }
- * @returns {Promise<Array>} список сообщений
+ * @param {number} limit
+ * @param {number} offset
+ * @returns {Promise<Array>}
  */
-async function getMessages(chatId, options = {}) {
+async function getMessages(chatId, limit = 50, offset = 0) {
   const db = getDB();
   if (!db) throw new Error('DB not connected');
 
   const chatIdStr = String(chatId);
-  const objId = toObjectId(chatId);
+  const objId = safeObjectId(chatId);
 
-  const query = {
-    $or: [{ chatId: chatIdStr }, { chatId: objId }],
-  };
-
-  // Курсорная пагинация (скролл назад во времени)
-  if (options.before) {
-    const beforeDate = new Date(options.before);
-    if (!isNaN(beforeDate.getTime())) {
-      query.createdAt = { $lt: beforeDate };
-    } else {
-      const beforeObjId = toObjectId(options.before);
-      if (beforeObjId) {
-        query._id = { $lt: beforeObjId };
-      }
-    }
-  }
-
-  // Курсорная пагинация (новые сообщения вперед)
-  if (options.after) {
-    const afterDate = new Date(options.after);
-    if (!isNaN(afterDate.getTime())) {
-      query.createdAt = { $gt: afterDate };
-    }
-  }
-
-  const limit = Math.min(Math.max(parseInt(options.limit, 10) || 50, 1), 100);
-  const skip = Math.max(parseInt(options.skip || options.offset, 10) || 0, 0);
-  const order = options.order === 'desc' ? 'desc' : 'asc';
-
-  // Выбираем самые свежие сообщения
-  const rawMessages = await db
-    .collection('messages')
-    .find(query)
+  return db.collection('messages')
+    .find({
+      $or: [{ chatId: chatIdStr }, { chatId: objId }],
+      deleted: { $ne: true },
+    })
     .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
+    .skip(Number(offset) || 0)
+    .limit(Number(limit) || 50)
     .toArray();
-
-  const formattedMessages = rawMessages.map((m) => ({
-    ...m,
-    _id: String(m._id),
-    chatId: String(m.chatId),
-    senderId: String(m.senderId),
-  }));
-
-  // Для фронтенда мессенджера порядок по умолчанию — хронологический (старые -> новые)
-  if (order === 'asc') {
-    formattedMessages.reverse();
-  }
-
-  return formattedMessages;
 }
 
 /**
- * Получить конкретное сообщение по ID
+ * Найти сообщение по ID
  * @param {string} messageId
  * @returns {Promise<object|null>}
  */
@@ -130,86 +111,58 @@ async function getMessageById(messageId) {
   const db = getDB();
   if (!db) throw new Error('DB not connected');
 
-  const objId = toObjectId(messageId);
-  const message = await db.collection('messages').findOne({
+  const objId = safeObjectId(messageId);
+  return db.collection('messages').findOne({
     $or: [{ _id: objId }, { _id: String(messageId) }],
   });
-
-  if (!message) return null;
-
-  return {
-    ...message,
-    _id: String(message._id),
-    chatId: String(message.chatId),
-    senderId: String(message.senderId),
-  };
 }
 
 /**
- * Отредактировать текст сообщения
+ * Пометить сообщение прочитанным пользователем
  * @param {string} messageId
- * @param {string} userId - ID запрашивающего (должен быть автором)
- * @param {string} newText
- * @returns {Promise<object>} обновленное сообщение
+ * @param {string} userId
  */
-async function updateMessage(messageId, userId, newText) {
+async function markAsRead(messageId, userId) {
   const db = getDB();
   if (!db) throw new Error('DB not connected');
 
-  const message = await getMessageById(messageId);
-  if (!message) {
-    const err = new Error('Message not found');
-    err.status = 404;
-    throw err;
-  }
+  const objId = safeObjectId(messageId);
+  const userIdStr = String(userId);
 
-  if (String(message.senderId) !== String(userId)) {
-    const err = new Error('Access denied: You can only edit your own messages');
-    err.status = 403;
-    throw err;
-  }
-
-  const objId = toObjectId(messageId);
-  const now = new Date();
-
-  await db.collection('messages').updateOne(
-    { $or: [{ _id: objId }, { _id: String(messageId) }] },
+  const result = await db.collection('messages').updateOne(
     {
-      $set: {
-        encryptedText: String(newText),
-        isEdited: true,
-        editedAt: now,
-      },
-    }
+      $or: [{ _id: objId }, { _id: String(messageId) }],
+    },
+    { $addToSet: { readBy: userIdStr } }
   );
 
-  const updatedMessage = await getMessageById(messageId);
-
-  // Проверяем, было ли это сообщение последним в чате — если да, обновляем превью в чате
-  try {
-    const chat = await db.collection('chats').findOne({
-      $or: [{ _id: toObjectId(message.chatId) }, { _id: String(message.chatId) }],
-    });
-    if (chat && chat.lastMessage && String(chat.lastMessage.messageId) === String(messageId)) {
-      await db.collection('chats').updateOne(
-        { _id: chat._id },
-        {
-          $set: {
-            'lastMessage.encryptedText': String(newText),
-            'lastMessage.isEdited': true,
-          },
-        }
-      );
-    }
-  } catch (e) {
-    console.error('Failed to update chat lastMessage on edit:', e.message);
-  }
-
-  return updatedMessage;
+  return result.modifiedCount > 0;
 }
 
 /**
- * Удалить сообщение
+ * Пометить сообщение доставленным пользователю
+ * @param {string} messageId
+ * @param {string} userId
+ */
+async function markAsDelivered(messageId, userId) {
+  const db = getDB();
+  if (!db) throw new Error('DB not connected');
+
+  const objId = safeObjectId(messageId);
+  const userIdStr = String(userId);
+
+  const result = await db.collection('messages').updateOne(
+    {
+      $or: [{ _id: objId }, { _id: String(messageId) }],
+    },
+    { $addToSet: { deliveredTo: userIdStr } }
+  );
+
+  return result.modifiedCount > 0;
+}
+
+/**
+ * Удалить сообщение (soft delete)
  * @param {string} messageId
  * @param {string} userId
  * @param {boolean} isChatAdmin
@@ -232,15 +185,104 @@ async function deleteMessage(messageId, userId, isChatAdmin = false) {
     throw err;
   }
 
-  const objId = toObjectId(messageId);
-  await db.collection('messages').deleteOne({
-    $or: [{ _id: objId }, { _id: String(messageId) }],
-  });
+  const objId = safeObjectId(messageId);
+  await db.collection('messages').updateOne(
+    {
+      $or: [{ _id: objId }, { _id: String(messageId) }],
+    },
+    {
+      $set: {
+        deleted: true,
+        deletedAt: new Date(),
+      },
+    }
+  );
 
   // Пересчитываем lastMessage в чате
-  await recalculateLastMessage(message.chatId);
+  try {
+    if (typeof recalculateLastMessage === 'function') {
+      await recalculateLastMessage(message.chatId);
+    }
+  } catch (err) {
+    console.error('Failed to recalculate chat lastMessage:', err.message);
+  }
 
   return { success: true, messageId: String(messageId), chatId: String(message.chatId) };
+}
+
+/**
+ * Получить количество непрочитанных сообщений в чате
+ * @param {string} chatId
+ * @param {string} userId
+ */
+async function getUnreadCount(chatId, userId) {
+  const db = getDB();
+  if (!db) throw new Error('DB not connected');
+
+  const chatIdStr = String(chatId);
+  const userIdStr = String(userId);
+  const objId = safeObjectId(chatId);
+
+  return db.collection('messages').countDocuments({
+    $or: [{ chatId: chatIdStr }, { chatId: objId }],
+    deleted: { $ne: true },
+    senderId: { $ne: userIdStr },
+    readBy: { $ne: userIdStr },
+  });
+}
+
+/**
+ * Отредактировать текст сообщения
+ * @param {string} messageId
+ * @param {string} userId
+ * @param {string} newEncryptedText
+ */
+async function updateMessage(messageId, userId, newEncryptedText) {
+  const db = getDB();
+  if (!db) throw new Error('DB not connected');
+
+  const message = await getMessageById(messageId);
+  if (!message) {
+    const err = new Error('Message not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (String(message.senderId) !== String(userId)) {
+    const err = new Error('Access denied: You can only edit your own messages');
+    err.status = 403;
+    throw err;
+  }
+
+  const objId = safeObjectId(messageId);
+  await db.collection('messages').updateOne(
+    {
+      $or: [{ _id: objId }, { _id: String(messageId) }],
+    },
+    {
+      $set: {
+        encryptedText: String(newEncryptedText),
+        isEdited: true,
+        editedAt: new Date(),
+      },
+    }
+  );
+
+  // Обновляем lastMessage если это было последнее сообщение
+  try {
+    if (typeof recalculateLastMessage === 'function') {
+      await recalculateLastMessage(message.chatId);
+    }
+  } catch (err) {
+    console.error('Failed to recalculate last message on update:', err.message);
+  }
+
+  return {
+    ...message,
+    encryptedText: String(newEncryptedText),
+    isEdited: true,
+    editedAt: new Date(),
+  };
 }
 
 /**
@@ -253,11 +295,12 @@ async function markMessagesAsRead(chatId, userId) {
   if (!db) throw new Error('DB not connected');
 
   const userIdStr = String(userId);
-  const objId = toObjectId(chatId);
+  const chatIdStr = String(chatId);
+  const objId = safeObjectId(chatId);
 
   await db.collection('messages').updateMany(
     {
-      $or: [{ chatId: String(chatId) }, { chatId: objId }],
+      $or: [{ chatId: chatIdStr }, { chatId: objId }],
       readBy: { $ne: userIdStr },
     },
     {
@@ -265,14 +308,17 @@ async function markMessagesAsRead(chatId, userId) {
     }
   );
 
-  return { success: true, chatId: String(chatId), userId: userIdStr };
+  return { success: true, chatId: chatIdStr, userId: userIdStr };
 }
 
 module.exports = {
   saveMessage,
   getMessages,
   getMessageById,
-  updateMessage,
+  markAsRead,
+  markAsDelivered,
   deleteMessage,
+  getUnreadCount,
+  updateMessage,
   markMessagesAsRead,
 };
