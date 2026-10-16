@@ -47,6 +47,12 @@ export const keysApi = {
   upload: (publicKey: string) =>
     api.post('/keys/upload', { publicKey }),
 
+  me: () =>
+    api.get<{ userId: string; publicKey: string }>('/keys/me'),
+
   get: (userId: string) =>
     api.get<{ userId: string; publicKey: string }>(`/keys/${userId}`),
+
+  exchange: (targetUserId: string) =>
+    api.post<{ myKey: string; targetKey: string }>('/keys/exchange', { targetUserId }),
 };

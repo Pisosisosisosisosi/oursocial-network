@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSocket } from '../api/socket';
+import { decryptMessage } from '../crypto/encrypt';
 import MessageList, { type Message } from '../components/MessageList';
 import MessageInput from '../components/MessageInput';
 
@@ -24,13 +25,25 @@ export default function Chat() {
 
     socket.emit('join_chat', { chatId });
 
-    const handleReceive = (msg: Message) => {
-      if (msg.chatId === chatId) {
-        setMessages((prev) => {
-          if (msg._id && prev.some((m) => m._id === msg._id)) return prev;
-          return [...prev, msg];
-        });
+    const handleReceive = async (msg: Message) => {
+      if (msg.chatId !== chatId) return;
+
+      let decrypted = '[Зашифровано]';
+      try {
+        decrypted = await decryptMessage(msg.encryptedText);
+      } catch (err) {
+        console.error('❌ Ошибка расшифровки:', err);
       }
+
+      const decryptedMsg: Message = {
+        ...msg,
+        encryptedText: decrypted,
+      };
+
+      setMessages((prev) => {
+        if (msg._id && prev.some((m) => m._id === msg._id)) return prev;
+        return [...prev, decryptedMsg];
+      });
     };
 
     const handleTyping = (data: { userId: string; chatId: string; username?: string }) => {
@@ -54,6 +67,10 @@ export default function Chat() {
     return <div className="p-8">Загрузка...</div>;
   }
 
+  // TODO: заменить на реальный recipientId из API чата
+  // Пока — временная заглушка: ID второго пользователя
+  const recipientId = '6ad20f8e95279239674ac1c3';
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <header className="bg-white shadow p-4 flex items-center gap-4">
@@ -73,7 +90,7 @@ export default function Chat() {
 
       <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto bg-gray-50">
         <MessageList messages={messages} currentUserId={user.id} />
-        <MessageInput chatId={chatId} />
+        <MessageInput chatId={chatId} recipientId={recipientId} />
       </div>
     </div>
   );
