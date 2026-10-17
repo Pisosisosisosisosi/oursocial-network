@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSocket } from '../api/socket';
-import { decryptMessage } from '../crypto/encrypt';
+import { decryptMessage, encryptMessage } from '../crypto/encrypt';
 import MessageList, { type Message } from '../components/MessageList';
 import MessageInput from '../components/MessageInput';
 import axios from 'axios';
@@ -28,14 +28,12 @@ export default function Chat() {
       try {
         setLoading(true);
         
-        // Запрашиваем историю сообщений
         const res = await axios.get(`${NODE_API}/api/chats/${chatId}/messages`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
         const history = res.data.messages || res.data || [];
         
-        // Расшифровываем каждое сообщение
         const decryptedHistory = await Promise.all(
           history.map(async (msg: any) => {
             let decrypted = '[Зашифровано]';
@@ -50,7 +48,6 @@ export default function Chat() {
 
         setMessages(decryptedHistory);
 
-        // Определяем ID собеседника (берем из первого сообщения или из URL)
         const urlParams = new URLSearchParams(window.location.search);
         const toId = urlParams.get('to');
         if (toId) {

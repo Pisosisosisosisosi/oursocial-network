@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, FormEvent } from 'react';
 import { getSocket } from '../api/socket';
 import { keysApi } from '../api/client';
 import { encryptMessage } from '../crypto/encrypt';
@@ -28,10 +28,20 @@ export default function MessageInput({ chatId, recipientId }: Props) {
     setError('');
 
     try {
-      const keyRes = await keysApi.get(recipientId);
-      const recipientPublicKey = keyRes.data.publicKey;
+      let encrypted = trimmed;
 
-      const encrypted = await encryptMessage(trimmed, recipientPublicKey);
+      // Пытаемся получить ключ и зашифровать. Если ключа нет (404) - отправляем как есть.
+      if (recipientId) {
+        try {
+          const keyRes = await keysApi.get(recipientId);
+          if (keyRes.data.publicKey) {
+            encrypted = await encryptMessage(trimmed, keyRes.data.publicKey);
+          }
+        } catch (err) {
+          console.warn('Не удалось зашифровать сообщение (ключ не найден). Отправляем без шифрования.', err);
+        }
+      }
+
       const moderationEnabled = localStorage.getItem('moderationEnabled') !== 'false';
 
       socket.emit(
