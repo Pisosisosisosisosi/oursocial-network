@@ -3,5 +3,10 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  base: './',
   plugins: [react(), tailwindcss()],
+  build: {
+    minify: 'esbuild',
+    target: 'esnext',
+  },
 })
