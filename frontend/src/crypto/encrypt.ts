@@ -31,20 +31,20 @@ export async function encryptMessage(text: string, publicKeyJwk: string): Promis
 }
 
 export async function decryptMessage(encryptedBase64: string): Promise<string> {
+  if (!encryptedBase64) return '';
   try {
     const privateKey = await loadPrivateKey();
     if (!privateKey) {
-      console.warn('⚠️ No private key found');
-      return '[Нет ключа для расшифровки]';
+      return encryptedBase64;
     }
 
     const encrypted = base64ToArrayBuffer(encryptedBase64);
     const decrypted = await window.crypto.subtle.decrypt(ALGO, privateKey, encrypted);
 
     return new TextDecoder().decode(decrypted);
-  } catch (err) {
-    console.error('❌ Decryption failed:', err);
-    return '[Не удалось расшифровать]';
+  } catch (_err) {
+    // If decryption fails (e.g. sent as plain text), show the original message text
+    return encryptedBase64;
   }
 }
 

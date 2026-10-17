@@ -1,6 +1,8 @@
 import { io, type Socket } from 'socket.io-client';
 
-const SOCKET_URL = (import.meta.env && import.meta.env.VITE_SOCKET_URL) || 'http://localhost:3001';
+const SOCKET_URL =
+  (import.meta.env && import.meta.env.VITE_SOCKET_URL) ||
+  'https://oursocial-network-production.up.railway.app';
 
 let socket: Socket | null = null;
 
