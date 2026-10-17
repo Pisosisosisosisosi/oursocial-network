@@ -60,6 +60,34 @@ export default function Chats() {
     loadData();
   }, [user, token]);
 
+  // Новая функция для начала личного чата
+  const startDirectChat = async (targetUser: User) => {
+    if (!user) return;
+    
+    try {
+      // Создаем или получаем существующий чат
+      const res = await axios.post(`${NODE_API}/api/chats`, {
+        type: 'direct',
+        participantIds: [targetUser.id]
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Извлекаем ID чата
+      const newChatId = res.data.chat?._id || res.data._id || res.data.chatId;
+      
+      if (newChatId) {
+        // Переходим в чат, передавая ID собеседника через ?to=
+        navigate(`/chat/${newChatId}?to=${targetUser.id}`);
+      } else {
+        alert('Не удалось создать чат');
+      }
+    } catch (err) {
+      console.error('Ошибка создания чата:', err);
+      alert('Ошибка при создании чата');
+    }
+  };
+
   const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedUsers.length === 0) {
       alert('Введите название и выберите хотя бы одного участника');
@@ -145,7 +173,9 @@ export default function Chats() {
             {users.map(u => (
               <div key={u.id} className="py-3 flex justify-between items-center">
                 <span>{u.username}</span>
-                <button onClick={() => navigate(`/chat/${u.id}`)} className="bg-green-500 text-white px-3 py-1 rounded text-sm">Написать</button>
+                <button onClick={() => startDirectChat(u)} className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
+                  Написать
+                </button>
               </div>
             ))}
           </div>
