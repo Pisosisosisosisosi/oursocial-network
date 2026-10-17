@@ -82,7 +82,7 @@ export default function Chats() {
         navigate(`/chat/${newChatId}`);
       } else {
         setIsModalOpen(false);
-        window.location.reload(); // Перезагружаем, чтобы увидеть новый чат в списке
+        window.location.reload();
       }
     } catch (err) {
       console.error('Ошибка создания группы:', err);
