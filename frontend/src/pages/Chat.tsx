@@ -15,20 +15,25 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recipientId, setRecipientId] = useState<string>('');
 
-  // 1. Загрузка истории сообщений из базы
+  const NODE_API = 'https://oursocial-network-production.up.railway.app';
+  const token = localStorage.getItem('token');
+
+  // 1. Загрузка истории сообщений и определение собеседника
   useEffect(() => {
     if (!chatId || !user) return;
 
     const loadHistory = async () => {
       try {
         setLoading(true);
-        // Делаем запрос к Node.js API
-        const res = await axios.get(`https://oursocial-network-production.up.railway.app/api/chats/${chatId}/messages`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        
+        // Запрашиваем историю сообщений
+        const res = await axios.get(`${NODE_API}/api/chats/${chatId}/messages`, {
+          headers: { Authorization: `Bearer ${token}` }
         });
 
-        const history = res.data.messages || res.data; 
+        const history = res.data.messages || res.data || [];
         
         // Расшифровываем каждое сообщение
         const decryptedHistory = await Promise.all(
@@ -44,6 +49,16 @@ export default function Chat() {
         );
 
         setMessages(decryptedHistory);
+
+        // Определяем ID собеседника (берем из первого сообщения или из URL)
+        const urlParams = new URLSearchParams(window.location.search);
+        const toId = urlParams.get('to');
+        if (toId) {
+          setRecipientId(toId);
+        } else if (history.length > 0) {
+          const otherUserMsg = history.find((m: any) => m.senderId !== user.id);
+          if (otherUserMsg) setRecipientId(otherUserMsg.senderId);
+        }
       } catch (err) {
         console.error('Ошибка загрузки истории:', err);
       } finally {
@@ -52,7 +67,7 @@ export default function Chat() {
     };
 
     loadHistory();
-  }, [chatId, user]);
+  }, [chatId, user, token, NODE_API]);
 
   // 2. Подключение к Socket.IO для новых сообщений
   useEffect(() => {
@@ -102,16 +117,13 @@ export default function Chat() {
     return <div className="p-8">Загрузка...</div>;
   }
 
-  // TODO: позже будем брать из данных чата
-  const recipientId = user.id; 
-
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <header className="bg-white shadow p-4 flex items-center gap-4">
         <button onClick={() => navigate('/')} className="text-blue-500 hover:underline">
           ← Назад
         </button>
-        <h1 className="text-lg font-bold">Чат: {chatId}</h1>
+        <h1 className="text-lg font-bold">Чат: {chatId.slice(-6)}</h1>
         {typingUser && (
           <span className="text-sm text-gray-500 ml-auto">{typingUser} печатает...</span>
         )}
