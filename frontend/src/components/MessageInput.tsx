@@ -1,4 +1,4 @@
-﻿import { useState, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { getSocket } from '../api/socket';
 import { keysApi } from '../api/client';
 import { encryptMessage } from '../crypto/encrypt';
@@ -6,9 +6,10 @@ import { encryptMessage } from '../crypto/encrypt';
 interface Props {
   chatId: string;
   recipientId: string;
+  onMessageSent?: (msg: any) => void;
 }
 
-export default function MessageInput({ chatId, recipientId }: Props) {
+export default function MessageInput({ chatId, recipientId, onMessageSent }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -20,7 +21,7 @@ export default function MessageInput({ chatId, recipientId }: Props) {
 
     const socket = getSocket();
     if (!socket) {
-      setError('Socket не подключён');
+      setError('Socket не подключён. Проверьте соединение.');
       return;
     }
 
@@ -28,12 +29,22 @@ export default function MessageInput({ chatId, recipientId }: Props) {
     setError('');
 
     try {
+      let encrypted = trimmed;
       const keyRes = await keysApi.get(recipientId);
-      const recipientPublicKey = keyRes.data.publicKey;
-      const encrypted = await encryptMessage(trimmed, recipientPublicKey);
+      if (keyRes?.data?.publicKey) {
+        try {
+          encrypted = await encryptMessage(trimmed, keyRes.data.publicKey);
+        } catch {
+          // fallback to plaintext
+        }
+      }
 
-      // Читаем настройку модерации (по умолчанию включена)
-      const moderationEnabled = localStorage.getItem('moderationEnabled') !== 'false';
+      let ackReceived = false;
+      const timer = setTimeout(() => {
+        if (!ackReceived) {
+          setSending(false);
+        }
+      }, 5000);
 
       socket.emit(
         'send_message',
@@ -41,25 +52,41 @@ export default function MessageInput({ chatId, recipientId }: Props) {
           chatId,
           encryptedText: encrypted,
           type: 'text',
-          moderationEnabled, // <-- Передаем флаг на сервер
         },
         (response: any) => {
+          ackReceived = true;
+          clearTimeout(timer);
           setSending(false);
           if (response?.status === 'ok') {
             setText('');
+            setError('');
+            if (response.message && onMessageSent) {
+              onMessageSent(response.message);
+            }
           } else {
-            setError('Ошибка отправки: ' + (response?.error || 'unknown'));
+            setError('Ошибка отправки: ' + (response?.error || 'не удалось доставить'));
           }
         }
       );
     } catch (err: any) {
       setSending(false);
-      setError(err.message || 'Ошибка шифрования');
+      console.error('❌ Error:', err);
+      setError(err.message || 'Ошибка отправки сообщения');
+    }
+  };
+
+  const handleTyping = () => {
+    const socket = getSocket();
+    if (socket && text.length > 0) {
+      socket.emit('typing', { chatId });
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="border-t bg-white p-3 flex flex-col gap-2">
+    <form
+      onSubmit={handleSubmit}
+      className="border-t bg-white p-3 flex flex-col gap-2"
+    >
       {error && (
         <div className="bg-red-100 text-red-700 p-2 rounded text-sm">
           {error}
@@ -69,7 +96,10 @@ export default function MessageInput({ chatId, recipientId }: Props) {
         <input
           type="text"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            handleTyping();
+          }}
           placeholder="Введите сообщение..."
           className="flex-1 px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-400"
           disabled={sending}
