@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
@@ -24,13 +24,11 @@ export default function Chats() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Модалка создания группы
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
 
-  // Модалка настроек
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [moderationEnabled, setModerationEnabled] = useState(true);
 
@@ -44,8 +42,8 @@ export default function Chats() {
     const loadData = async () => {
       try {
         const [chatsRes, usersRes] = await Promise.all([
-          axios.get(${NODE_API}/api/chats, { headers: { Authorization: Bearer  } }),
-          axios.get(${PYTHON_API}/users/search?q=, { headers: { Authorization: Bearer  } }).catch(() => ({ data: [] }))
+          axios.get(`${NODE_API}/api/chats`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${PYTHON_API}/users/search?q=`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
         ]);
 
         setChats(Array.isArray(chatsRes.data) ? chatsRes.data : (chatsRes.data.chats || []));
@@ -70,17 +68,17 @@ export default function Chats() {
 
     setCreating(true);
     try {
-      const res = await axios.post(${NODE_API}/api/chats, {
+      const res = await axios.post(`${NODE_API}/api/chats`, {
         type: 'group',
         title: groupName,
         participantIds: selectedUsers
       }, {
-        headers: { Authorization: Bearer  }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       const newChatId = res.data.chat?._id || res.data._id || res.data.chatId;
       if (newChatId) {
-        navigate(/chat/);
+        navigate(`/chat/${newChatId}`);
       } else {
         setIsModalOpen(false);
         window.location.reload();
@@ -111,28 +109,15 @@ export default function Chats() {
         <h1 className="text-xl font-bold">Наша соцсеть</h1>
         <div className="flex items-center gap-4">
           <span>{user?.username}</span>
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="bg-gray-200 text-gray-800 px-3 py-1 rounded hover:bg-gray-300"
-            title="Настройки"
-          >
-            ⚙️
-          </button>
-          <button onClick={logout} className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
-            Выйти
-          </button>
+          <button onClick={() => setIsSettingsOpen(true)} className="bg-gray-200 px-3 py-1 rounded" title="Настройки">⚙️</button>
+          <button onClick={logout} className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Выйти</button>
         </div>
       </header>
 
       <main className="p-8 max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold">Мои чаты</h2>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            + Создать группу
-          </button>
+          <button onClick={() => setIsModalOpen(true)} className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">+ Создать группу</button>
         </div>
 
         {loading ? (
@@ -142,15 +127,9 @@ export default function Chats() {
         ) : (
           <div className="bg-white rounded-lg shadow divide-y">
             {chats.map((chat) => (
-              <div
-                key={chat._id}
-                onClick={() => navigate(/chat/)}
-                className="p-4 hover:bg-gray-50 cursor-pointer flex justify-between items-center"
-              >
+              <div key={chat._id} onClick={() => navigate(`/chat/${chat._id}`)} className="p-4 hover:bg-gray-50 cursor-pointer flex justify-between items-center">
                 <div>
-                  <p className="font-semibold">
-                    {chat.type === 'group' ? 👥  : Чат: }
-                  </p>
+                  <p className="font-semibold">{chat.type === 'group' ? `👥 ${chat.title || 'Группа'}` : `Чат: ${chat._id.slice(-6)}`}</p>
                   <p className="text-sm text-gray-500">{chat.lastMessage || 'Нет сообщений'}</p>
                 </div>
                 <span className="text-blue-500">→</span>
@@ -164,31 +143,19 @@ export default function Chats() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-xl font-bold mb-4">Создать группу</h3>
-            <input
-              type="text"
-              placeholder="Название группы"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              className="w-full border p-2 rounded mb-4"
-            />
+            <input type="text" placeholder="Название группы" value={groupName} onChange={(e) => setGroupName(e.target.value)} className="w-full border p-2 rounded mb-4" />
             <p className="font-semibold mb-2">Выберите участников:</p>
             <div className="max-h-48 overflow-y-auto border rounded p-2 mb-4">
               {users.map(u => (
                 <label key={u.id} className="flex items-center gap-2 p-1 hover:bg-gray-50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedUsers.includes(u.id)}
-                    onChange={() => toggleUserSelection(u.id)}
-                  />
+                  <input type="checkbox" checked={selectedUsers.includes(u.id)} onChange={() => toggleUserSelection(u.id)} />
                   {u.username}
                 </label>
               ))}
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded">Отмена</button>
-              <button onClick={handleCreateGroup} disabled={creating} className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50">
-                {creating ? 'Создание...' : 'Создать'}
-              </button>
+              <button onClick={handleCreateGroup} disabled={creating} className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50">{creating ? 'Создание...' : 'Создать'}</button>
             </div>
           </div>
         </div>
@@ -200,12 +167,7 @@ export default function Chats() {
             <h3 className="text-xl font-bold mb-4">Настройки</h3>
             <label className="flex items-center justify-between p-2 border rounded mb-4">
               <span>Фильтр нецензурной лексики</span>
-              <input
-                type="checkbox"
-                checked={moderationEnabled}
-                onChange={(e) => setModerationEnabled(e.target.checked)}
-                className="w-5 h-5"
-              />
+              <input type="checkbox" checked={moderationEnabled} onChange={(e) => setModerationEnabled(e.target.checked)} className="w-5 h-5" />
             </label>
             <div className="flex justify-end gap-2">
               <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 border rounded">Отмена</button>
