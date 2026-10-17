@@ -1,4 +1,4 @@
-﻿import { useState, FormEvent } from 'react';
+import { useState, FormEvent } from 'react';
 import { getSocket } from '../api/socket';
 import { keysApi } from '../api/client';
 import { encryptMessage } from '../crypto/encrypt';
@@ -31,27 +31,21 @@ export default function MessageInput({ chatId, recipientId }: Props) {
       const keyRes = await keysApi.get(recipientId);
       const recipientPublicKey = keyRes.data.publicKey;
       const encrypted = await encryptMessage(trimmed, recipientPublicKey);
-
-      // Читаем настройку модерации (по умолчанию включена)
       const moderationEnabled = localStorage.getItem('moderationEnabled') !== 'false';
 
-      socket.emit(
-        'send_message',
-        {
-          chatId,
-          encryptedText: encrypted,
-          type: 'text',
-          moderationEnabled, // <-- Передаем флаг на сервер
-        },
-        (response: any) => {
-          setSending(false);
-          if (response?.status === 'ok') {
-            setText('');
-          } else {
-            setError('Ошибка отправки: ' + (response?.error || 'unknown'));
-          }
+      socket.emit('send_message', {
+        chatId,
+        encryptedText: encrypted,
+        type: 'text',
+        moderationEnabled,
+      }, (response: any) => {
+        setSending(false);
+        if (response?.status === 'ok') {
+          setText('');
+        } else {
+          setError('Ошибка отправки: ' + (response?.error || 'unknown'));
         }
-      );
+      });
     } catch (err: any) {
       setSending(false);
       setError(err.message || 'Ошибка шифрования');
@@ -60,11 +54,7 @@ export default function MessageInput({ chatId, recipientId }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="border-t bg-white p-3 flex flex-col gap-2">
-      {error && (
-        <div className="bg-red-100 text-red-700 p-2 rounded text-sm">
-          {error}
-        </div>
-      )}
+      {error && <div className="bg-red-100 text-red-700 p-2 rounded text-sm">{error}</div>}
       <div className="flex gap-2">
         <input
           type="text"
@@ -77,7 +67,7 @@ export default function MessageInput({ chatId, recipientId }: Props) {
         <button
           type="submit"
           disabled={sending || !text.trim()}
-          className="bg-blue-500 text-white px-6 py-2 rounded-full hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-blue-500 text-white px-6 py-2 rounded-full hover:bg-blue-600 disabled:opacity-50"
         >
           {sending ? '...' : 'Отправить'}
         </button>
