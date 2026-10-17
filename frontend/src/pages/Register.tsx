@@ -18,7 +18,7 @@ export default function Register() {
       await register(email, password, username);
     } catch (err: any) {
       if (!err.response) {
-        setError('Не удалось подключиться к серверу (http://localhost:8000). Убедитесь, что бэкенд и база данных запущены!');
+        setError('Не удалось подключиться к серверу авторизации. Проверьте соединение.');
       } else {
         setError(err.response?.data?.detail || err.response?.data?.error || 'Ошибка при регистрации');
       }
