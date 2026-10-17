@@ -5,6 +5,7 @@ const { initSocket } = require('./socket');
 const { connectDB } = require('./services/db');
 
 const PORT = process.env.PORT || 3001;
+const HOST = '0.0.0.0';   // ← ВАЖНО: слушать все интерфейсы (для Railway)
 
 async function start() {
   try {
@@ -16,8 +17,8 @@ async function start() {
 
     initSocket(server);
 
-    server.listen(PORT, () => {
-      console.log(`✅ Backend running on http://localhost:${PORT}`);
+    server.listen(PORT, HOST, () => {
+      console.log(`✅ Backend running on http://${HOST}:${PORT}`);
     });
   } catch (err) {
     console.error('❌ Failed to start backend:', err);
