@@ -60,24 +60,21 @@ export default function Chats() {
     loadData();
   }, [user, token]);
 
-  // Новая функция для начала личного чата
+  // ИСПРАВЛЕНО: participantId теперь строка, а не массив
   const startDirectChat = async (targetUser: User) => {
     if (!user) return;
     
     try {
-      // Создаем или получаем существующий чат
       const res = await axios.post(`${NODE_API}/api/chats`, {
         type: 'direct',
-        participantId: [targetUser.id]
+        participantId: targetUser.id // <-- ИСПРАВЛЕНО ЗДЕСЬ
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // Извлекаем ID чата
       const newChatId = res.data.chat?._id || res.data._id || res.data.chatId;
       
       if (newChatId) {
-        // Переходим в чат, передавая ID собеседника через ?to=
         navigate(`/chat/${newChatId}?to=${targetUser.id}`);
       } else {
         alert('Не удалось создать чат');
