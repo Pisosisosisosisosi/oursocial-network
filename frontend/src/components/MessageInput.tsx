@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+﻿import { useState, FormEvent } from 'react';
 import { getSocket } from '../api/socket';
 import { keysApi } from '../api/client';
 import { encryptMessage } from '../crypto/encrypt';
@@ -6,10 +6,9 @@ import { encryptMessage } from '../crypto/encrypt';
 interface Props {
   chatId: string;
   recipientId: string;
-  onMessageSent?: (msg: any) => void;
 }
 
-export default function MessageInput({ chatId, recipientId, onMessageSent }: Props) {
+export default function MessageInput({ chatId, recipientId }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +20,7 @@ export default function MessageInput({ chatId, recipientId, onMessageSent }: Pro
 
     const socket = getSocket();
     if (!socket) {
-      setError('Socket не подключён. Проверьте соединение.');
+      setError('Socket не подключён');
       return;
     }
 
@@ -29,22 +28,12 @@ export default function MessageInput({ chatId, recipientId, onMessageSent }: Pro
     setError('');
 
     try {
-      let encrypted = trimmed;
       const keyRes = await keysApi.get(recipientId);
-      if (keyRes?.data?.publicKey) {
-        try {
-          encrypted = await encryptMessage(trimmed, keyRes.data.publicKey);
-        } catch {
-          // fallback to plaintext
-        }
-      }
+      const recipientPublicKey = keyRes.data.publicKey;
+      const encrypted = await encryptMessage(trimmed, recipientPublicKey);
 
-      let ackReceived = false;
-      const timer = setTimeout(() => {
-        if (!ackReceived) {
-          setSending(false);
-        }
-      }, 5000);
+      // Читаем настройку модерации (по умолчанию включена)
+      const moderationEnabled = localStorage.getItem('moderationEnabled') !== 'false';
 
       socket.emit(
         'send_message',
@@ -52,41 +41,25 @@ export default function MessageInput({ chatId, recipientId, onMessageSent }: Pro
           chatId,
           encryptedText: encrypted,
           type: 'text',
+          moderationEnabled, // <-- Передаем флаг на сервер
         },
         (response: any) => {
-          ackReceived = true;
-          clearTimeout(timer);
           setSending(false);
           if (response?.status === 'ok') {
             setText('');
-            setError('');
-            if (response.message && onMessageSent) {
-              onMessageSent(response.message);
-            }
           } else {
-            setError('Ошибка отправки: ' + (response?.error || 'не удалось доставить'));
+            setError('Ошибка отправки: ' + (response?.error || 'unknown'));
           }
         }
       );
     } catch (err: any) {
       setSending(false);
-      console.error('❌ Error:', err);
-      setError(err.message || 'Ошибка отправки сообщения');
-    }
-  };
-
-  const handleTyping = () => {
-    const socket = getSocket();
-    if (socket && text.length > 0) {
-      socket.emit('typing', { chatId });
+      setError(err.message || 'Ошибка шифрования');
     }
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="border-t bg-white p-3 flex flex-col gap-2"
-    >
+    <form onSubmit={handleSubmit} className="border-t bg-white p-3 flex flex-col gap-2">
       {error && (
         <div className="bg-red-100 text-red-700 p-2 rounded text-sm">
           {error}
@@ -96,10 +69,7 @@ export default function MessageInput({ chatId, recipientId, onMessageSent }: Pro
         <input
           type="text"
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            handleTyping();
-          }}
+          onChange={(e) => setText(e.target.value)}
           placeholder="Введите сообщение..."
           className="flex-1 px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-400"
           disabled={sending}
