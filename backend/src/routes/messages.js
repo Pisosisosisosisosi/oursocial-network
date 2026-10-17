@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
 const authMiddleware = require('../middleware/auth');
+const { containsProfanity } = require('../services/moderation'); // <-- ИМПОРТ ФИЛЬТРА
 const {
   getMessages,
   saveMessage,
@@ -58,12 +59,6 @@ async function verifyChatMembership(chatId, userId) {
 /**
  * GET /api/chats/:id/messages (или /api/messages/:chatId)
  * Получение истории сообщений чата
- * Query параметры:
- * - limit: количество сообщений (по умолчанию 50)
- * - before: курсор (ISO дата или ObjectId) для загрузки более старых сообщений
- * - after: курсор для загрузки более новых сообщений
- * - skip: смещение
- * - order: asc (по умолчанию, от старых к новым) или desc (новые сначала)
  */
 async function getChatMessagesHandler(req, res, next) {
   try {
@@ -74,8 +69,6 @@ async function getChatMessagesHandler(req, res, next) {
     }
 
     const userId = getReqUserId(req);
-
-    // Проверяем, что пользователь состоит в чате
     await verifyChatMembership(chatId, userId);
 
     const options = {
@@ -104,7 +97,7 @@ router.get('/:chatId', getChatMessagesHandler);
 
 /**
  * POST /api/chats/:id/messages (или /api/messages/:chatId)
- * REST отправка сообщения в чат (с полным сохранением и сокет-оповещением)
+ * REST отправка сообщения в чат
  */
 async function postMessageHandler(req, res, next) {
   try {
@@ -115,8 +108,6 @@ async function postMessageHandler(req, res, next) {
     }
 
     const userId = getReqUserId(req);
-
-    // Проверяем членство в чате
     const chat = await verifyChatMembership(chatId, userId);
 
     const encryptedText =
@@ -125,6 +116,12 @@ async function postMessageHandler(req, res, next) {
     if (!encryptedText && encryptedText !== '') {
       return res.status(400).json({ error: 'encryptedText or text is required' });
     }
+
+    // --- ПРОВЕРКА НА МАТ ---
+    if (encryptedText && containsProfanity(encryptedText)) {
+      return res.status(400).json({ error: 'Сообщение содержит нецензурную лексику' });
+    }
+    // -----------------------
 
     const type = req.body.type || 'text';
     const giftId = req.body.giftId || null;
@@ -141,16 +138,11 @@ async function postMessageHandler(req, res, next) {
       replyTo,
     };
 
-    // Сохраняем сообщение и обновляем lastMessage чата
     const savedMessage = await saveMessage(messageData);
 
-    // Оповещаем участников через Socket.IO в реальном времени
     const io = getSocketIO();
     if (io) {
-      // Отправляем в комнату чата
       io.to(`chat:${chatId}`).emit('receive_message', savedMessage);
-
-      // Отправляем обновление чата каждому участнику в его персональную комнату
       (chat.participants || []).forEach((pId) => {
         io.to(`user:${pId}`).emit('chat_updated', {
           chatId: String(chatId),
@@ -174,8 +166,7 @@ router.post('/', postMessageHandler);
 router.post('/:chatId', postMessageHandler);
 
 /**
- * PATCH /api/chats/:id/messages/:messageId (или /api/messages/:messageId)
- * Редактирование текста отправленного сообщения
+ * PATCH /api/chats/:id/messages/:messageId
  */
 router.patch('/:messageId', async (req, res, next) => {
   try {
@@ -186,6 +177,12 @@ router.patch('/:messageId', async (req, res, next) => {
     if (!newText && newText !== '') {
       return res.status(400).json({ error: 'encryptedText or text is required' });
     }
+
+    // --- ПРОВЕРКА НА МАТ ПРИ РЕДАКТИРОВАНИИ ---
+    if (newText && containsProfanity(newText)) {
+      return res.status(400).json({ error: 'Сообщение содержит нецензурную лексику' });
+    }
+    // ------------------------------------------
 
     const updated = await updateMessage(messageId, userId, newText);
 
@@ -204,8 +201,7 @@ router.patch('/:messageId', async (req, res, next) => {
 });
 
 /**
- * DELETE /api/chats/:id/messages/:messageId (или /api/messages/:messageId)
- * Удаление сообщения
+ * DELETE /api/chats/:id/messages/:messageId
  */
 router.delete('/:messageId', async (req, res, next) => {
   try {
@@ -217,7 +213,6 @@ router.delete('/:messageId', async (req, res, next) => {
       return res.status(404).json({ error: 'Message not found' });
     }
 
-    // Проверяем, является ли пользователь автором сообщения или админом чата
     const chat = await getChatById(existing.chatId);
     const admins = (chat && chat.admins) ? chat.admins.map(String) : [];
     const isChatAdmin = admins.includes(userId) || (chat && String(chat.creatorId) === userId);
@@ -242,8 +237,7 @@ router.delete('/:messageId', async (req, res, next) => {
 });
 
 /**
- * POST /read (или /api/chats/:id/messages/read)
- * Пометить сообщения чата прочитанными
+ * POST /read
  */
 router.post('/read', async (req, res, next) => {
   try {
