@@ -13,9 +13,14 @@ from crypto import validate_public_key, make_key_document
 
 app = FastAPI(title="Our Social Network API")
 
+# Явно указываем домены для CORS (звездочка не работает с credentials)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://pipipipipi.3utilities.com",  # Ваш точный домен (4 буквы i)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -195,8 +200,6 @@ def upload_key(payload: UploadKeyRequest, current=Depends(get_current_user)):
     keys = keys_collection()
     user_id = current["userId"]
 
-    print("DEBUG keys/upload: user_id=" + str(user_id))
-
     keys.update_one(
         {"userId": user_id},
         {"$set": make_key_document(user_id, payload.publicKey)},
@@ -209,11 +212,6 @@ def upload_key(payload: UploadKeyRequest, current=Depends(get_current_user)):
 def get_my_key(current=Depends(get_current_user)):
     keys = keys_collection()
     user_id = current["userId"]
-
-    print("DEBUG keys/me: user_id=" + str(user_id))
-    print("DEBUG keys/me: count=" + str(keys.count_documents({})))
-    all_ids = [k.get("userId") for k in keys.find({}, {"userId": 1})]
-    print("DEBUG keys/me: all_ids=" + str(all_ids))
 
     doc = keys.find_one({"userId": user_id})
     if not doc:
@@ -252,7 +250,7 @@ def exchange_keys(payload: ExchangeRequest, current=Depends(get_current_user)):
 @app.get("/keys/{user_id}")
 def get_key(user_id: str, current=Depends(get_current_user)):
     keys = keys_collection()
-    doc = keys.find_one({"userId": user_id})
+    doc = keys.findOne({"userId": user_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Key not found")
     return {"userId": doc["userId"], "publicKey": doc["publicKey"]}
