@@ -53,7 +53,12 @@ export default function MessageList({ messages, currentUserId }: Props) {
                   {msg.senderName || msg.senderId.slice(0, 6)}
                 </div>
               )}
-              <div className="break-words">{msg.encryptedText}</div>
+              <div className="break-words">
+                {/* ЗАЩИТА ОТ ОШИБКИ REACT #31: выводим только строку */}
+                {typeof msg.encryptedText === 'string' 
+                  ? msg.encryptedText 
+                  : '[Ошибка формата сообщения]'}
+              </div>
               {msg.createdAt && (
                 <div
                   className={`text-xs mt-1 ${
