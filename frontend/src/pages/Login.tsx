@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
-  const { login, loginAsDemo } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,7 +17,7 @@ export default function Login() {
       await login(email, password);
     } catch (err: any) {
       if (!err.response) {
-        setError('Не удалось подключиться к серверу (бэкенд не запущен). Вы можете использовать демо-вход ниже.');
+        setError('Не удалось подключиться к серверу. Проверьте соединение с бэкендом.');
       } else {
         setError(err.response?.data?.detail || err.response?.data?.error || 'Ошибка входа');
       }
@@ -70,19 +70,6 @@ export default function Login() {
             {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
-
-        <div className="mt-4 pt-4 border-t">
-          <button
-            type="button"
-            onClick={() => loginAsDemo()}
-            className="w-full bg-purple-600 text-white p-2 rounded hover:bg-purple-700 transition font-medium text-sm flex items-center justify-center gap-2"
-          >
-            ⚡ Быстрый демо-вход (без бэкенда)
-          </button>
-          <p className="text-xs text-gray-500 text-center mt-1">
-            Позволяет протестировать интерфейс прямо на GitHub Pages
-          </p>
-        </div>
 
         <p className="text-center mt-6 text-sm text-gray-600">
           Нет аккаунта?{' '}
