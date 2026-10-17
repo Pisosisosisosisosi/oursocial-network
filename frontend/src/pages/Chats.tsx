@@ -60,14 +60,13 @@ export default function Chats() {
     loadData();
   }, [user, token]);
 
-  // ИСПРАВЛЕНО: participantId теперь строка, а не массив
   const startDirectChat = async (targetUser: User) => {
     if (!user) return;
     
     try {
       const res = await axios.post(`${NODE_API}/api/chats`, {
         type: 'direct',
-        participantId: targetUser.id // <-- ИСПРАВЛЕНО ЗДЕСЬ
+        participantId: targetUser.id 
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -155,7 +154,11 @@ export default function Chats() {
               <div key={chat._id} onClick={() => navigate(`/chat/${chat._id}`)} className="p-4 hover:bg-gray-50 cursor-pointer flex justify-between items-center">
                 <div>
                   <p className="font-semibold">{chat.type === 'group' ? `👥 ${chat.title || 'Группа'}` : `Чат: ${chat._id.slice(-6)}`}</p>
-                  <p className="text-sm text-gray-500">{chat.lastMessage || 'Нет сообщений'}</p>
+                  <p className="text-sm text-gray-500">
+ 			 {chat.lastMessage?.encryptedText 
+   			 ? chat.lastMessage.encryptedText 
+  			  : 'Нет сообщений'}
+		</p>
                 </div>
                 <span className="text-blue-500">→</span>
               </div>
