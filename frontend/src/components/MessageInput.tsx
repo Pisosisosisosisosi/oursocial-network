@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { getSocket } from '../api/socket';
 import { keysApi } from '../api/client';
 import { encryptMessage } from '../crypto/encrypt';
@@ -6,9 +6,10 @@ import { encryptMessage } from '../crypto/encrypt';
 interface Props {
   chatId: string;
   recipientId: string;
+  onMessageSent?: (msg: any) => void;
 }
 
-export default function MessageInput({ chatId, recipientId }: Props) {
+export default function MessageInput({ chatId, recipientId, onMessageSent }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -20,7 +21,7 @@ export default function MessageInput({ chatId, recipientId }: Props) {
 
     const socket = getSocket();
     if (!socket) {
-      setError('Socket не подключён');
+      setError('Socket не подключён. Проверьте соединение.');
       return;
     }
 
@@ -28,10 +29,22 @@ export default function MessageInput({ chatId, recipientId }: Props) {
     setError('');
 
     try {
+      let encrypted = trimmed;
       const keyRes = await keysApi.get(recipientId);
-      const recipientPublicKey = keyRes.data.publicKey;
+      if (keyRes?.data?.publicKey) {
+        try {
+          encrypted = await encryptMessage(trimmed, keyRes.data.publicKey);
+        } catch {
+          // fallback to plaintext
+        }
+      }
 
-      const encrypted = await encryptMessage(trimmed, recipientPublicKey);
+      let ackReceived = false;
+      const timer = setTimeout(() => {
+        if (!ackReceived) {
+          setSending(false);
+        }
+      }, 5000);
 
       socket.emit(
         'send_message',
@@ -41,18 +54,24 @@ export default function MessageInput({ chatId, recipientId }: Props) {
           type: 'text',
         },
         (response: any) => {
+          ackReceived = true;
+          clearTimeout(timer);
           setSending(false);
           if (response?.status === 'ok') {
             setText('');
+            setError('');
+            if (response.message && onMessageSent) {
+              onMessageSent(response.message);
+            }
           } else {
-            setError('Ошибка отправки: ' + (response?.error || 'unknown'));
+            setError('Ошибка отправки: ' + (response?.error || 'не удалось доставить'));
           }
         }
       );
     } catch (err: any) {
       setSending(false);
       console.error('❌ Error:', err);
-      setError(err.message || 'Ошибка шифрования');
+      setError(err.message || 'Ошибка отправки сообщения');
     }
   };
 

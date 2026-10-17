@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
       
@@ -36,7 +36,7 @@ jobs:
         working-directory: ./frontend
         run: npm run build
         env:
-          VITE_API_URL: https://oursocial-python.onrender.com
+          VITE_API_URL: https://oursocial-network-production.up.railway.app
           VITE_SOCKET_URL: https://oursocial-network-production.up.railway.app
       
       - name: Setup Pages

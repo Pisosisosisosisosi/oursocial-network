@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { authApi, type User } from '../api/client';
 import { connectSocket, disconnectSocket } from '../api/socket';
 import { keysApi } from '../api/client';
@@ -26,7 +26,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (savedToken) {
         try {
           const res = await authApi.me();
-          setUser(res.data);
+          const userData = (res.data as any)?.user || res.data;
+          setUser(userData);
           setToken(savedToken);
           connectSocket(savedToken);
         } catch {
@@ -39,14 +40,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     init();
   }, []);
 
-const login = async (email: string, password: string) => {
-  const res = await authApi.login(email, password);
-  localStorage.setItem('token', res.data.token);
-  setToken(res.data.token);
-  setUser(res.data.user);
-  connectSocket(res.data.token);
+  const login = async (email: string, password: string) => {
+    const res = await authApi.login(email, password);
+    const token = res.data.token;
+    const userData = res.data.user || (res.data as any);
+    localStorage.setItem('token', token);
+    setToken(token);
+    setUser(userData);
+    connectSocket(token);
 
-  if (!hasPrivateKey()) {
+    if (!hasPrivateKey()) {
+      try {
+        const { publicKeyJwk } = await generateKeyPair();
+        await keysApi.upload(publicKeyJwk);
+        console.log('✅ E2E keys generated and uploaded');
+      } catch (err) {
+        console.error('❌ Failed to generate/upload keys:', err);
+      }
+    } else {
+      console.log('✅ Using existing E2E keys');
+    }
+  };
+
+  const register = async (email: string, password: string, username: string) => {
+    const res = await authApi.register(email, password, username);
+    const token = res.data.token;
+    const userData = res.data.user || (res.data as any);
+    localStorage.setItem('token', token);
+    setToken(token);
+    setUser(userData);
+    connectSocket(token);
+
     try {
       const { publicKeyJwk } = await generateKeyPair();
       await keysApi.upload(publicKeyJwk);
@@ -54,26 +78,7 @@ const login = async (email: string, password: string) => {
     } catch (err) {
       console.error('❌ Failed to generate/upload keys:', err);
     }
-  } else {
-    console.log('✅ Using existing E2E keys');
-  }
-};
-
-const register = async (email: string, password: string, username: string) => {
-  const res = await authApi.register(email, password, username);
-  localStorage.setItem('token', res.data.token);
-  setToken(res.data.token);
-  setUser(res.data.user);
-  connectSocket(res.data.token);
-
-  try {
-    const { publicKeyJwk } = await generateKeyPair();
-    await keysApi.upload(publicKeyJwk);
-    console.log('✅ E2E keys generated and uploaded');
-  } catch (err) {
-    console.error('❌ Failed to generate/upload keys:', err);
-  }
-};
+  };
 
 const logout = () => {
   localStorage.removeItem('token');

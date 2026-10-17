@@ -25,15 +25,18 @@ function toObjectId(id) {
  */
 router.post('/register', async (req, res, next) => {
   try {
-    const { username, password, name, avatar } = req.body;
+    const { username, password, name, avatar, email } = req.body;
 
-    if (!username || !password) {
+    const rawLogin = username || (email ? email.split('@')[0] : '');
+    if (!rawLogin || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const cleanUsername = String(username).trim().toLowerCase();
-    if (cleanUsername.length < 3) {
-      return res.status(400).json({ error: 'Username must be at least 3 characters long' });
+    const cleanUsername = String(rawLogin).trim().toLowerCase();
+    const cleanEmail = email ? String(email).trim().toLowerCase() : `${cleanUsername}@example.com`;
+
+    if (cleanUsername.length < 2) {
+      return res.status(400).json({ error: 'Username must be at least 2 characters long' });
     }
 
     if (String(password).length < 4) {
@@ -41,9 +44,11 @@ router.post('/register', async (req, res, next) => {
     }
 
     const db = getDB();
-    const existing = await db.collection('users').findOne({ username: cleanUsername });
+    const existing = await db.collection('users').findOne({
+      $or: [{ username: cleanUsername }, { email: cleanEmail }],
+    });
     if (existing) {
-      return res.status(409).json({ error: 'Username is already taken' });
+      return res.status(409).json({ error: 'Username or email is already taken' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -51,8 +56,10 @@ router.post('/register', async (req, res, next) => {
 
     const newUser = {
       username: cleanUsername,
+      email: cleanEmail,
       name: name ? String(name).trim() : cleanUsername,
       avatar: avatar || null,
+      avatarUrl: avatar || '',
       passwordHash,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -66,6 +73,7 @@ router.post('/register', async (req, res, next) => {
       {
         userId,
         username: newUser.username,
+        email: newUser.email,
         name: newUser.name,
       },
       secret,
@@ -77,9 +85,11 @@ router.post('/register', async (req, res, next) => {
       token,
       user: {
         id: userId,
+        email: newUser.email,
         username: newUser.username,
         name: newUser.name,
         avatar: newUser.avatar,
+        avatarUrl: newUser.avatarUrl,
       },
     });
   } catch (err) {
@@ -93,23 +103,26 @@ router.post('/register', async (req, res, next) => {
  */
 router.post('/login', async (req, res, next) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, email } = req.body;
+    const rawLogin = username || email;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+    if (!rawLogin || !password) {
+      return res.status(400).json({ error: 'Username/email and password are required' });
     }
 
-    const cleanUsername = String(username).trim().toLowerCase();
+    const cleanLogin = String(rawLogin).trim().toLowerCase();
     const db = getDB();
-    const user = await db.collection('users').findOne({ username: cleanUsername });
+    const user = await db.collection('users').findOne({
+      $or: [{ username: cleanLogin }, { email: cleanLogin }],
+    });
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid username or password' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const userId = String(user._id);
@@ -118,6 +131,7 @@ router.post('/login', async (req, res, next) => {
       {
         userId,
         username: user.username,
+        email: user.email || `${user.username}@example.com`,
         name: user.name || user.username,
       },
       secret,
@@ -129,9 +143,11 @@ router.post('/login', async (req, res, next) => {
       token,
       user: {
         id: userId,
+        email: user.email || `${user.username}@example.com`,
         username: user.username,
         name: user.name || user.username,
         avatar: user.avatar || null,
+        avatarUrl: user.avatar || user.avatarUrl || '',
       },
     });
   } catch (err) {
@@ -157,13 +173,13 @@ router.get('/me', authMiddleware, async (req, res, next) => {
 
     res.status(200).json({
       status: 'ok',
-      user: {
-        id: String(user._id),
-        username: user.username,
-        name: user.name || user.username,
-        avatar: user.avatar || null,
-        createdAt: user.createdAt,
-      },
+      id: String(user._id),
+      email: user.email || `${user.username}@example.com`,
+      username: user.username,
+      name: user.name || user.username,
+      avatar: user.avatar || null,
+      avatarUrl: user.avatar || user.avatarUrl || '',
+      createdAt: user.createdAt,
     });
   } catch (err) {
     next(err);
@@ -207,6 +223,33 @@ router.get('/users', authMiddleware, async (req, res, next) => {
       count: formatted.length,
       users: formatted,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /users/search
+ */
+router.get('/search', async (req, res, next) => {
+  try {
+    const search = req.query.q || req.query.search || '';
+    const db = getDB();
+    const query = search ? { username: new RegExp(search, 'i') } : {};
+    const results = await db
+      .collection('users')
+      .find(query, { projection: { passwordHash: 0 } })
+      .limit(20)
+      .toArray();
+
+    res.json(
+      results.map((u) => ({
+        id: String(u._id),
+        username: u.username,
+        email: u.email || `${u.username}@example.com`,
+        avatarUrl: u.avatar || u.avatarUrl || '',
+      }))
+    );
   } catch (err) {
     next(err);
   }
