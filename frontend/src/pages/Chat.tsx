@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSocket } from '../api/socket';
-import { decryptMessage, encryptMessage } from '../crypto/encrypt';
+import { decryptMessage } from '../crypto/encrypt';
 import MessageList, { type Message } from '../components/MessageList';
 import MessageInput from '../components/MessageInput';
 import axios from 'axios';
