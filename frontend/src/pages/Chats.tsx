@@ -13,7 +13,11 @@ interface Chat {
   title?: string;
   type?: string;
   participants: string[];
-  lastMessage?: string;
+  lastMessage?: {
+  encryptedText?: string;
+  senderName?: string;
+  createdAt?: string;
+  };
 }
 
 export default function Chats() {
