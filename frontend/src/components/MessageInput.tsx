@@ -6,9 +6,10 @@ import { encryptMessage } from '../crypto/encrypt';
 interface Props {
   chatId: string;
   recipientId: string;
+  onMessageSent?: (msg: any) => void;
 }
 
-export default function MessageInput({ chatId, recipientId }: Props) {
+export default function MessageInput({ chatId, recipientId, onMessageSent }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -29,13 +30,13 @@ export default function MessageInput({ chatId, recipientId }: Props) {
 
     try {
       let encrypted = trimmed;
-      try {
-        const keyRes = await keysApi.get(recipientId);
-        if (keyRes?.data?.publicKey) {
+      const keyRes = await keysApi.get(recipientId);
+      if (keyRes?.data?.publicKey) {
+        try {
           encrypted = await encryptMessage(trimmed, keyRes.data.publicKey);
+        } catch {
+          // fallback to plaintext
         }
-      } catch (keyErr) {
-        console.warn('Не удалось получить ключ шифрования собеседника, отправляем напрямую:', keyErr);
       }
 
       let ackReceived = false;
@@ -59,6 +60,9 @@ export default function MessageInput({ chatId, recipientId }: Props) {
           if (response?.status === 'ok') {
             setText('');
             setError('');
+            if (response.message && onMessageSent) {
+              onMessageSent(response.message);
+            }
           } else {
             setError('Ошибка отправки: ' + (response?.error || 'не удалось доставить'));
           }

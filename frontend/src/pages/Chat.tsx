@@ -80,6 +80,13 @@ export default function Chat() {
   // Пока — временная заглушка: ID второго пользователя
   const recipientId = new URLSearchParams(window.location.search).get('to') || user.id;
 
+  const handleMessageSent = (msg: Message) => {
+    setMessages((prev) => {
+      if (msg._id && prev.some((m) => m._id === msg._id)) return prev;
+      return [...prev, msg];
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <header className="bg-white shadow p-4 flex items-center gap-4">
@@ -99,7 +106,11 @@ export default function Chat() {
 
       <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto bg-gray-50">
         <MessageList messages={messages} currentUserId={user.id} />
-        <MessageInput chatId={chatId} recipientId={recipientId} />
+        <MessageInput
+          chatId={chatId}
+          recipientId={recipientId}
+          onMessageSent={handleMessageSent}
+        />
       </div>
     </div>
   );

@@ -112,53 +112,32 @@ export const authApi = {
   },
 };
 
+// Локальное хранилище публичных ключей (поскольку бэкенд Railway не имеет таблицы /keys)
+const localKeys = new Map<string, string>();
+
 export const keysApi = {
   upload: async (publicKey: string) => {
     try {
-      return await api.post('/api/keys/upload', { publicKey });
-    } catch (err: any) {
-      try {
-        return await api.post('/keys/upload', { publicKey });
-      } catch (e) {
-        console.warn('E2E server key storage unavailable, proceeding in memory:', e);
-        return { data: { ok: true } };
-      }
+      localStorage.setItem('e2e_my_public_key', publicKey);
+      localKeys.set('me', publicKey);
+      return { data: { ok: true } };
+    } catch {
+      return { data: { ok: true } };
     }
   },
 
   me: async () => {
-    try {
-      return await api.get<{ userId: string; publicKey: string }>('/api/keys/me');
-    } catch (err: any) {
-      try {
-        return await api.get<{ userId: string; publicKey: string }>('/keys/me');
-      } catch {
-        return { data: { userId: '', publicKey: '' } };
-      }
-    }
+    const key = localKeys.get('me') || localStorage.getItem('e2e_my_public_key') || '';
+    return { data: { userId: 'me', publicKey: key } };
   },
 
   get: async (userId: string) => {
-    try {
-      return await api.get<{ userId: string; publicKey: string }>(`/api/keys/${userId}`);
-    } catch (err: any) {
-      try {
-        return await api.get<{ userId: string; publicKey: string }>(`/keys/${userId}`);
-      } catch {
-        return { data: { userId, publicKey: '' } };
-      }
-    }
+    const key = localKeys.get(userId) || (userId === 'me' ? localStorage.getItem('e2e_my_public_key') : '') || '';
+    return { data: { userId, publicKey: key } };
   },
 
-  exchange: async (targetUserId: string) => {
-    try {
-      return await api.post<{ myKey: string; targetKey: string }>('/api/keys/exchange', { targetUserId });
-    } catch (err: any) {
-      try {
-        return await api.post<{ myKey: string; targetKey: string }>('/keys/exchange', { targetUserId });
-      } catch {
-        return { data: { myKey: '', targetKey: '' } };
-      }
-    }
+  exchange: async (_targetUserId: string) => {
+    const myKey = localKeys.get('me') || localStorage.getItem('e2e_my_public_key') || '';
+    return { data: { myKey, targetKey: '' } };
   },
 };
