@@ -1,5 +1,6 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const { containsProfanity } = require('./services/moderation'); // <-- ИМПОРТ ФИЛЬТРА
 const {
   saveMessage,
   markAsRead,
@@ -108,6 +109,14 @@ function initSocket(server) {
           }
           return;
         }
+
+        // --- ПРОВЕРКА НА МАТ ---
+        if (content && containsProfanity(String(content))) {
+          console.log(`❌ Сообщение отклонено (мат) от ${socket.userId}`);
+          if (callback) callback({ status: 'error', error: 'Сообщение содержит нецензурную лексику' });
+          return;
+        }
+        // -----------------------
 
         // Проверяем существование чата и членство (если сервис доступен)
         let chat = null;
