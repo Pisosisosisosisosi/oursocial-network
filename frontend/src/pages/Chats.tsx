@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
@@ -24,7 +24,6 @@ export default function Chats() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Состояния для модального окна создания группы
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
@@ -34,21 +33,19 @@ export default function Chats() {
   const NODE_API = 'https://oursocial-network-production.up.railway.app';
   const PYTHON_API = 'https://oursocial-python.onrender.com';
 
-  // Загрузка чатов и пользователей
   useEffect(() => {
     if (!user) return;
 
     const loadData = async () => {
       try {
         const [chatsRes, usersRes] = await Promise.all([
-          axios.get(`${NODE_API}/api/chats`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${PYTHON_API}/users/search?q=`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
+          axios.get(${NODE_API}/api/chats, { headers: { Authorization: Bearer  } }),
+          axios.get(${PYTHON_API}/users/search?q=, { headers: { Authorization: Bearer  } }).catch(() => ({ data: [] }))
         ]);
 
         setChats(Array.isArray(chatsRes.data) ? chatsRes.data : (chatsRes.data.chats || []));
         
         const allUsers = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data.users || []);
-        // Исключаем себя из списка для создания группы
         setUsers(allUsers.filter((u: User) => u.id !== user.id));
       } catch (err) {
         console.error('Ошибка загрузки данных:', err);
@@ -60,7 +57,6 @@ export default function Chats() {
     loadData();
   }, [user, token]);
 
-  // Создание группы
   const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedUsers.length === 0) {
       alert('Введите название и выберите хотя бы одного участника');
@@ -69,17 +65,17 @@ export default function Chats() {
 
     setCreating(true);
     try {
-      const res = await axios.post(`${NODE_API}/api/chats`, {
+      const res = await axios.post(${NODE_API}/api/chats, {
         type: 'group',
         title: groupName,
         participantIds: selectedUsers
       }, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: Bearer  }
       });
 
       const newChatId = res.data.chat?._id || res.data._id || res.data.chatId;
       if (newChatId) {
-        navigate(`/chat/${newChatId}`);
+        navigate(/chat/);
       } else {
         setIsModalOpen(false);
         window.location.reload();
@@ -130,12 +126,12 @@ export default function Chats() {
             {chats.map((chat) => (
               <div
                 key={chat._id}
-                onClick={() => navigate(`/chat/${chat._id}`)}
+                onClick={() => navigate(/chat/)}
                 className="p-4 hover:bg-gray-50 cursor-pointer flex justify-between items-center"
               >
                 <div>
                   <p className="font-semibold">
-                    {chat.type === 'group' ? `👥 ${chat.title || 'Группа'}` : `Чат: ${chat._id.slice(-6)}`}
+                    {chat.type === 'group' ? 👥  : Чат: }
                   </p>
                   <p className="text-sm text-gray-500">{chat.lastMessage || 'Нет сообщений'}</p>
                 </div>
@@ -146,7 +142,6 @@ export default function Chats() {
         )}
       </main>
 
-      {/* Модальное окно создания группы */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
