@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+// ЖЕСТКО ПРОПИСЫВАЕМ URL PYTHON API НА RENDER
+const PYTHON_API_URL = 'https://oursocial-python.onrender.com';
 
 export const api = axios.create({
-  baseURL: API_URL,
+  baseURL: PYTHON_API_URL,
   headers: { 'Content-Type': 'application/json' },
 });
 
