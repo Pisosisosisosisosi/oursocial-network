@@ -24,10 +24,15 @@ export default function Chats() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Модалка создания группы
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+
+  // Модалка настроек
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [moderationEnabled, setModerationEnabled] = useState(true);
 
   const token = localStorage.getItem('token');
   const NODE_API = 'https://oursocial-network-production.up.railway.app';
@@ -88,6 +93,12 @@ export default function Chats() {
     }
   };
 
+  const handleSaveSettings = () => {
+    localStorage.setItem('moderationEnabled', String(moderationEnabled));
+    setIsSettingsOpen(false);
+    alert('Настройки сохранены!');
+  };
+
   const toggleUserSelection = (userId: string) => {
     setSelectedUsers(prev => 
       prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
@@ -100,6 +111,13 @@ export default function Chats() {
         <h1 className="text-xl font-bold">Наша соцсеть</h1>
         <div className="flex items-center gap-4">
           <span>{user?.username}</span>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="bg-gray-200 text-gray-800 px-3 py-1 rounded hover:bg-gray-300"
+            title="Настройки"
+          >
+            ⚙️
+          </button>
           <button onClick={logout} className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
             Выйти
           </button>
@@ -146,7 +164,6 @@ export default function Chats() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h3 className="text-xl font-bold mb-4">Создать группу</h3>
-            
             <input
               type="text"
               placeholder="Название группы"
@@ -154,7 +171,6 @@ export default function Chats() {
               onChange={(e) => setGroupName(e.target.value)}
               className="w-full border p-2 rounded mb-4"
             />
-
             <p className="font-semibold mb-2">Выберите участников:</p>
             <div className="max-h-48 overflow-y-auto border rounded p-2 mb-4">
               {users.map(u => (
@@ -167,20 +183,33 @@ export default function Chats() {
                   {u.username}
                 </label>
               ))}
-              {users.length === 0 && <p className="text-gray-400 text-sm">Нет доступных пользователей</p>}
             </div>
-
             <div className="flex justify-end gap-2">
-              <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded">
-                Отмена
-              </button>
-              <button 
-                onClick={handleCreateGroup} 
-                disabled={creating}
-                className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50"
-              >
+              <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded">Отмена</button>
+              <button onClick={handleCreateGroup} disabled={creating} className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50">
                 {creating ? 'Создание...' : 'Создать'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">Настройки</h3>
+            <label className="flex items-center justify-between p-2 border rounded mb-4">
+              <span>Фильтр нецензурной лексики</span>
+              <input
+                type="checkbox"
+                checked={moderationEnabled}
+                onChange={(e) => setModerationEnabled(e.target.checked)}
+                className="w-5 h-5"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 border rounded">Отмена</button>
+              <button onClick={handleSaveSettings} className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Сохранить</button>
             </div>
           </div>
         </div>
