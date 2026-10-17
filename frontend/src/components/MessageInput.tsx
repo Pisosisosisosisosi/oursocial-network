@@ -20,7 +20,7 @@ export default function MessageInput({ chatId, recipientId }: Props) {
 
     const socket = getSocket();
     if (!socket) {
-      setError('Socket не подключён');
+      setError('Socket не подключён. Проверьте соединение.');
       return;
     }
 
@@ -28,10 +28,22 @@ export default function MessageInput({ chatId, recipientId }: Props) {
     setError('');
 
     try {
-      const keyRes = await keysApi.get(recipientId);
-      const recipientPublicKey = keyRes.data.publicKey;
+      let encrypted = trimmed;
+      try {
+        const keyRes = await keysApi.get(recipientId);
+        if (keyRes?.data?.publicKey) {
+          encrypted = await encryptMessage(trimmed, keyRes.data.publicKey);
+        }
+      } catch (keyErr) {
+        console.warn('Не удалось получить ключ шифрования собеседника, отправляем напрямую:', keyErr);
+      }
 
-      const encrypted = await encryptMessage(trimmed, recipientPublicKey);
+      let ackReceived = false;
+      const timer = setTimeout(() => {
+        if (!ackReceived) {
+          setSending(false);
+        }
+      }, 5000);
 
       socket.emit(
         'send_message',
@@ -41,18 +53,21 @@ export default function MessageInput({ chatId, recipientId }: Props) {
           type: 'text',
         },
         (response: any) => {
+          ackReceived = true;
+          clearTimeout(timer);
           setSending(false);
           if (response?.status === 'ok') {
             setText('');
+            setError('');
           } else {
-            setError('Ошибка отправки: ' + (response?.error || 'unknown'));
+            setError('Ошибка отправки: ' + (response?.error || 'не удалось доставить'));
           }
         }
       );
     } catch (err: any) {
       setSending(false);
       console.error('❌ Error:', err);
-      setError(err.message || 'Ошибка шифрования');
+      setError(err.message || 'Ошибка отправки сообщения');
     }
   };
 

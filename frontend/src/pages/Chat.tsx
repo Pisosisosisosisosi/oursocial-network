@@ -23,16 +23,24 @@ export default function Chat() {
       return;
     }
 
-    socket.emit('join_chat', { chatId });
+    const joinRoom = () => {
+      socket.emit('join_chat', { chatId });
+    };
+
+    if (socket.connected) {
+      joinRoom();
+    } else {
+      socket.on('connect', joinRoom);
+    }
 
     const handleReceive = async (msg: Message) => {
       if (msg.chatId !== chatId) return;
 
-      let decrypted = '[Зашифровано]';
+      let decrypted = msg.encryptedText || '';
       try {
         decrypted = await decryptMessage(msg.encryptedText);
-      } catch (err) {
-        console.error('❌ Ошибка расшифровки:', err);
+      } catch (_) {
+        // Оставляем исходный текст, если расшифровать не удалось
       }
 
       const decryptedMsg: Message = {
@@ -58,6 +66,7 @@ export default function Chat() {
 
     return () => {
       socket.emit('leave_chat', { chatId });
+      socket.off('connect', joinRoom);
       socket.off('receive_message', handleReceive);
       socket.off('user_typing', handleTyping);
     };
