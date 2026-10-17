@@ -68,7 +68,7 @@ export default function Chats() {
       // Создаем или получаем существующий чат
       const res = await axios.post(`${NODE_API}/api/chats`, {
         type: 'direct',
-        participantIds: [targetUser.id]
+        participantId: [targetUser.id]
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
