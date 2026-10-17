@@ -5,6 +5,7 @@ import { getSocket } from '../api/socket';
 import { decryptMessage } from '../crypto/encrypt';
 import MessageList, { type Message } from '../components/MessageList';
 import MessageInput from '../components/MessageInput';
+import axios from 'axios';
 
 export default function Chat() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -13,40 +14,66 @@ export default function Chat() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // 1. Загрузка истории сообщений из базы
+  useEffect(() => {
+    if (!chatId || !user) return;
+
+    const loadHistory = async () => {
+      try {
+        setLoading(true);
+        // Делаем запрос к Node.js API
+        const res = await axios.get(`https://oursocial-network-production.up.railway.app/api/chats/${chatId}/messages`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+
+        const history = res.data.messages || res.data; 
+        
+        // Расшифровываем каждое сообщение
+        const decryptedHistory = await Promise.all(
+          history.map(async (msg: any) => {
+            let decrypted = '[Зашифровано]';
+            try {
+              decrypted = await decryptMessage(msg.encryptedText);
+            } catch (err) {
+              console.error('Ошибка расшифровки истории:', err);
+            }
+            return { ...msg, encryptedText: decrypted };
+          })
+        );
+
+        setMessages(decryptedHistory);
+      } catch (err) {
+        console.error('Ошибка загрузки истории:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHistory();
+  }, [chatId, user]);
+
+  // 2. Подключение к Socket.IO для новых сообщений
   useEffect(() => {
     if (!chatId || !user) return;
 
     const socket = getSocket();
-    if (!socket) {
-      console.warn('Socket не инициализирован');
-      return;
-    }
+    if (!socket) return;
 
-    const joinRoom = () => {
-      socket.emit('join_chat', { chatId });
-    };
-
-    if (socket.connected) {
-      joinRoom();
-    } else {
-      socket.on('connect', joinRoom);
-    }
+    socket.emit('join_chat', { chatId });
 
     const handleReceive = async (msg: Message) => {
       if (msg.chatId !== chatId) return;
 
-      let decrypted = msg.encryptedText || '';
+      let decrypted = '[Зашифровано]';
       try {
         decrypted = await decryptMessage(msg.encryptedText);
-      } catch (_) {
-        // Оставляем исходный текст, если расшифровать не удалось
+      } catch (err) {
+        console.error('Ошибка расшифровки:', err);
       }
 
-      const decryptedMsg: Message = {
-        ...msg,
-        encryptedText: decrypted,
-      };
+      const decryptedMsg: Message = { ...msg, encryptedText: decrypted };
 
       setMessages((prev) => {
         if (msg._id && prev.some((m) => m._id === msg._id)) return prev;
@@ -66,7 +93,6 @@ export default function Chat() {
 
     return () => {
       socket.emit('leave_chat', { chatId });
-      socket.off('connect', joinRoom);
       socket.off('receive_message', handleReceive);
       socket.off('user_typing', handleTyping);
     };
@@ -76,41 +102,28 @@ export default function Chat() {
     return <div className="p-8">Загрузка...</div>;
   }
 
-  // TODO: заменить на реальный recipientId из API чата
-  // Пока — временная заглушка: ID второго пользователя
-  const recipientId = new URLSearchParams(window.location.search).get('to') || user.id;
-
-  const handleMessageSent = (msg: Message) => {
-    setMessages((prev) => {
-      if (msg._id && prev.some((m) => m._id === msg._id)) return prev;
-      return [...prev, msg];
-    });
-  };
+  // TODO: позже будем брать из данных чата
+  const recipientId = user.id; 
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <header className="bg-white shadow p-4 flex items-center gap-4">
-        <button
-          onClick={() => navigate('/')}
-          className="text-blue-500 hover:underline"
-        >
+        <button onClick={() => navigate('/')} className="text-blue-500 hover:underline">
           ← Назад
         </button>
         <h1 className="text-lg font-bold">Чат: {chatId}</h1>
         {typingUser && (
-          <span className="text-sm text-gray-500 ml-auto">
-            {typingUser} печатает...
-          </span>
+          <span className="text-sm text-gray-500 ml-auto">{typingUser} печатает...</span>
         )}
       </header>
 
       <div className="flex-1 flex flex-col max-w-3xl w-full mx-auto bg-gray-50">
-        <MessageList messages={messages} currentUserId={user.id} />
-        <MessageInput
-          chatId={chatId}
-          recipientId={recipientId}
-          onMessageSent={handleMessageSent}
-        />
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center text-gray-400">Загрузка истории...</div>
+        ) : (
+          <MessageList messages={messages} currentUserId={user.id} />
+        )}
+        <MessageInput chatId={chatId} recipientId={recipientId} />
       </div>
     </div>
   );
