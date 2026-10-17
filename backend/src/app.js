@@ -4,6 +4,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const chatsRoutes = require('./routes/chats');
 const messagesRoutes = require('./routes/messages');
+const keysRoutes = require('./routes/keys');
 const errorMiddleware = require('./middleware/errors');
 
 function createApp() {
@@ -23,8 +24,14 @@ function createApp() {
 
   // 4. Подключение маршрутов
   app.use('/api/auth', authRoutes);
+  app.use('/auth', authRoutes);
+  app.use('/api/keys', keysRoutes);
+  app.use('/keys', keysRoutes);
   app.use('/api/chats', chatsRoutes);
+  app.use('/chats', chatsRoutes);
   app.use('/api/messages', messagesRoutes);
+  app.use('/messages', messagesRoutes);
+  app.use('/users', authRoutes);
 
 // Онлайн-пользователи (для отладки)
 app.get('/api/online', (req, res) => {
