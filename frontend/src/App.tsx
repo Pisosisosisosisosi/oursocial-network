@@ -35,6 +35,7 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
+      <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
 }

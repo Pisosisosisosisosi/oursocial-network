@@ -9,6 +9,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginAsDemo: (username?: string) => void;
   register: (email: string, password: string, username: string) => Promise<void>;
   logout: () => void;
 }
@@ -24,6 +25,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const init = async () => {
       const savedToken = localStorage.getItem('token');
       if (savedToken) {
+        if (savedToken.startsWith('demo-token')) {
+          const savedUser = localStorage.getItem('demo_user');
+          if (savedUser) {
+            try {
+              setUser(JSON.parse(savedUser));
+            } catch {
+              setUser({ id: 'demo-user-1', email: 'demo@example.com', username: 'Демо-Пользователь' });
+            }
+          } else {
+            setUser({ id: 'demo-user-1', email: 'demo@example.com', username: 'Демо-Пользователь' });
+          }
+          setToken(savedToken);
+          setLoading(false);
+          return;
+        }
+
         try {
           const res = await authApi.me();
           setUser(res.data);
@@ -59,6 +76,19 @@ const login = async (email: string, password: string) => {
   }
 };
 
+const loginAsDemo = (demoUsername = 'Демо-Пользователь') => {
+  const demoUser: User = {
+    id: 'demo-' + Math.random().toString(36).substring(2, 8),
+    email: 'demo@example.com',
+    username: demoUsername,
+  };
+  const demoToken = 'demo-token-' + Date.now();
+  localStorage.setItem('token', demoToken);
+  localStorage.setItem('demo_user', JSON.stringify(demoUser));
+  setToken(demoToken);
+  setUser(demoUser);
+};
+
 const register = async (email: string, password: string, username: string) => {
   const res = await authApi.register(email, password, username);
   localStorage.setItem('token', res.data.token);
@@ -77,6 +107,7 @@ const register = async (email: string, password: string, username: string) => {
 
 const logout = () => {
   localStorage.removeItem('token');
+  localStorage.removeItem('demo_user');
   setToken(null);
   setUser(null);
   disconnectSocket();
@@ -84,7 +115,7 @@ const logout = () => {
 };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, loginAsDemo, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
