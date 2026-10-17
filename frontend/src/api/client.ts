@@ -1,9 +1,13 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+// Берем URL из переменных окружения (Vercel/GitHub Actions) или используем localhost для разработки
+const PYTHON_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Для Node.js (чаты) используем отдельный URL, если он нужен, но пока все REST-запросы у нас идут в Python
+const NODE_API_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
+// Создаем клиент для Python API (Auth + Keys)
 export const api = axios.create({
-  baseURL: API_URL,
+  baseURL: PYTHON_API_URL,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -29,7 +33,7 @@ export interface AuthResponse {
   user: User;
 }
 
-// API-функции
+// API-функции для Python (Auth)
 export const authApi = {
   register: (email: string, password: string, username: string) =>
     api.post<AuthResponse>('/auth/register', { email, password, username }),
@@ -43,6 +47,7 @@ export const authApi = {
     api.get<User[]>(`/users/search`, { params: { q } }),
 };
 
+// API-функции для Python (Keys)
 export const keysApi = {
   upload: (publicKey: string) =>
     api.post('/keys/upload', { publicKey }),
