@@ -389,6 +389,7 @@ def serialize_message(message):
         "fileData": message.get("fileData", ""),
         "reactions": message.get("reactions", []),
         "pinned": message.get("pinned", False),
+        "pinnedAt": message.get("pinnedAt").isoformat() if message.get("pinnedAt") else None,
         "createdAt": message["createdAt"].isoformat(),
         "read": message.get("read", False),
     }
@@ -551,10 +552,16 @@ async def set_message_pin(
     current=Depends(get_current_user),
 ):
     message = find_message_for_user(message_id, current["userId"])
-    update_result = messages_collection().update_one(
-        {"_id": message["_id"]},
-        {"$set": {"pinned": payload.pinned}},
-    )
+    update: dict[str, dict[str, object]] = {"$set": {"pinned": payload.pinned}}
+    if payload.pinned:
+        update["$set"].update({
+            "pinnedAt": datetime.now(timezone.utc),
+            "pinnedBy": current["userId"],
+        })
+    else:
+        update["$unset"] = {"pinnedAt": "", "pinnedBy": ""}
+
+    update_result = messages_collection().update_one({"_id": message["_id"]}, update)
     if update_result.matched_count != 1:
         raise HTTPException(status_code=404, detail="Message not found")
 

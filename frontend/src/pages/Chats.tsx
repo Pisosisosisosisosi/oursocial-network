@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronUp, ContactRound, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +18,7 @@ interface ChatMessage {
   fileData?: string;
   reactions: { userId: string; emoji: string }[];
   pinned?: boolean;
+  pinnedAt?: string | null;
   createdAt: string;
   read: boolean;
 }
@@ -56,6 +57,8 @@ export default function Chats() {
   const [messageMenuPosition, setMessageMenuPosition] = useState({ x: 0, y: 0 });
   const [messageMenuClosing, setMessageMenuClosing] = useState(false);
   const [pinningMessageId, setPinningMessageId] = useState<string | null>(null);
+  const [activePinnedIndex, setActivePinnedIndex] = useState(0);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<ChatMessage | null>(null);
   const [lightboxClosing, setLightboxClosing] = useState(false);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
@@ -78,6 +81,7 @@ export default function Chats() {
   const messageMenuCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lightboxCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pinnedHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileRequestRef = useRef(0);
   const typingRecipientRef = useRef<string | null>(null);
 
@@ -216,6 +220,7 @@ export default function Chats() {
     if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
     if (lightboxCloseTimeoutRef.current) clearTimeout(lightboxCloseTimeoutRef.current);
     if (profileCloseTimeoutRef.current) clearTimeout(profileCloseTimeoutRef.current);
+    if (pinnedHighlightTimeoutRef.current) clearTimeout(pinnedHighlightTimeoutRef.current);
   }, []);
 
   const closeMessageMenu = useCallback(() => {
@@ -328,7 +333,31 @@ export default function Chats() {
       `${message.text} ${message.fileName || ''}`.toLocaleLowerCase().includes(chatSearch.trim().toLocaleLowerCase()),
     )
     : [], [chatSearch, messages]);
-  const pinnedMessages = useMemo(() => messages.filter((message) => message.pinned), [messages]);
+  const pinnedMessages = useMemo(() => messages
+    .filter((message) => message.pinned)
+    .sort((first, second) =>
+      new Date(second.pinnedAt || second.createdAt).getTime()
+      - new Date(first.pinnedAt || first.createdAt).getTime(),
+    ), [messages]);
+  const selectedPinnedIndex = Math.min(activePinnedIndex, Math.max(0, pinnedMessages.length - 1));
+  const activePinnedMessage = pinnedMessages[selectedPinnedIndex];
+
+  const jumpToPinnedMessage = (message: ChatMessage) => {
+    messageRefs.current.get(message.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedMessageId(message.id);
+    if (pinnedHighlightTimeoutRef.current) clearTimeout(pinnedHighlightTimeoutRef.current);
+    pinnedHighlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedMessageId(null);
+      pinnedHighlightTimeoutRef.current = null;
+    }, 1800);
+  };
+
+  const navigatePinnedMessage = (index: number) => {
+    const normalizedIndex = (index + pinnedMessages.length) % pinnedMessages.length;
+    setActivePinnedIndex(normalizedIndex);
+    const message = pinnedMessages[normalizedIndex];
+    if (message) jumpToPinnedMessage(message);
+  };
   const selectedSearchResult = Math.min(activeSearchResult, Math.max(0, searchMatches.length - 1));
 
   useEffect(() => {
@@ -341,6 +370,7 @@ export default function Chats() {
   const handleSelectChat = async (user: User & { nickname?: string }) => {
     stopTyping();
     setTypingUser(null);
+    setActivePinnedIndex(0);
     profileRequestRef.current += 1;
     setProfilePanelOpen(false);
     setChatProfile(null);
@@ -509,6 +539,7 @@ export default function Chats() {
         throw new Error('Сервер не подтвердил сохранение закрепления.');
       }
       setMessages(response.data);
+      if (!message.pinned) setActivePinnedIndex(0);
       closeMessageMenu();
       setChatError('');
     } catch (error) {
@@ -770,22 +801,44 @@ export default function Chats() {
                   </button>
                 </div>
               </div>
-              {pinnedMessages.length > 0 && (
-                <div className="pinned-strip flex min-w-0 items-center gap-2 overflow-x-auto rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] p-2.5 shadow-lg sm:ml-[3.25rem]">
-                  <Pin size={15} className="shrink-0 text-amber-300" />
-                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-300">Закреплено</span>
-                  <div className="h-5 w-px shrink-0 bg-amber-200/15" />
-                  {pinnedMessages.map((message) => (
-                    <button
-                      key={message.id}
-                      type="button"
-                      title={message.text || message.fileName || 'Перейти к закреплённому сообщению'}
-                      onClick={() => messageRefs.current.get(message.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-                      className="max-w-[70vw] shrink-0 truncate rounded-xl px-2.5 py-1.5 text-left text-xs text-amber-100/90 transition hover:bg-amber-200/10 sm:max-w-[min(55vw,540px)]"
-                    >
-                      {message.text || message.fileName || 'Вложение'}
-                    </button>
-                  ))}
+              {activePinnedMessage && (
+                <div className="pinned-strip flex min-w-0 items-center gap-2 overflow-hidden rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] p-2 shadow-lg sm:ml-[3.25rem] sm:gap-3 sm:p-2.5">
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-amber-300/10 text-amber-300">
+                    <Pin size={15} />
+                  </div>
+                  <button
+                    type="button"
+                    title="Перейти к закреплённому сообщению"
+                    onClick={() => jumpToPinnedMessage(activePinnedMessage)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-300">
+                      Закреплённое сообщение{pinnedMessages.length > 1 ? ` · ${selectedPinnedIndex + 1} из ${pinnedMessages.length}` : ''}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-amber-100/90">
+                      {activePinnedMessage.text || activePinnedMessage.fileName || 'Вложение'}
+                    </span>
+                  </button>
+                  {pinnedMessages.length > 1 && (
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button
+                        type="button"
+                        aria-label="Предыдущее закреплённое сообщение"
+                        onClick={() => navigatePinnedMessage(selectedPinnedIndex + 1)}
+                        className="rounded-lg p-1.5 text-amber-200/70 transition hover:bg-amber-200/10 hover:text-amber-100"
+                      >
+                        <ChevronLeft size={17} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Следующее закреплённое сообщение"
+                        onClick={() => navigatePinnedMessage(selectedPinnedIndex - 1)}
+                        className="rounded-lg p-1.5 text-amber-200/70 transition hover:bg-amber-200/10 hover:text-amber-100"
+                      >
+                        <ChevronRight size={17} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -800,7 +853,7 @@ export default function Chats() {
                 const isMe = m.senderId === currentUser?.id;
                 return (
                   <div key={m.id} ref={(element) => { if (element) messageRefs.current.set(m.id, element); else messageRefs.current.delete(m.id); }} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                    <div className="max-w-[88%] sm:max-w-[80%]">
+                    <div className={`message-row-content max-w-[88%] sm:max-w-[80%] ${highlightedMessageId === m.id ? 'pinned-message-highlight' : ''}`}>
                       <div
                         onContextMenu={(event) => {
                           event.preventDefault();
