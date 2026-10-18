@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent } from 'react';
 import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronUp, ContactRound, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
+import { isAxiosError } from 'axios';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { api, type Contact, type User } from '../api/client';
 import { getSocket } from '../api/socket';
@@ -51,7 +53,11 @@ export default function Chats() {
   const [chatError, setChatError] = useState('');
   const [sending, setSending] = useState(false);
   const [openMessageMenu, setOpenMessageMenu] = useState<string | null>(null);
+  const [messageMenuPosition, setMessageMenuPosition] = useState({ x: 0, y: 0 });
+  const [messageMenuClosing, setMessageMenuClosing] = useState(false);
+  const [pinningMessageId, setPinningMessageId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<ChatMessage | null>(null);
+  const [lightboxClosing, setLightboxClosing] = useState(false);
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -64,6 +70,8 @@ export default function Chats() {
   const messageFormRef = useRef<HTMLFormElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const incomingTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messageMenuCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lightboxCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingRecipientRef = useRef<string | null>(null);
 
   const stopTyping = (recipientId = typingRecipientRef.current) => {
@@ -198,7 +206,29 @@ export default function Chats() {
     if (incomingTypingTimeoutRef.current) {
       clearTimeout(incomingTypingTimeoutRef.current);
     }
+    if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
+    if (lightboxCloseTimeoutRef.current) clearTimeout(lightboxCloseTimeoutRef.current);
   }, []);
+
+  const closeMessageMenu = useCallback(() => {
+    if (!openMessageMenu || messageMenuClosing) return;
+    setMessageMenuClosing(true);
+    messageMenuCloseTimeoutRef.current = setTimeout(() => {
+      setOpenMessageMenu(null);
+      setMessageMenuClosing(false);
+      messageMenuCloseTimeoutRef.current = null;
+    }, 140);
+  }, [openMessageMenu, messageMenuClosing]);
+
+  const closeLightbox = useCallback(() => {
+    if (!lightboxImage || lightboxClosing) return;
+    setLightboxClosing(true);
+    lightboxCloseTimeoutRef.current = setTimeout(() => {
+      setLightboxImage(null);
+      setLightboxClosing(false);
+      lightboxCloseTimeoutRef.current = null;
+    }, 180);
+  }, [lightboxImage, lightboxClosing]);
 
   useEffect(() => {
     if (!openMessageMenu && !lightboxImage) return;
@@ -206,12 +236,12 @@ export default function Chats() {
     const handlePointerDown = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return;
       if (event.target.closest('[data-message-menu]') || event.target.closest('[data-message-menu-trigger]')) return;
-      setOpenMessageMenu(null);
+      closeMessageMenu();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setOpenMessageMenu(null);
-        setLightboxImage(null);
+        closeMessageMenu();
+        closeLightbox();
       }
     };
 
@@ -221,7 +251,7 @@ export default function Chats() {
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [openMessageMenu, lightboxImage]);
+  }, [openMessageMenu, lightboxImage, messageMenuClosing, lightboxClosing, closeMessageMenu, closeLightbox]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -257,6 +287,7 @@ export default function Chats() {
       `${message.text} ${message.fileName || ''}`.toLocaleLowerCase().includes(chatSearch.trim().toLocaleLowerCase()),
     )
     : [], [chatSearch, messages]);
+  const pinnedMessages = useMemo(() => messages.filter((message) => message.pinned), [messages]);
   const selectedSearchResult = Math.min(activeSearchResult, Math.max(0, searchMatches.length - 1));
 
   useEffect(() => {
@@ -389,7 +420,7 @@ export default function Chats() {
     try {
       await api.delete(`/messages/${message.id}`);
       setMessages((previous) => previous.filter((item) => item.id !== message.id));
-      setOpenMessageMenu(null);
+      closeMessageMenu();
       setChatError('');
     } catch (error) {
       console.error('Ошибка удаления сообщения:', error);
@@ -398,31 +429,63 @@ export default function Chats() {
   };
 
   const handleReaction = async (message: ChatMessage, emoji: string) => {
+    const previousReactions = message.reactions;
+    const alreadyReacted = previousReactions.some((reaction) =>
+      reaction.userId === currentUser?.id && reaction.emoji === emoji,
+    );
+    const updatedReactions = alreadyReacted
+      ? previousReactions.filter((reaction) => !(reaction.userId === currentUser?.id && reaction.emoji === emoji))
+      : [...previousReactions, { userId: String(currentUser?.id), emoji }];
+    setMessages((previous) => previous.map((item) =>
+      item.id === message.id ? { ...item, reactions: updatedReactions } : item,
+    ));
     try {
       await api.post(`/messages/${message.id}/reactions`, { emoji });
-      if (activeChat) await refreshMessages(String(activeChat.id));
-      setOpenMessageMenu(null);
+      closeMessageMenu();
       setChatError('');
     } catch (error) {
       console.error('Ошибка сохранения реакции:', error);
+      setMessages((previous) => previous.map((item) =>
+        item.id === message.id ? { ...item, reactions: previousReactions } : item,
+      ));
       setChatError('Не удалось сохранить реакцию.');
     }
   };
 
   const handleTogglePin = async (message: ChatMessage) => {
+    if (!activeChat || pinningMessageId) return;
+    setPinningMessageId(message.id);
     try {
-      const response = await api.post<{ pinned: boolean }>(`/messages/${message.id}/pin`, {
+      await api.post<{ status: string; pinned: boolean }>(`/messages/${message.id}/pin`, {
         pinned: !message.pinned,
       });
-      setMessages((previous) => previous.map((item) =>
-        item.id === message.id ? { ...item, pinned: response.data.pinned } : item,
-      ));
-      setOpenMessageMenu(null);
+      const response = await api.get<ChatMessage[]>(`/messages/${activeChat.id}`);
+      const savedMessage = response.data.find((item) => item.id === message.id);
+      if (!savedMessage || savedMessage.pinned !== !message.pinned) {
+        throw new Error('Сервер не подтвердил сохранение закрепления.');
+      }
+      setMessages(response.data);
+      closeMessageMenu();
       setChatError('');
     } catch (error) {
       console.error('Ошибка закрепления сообщения:', error);
-      setChatError('Не удалось изменить закрепление сообщения.');
+      const detail = isAxiosError(error) && error.response?.status === 404
+        ? 'На сервере не найден маршрут закрепления. Обновите Python API и повторите попытку.'
+        : 'Не удалось сохранить закрепление. Проверьте соединение и повторите попытку.';
+      setChatError(detail);
+    } finally {
+      setPinningMessageId(null);
     }
+  };
+
+  const showMessageMenu = (messageId: string, x: number, y: number) => {
+    if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
+    setMessageMenuClosing(false);
+    setOpenMessageMenu(messageId);
+    setMessageMenuPosition({
+      x: Math.max(8, Math.min(x, window.innerWidth - 224)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 196)),
+    });
   };
 
   const handleChatSearch = (value: string) => {
@@ -663,7 +726,23 @@ export default function Chats() {
 
             <div className="flex-1 min-h-0 p-3 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10">
               {chatError && <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3 py-2 text-xs text-rose-200">{chatError}</div>}
-              <div className="text-center text-slate-600 text-[10px] font-mono my-4 flex items-center justify-center gap-2">
+            {pinnedMessages.length > 0 && (
+              <div className="pinned-strip flex items-center gap-2 overflow-x-auto rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] p-2.5 shadow-lg">
+                <Pin size={15} className="shrink-0 text-amber-300" />
+                {pinnedMessages.map((message) => (
+                  <button
+                    key={message.id}
+                    type="button"
+                    onClick={() => messageRefs.current.get(message.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                    className="max-w-[75vw] shrink-0 truncate rounded-xl px-2.5 py-1.5 text-left text-xs text-amber-100/90 transition hover:bg-amber-200/10"
+                  >
+                    <span className="mr-1.5 text-amber-300">Закреплено</span>
+                    {message.text || message.fileName || 'Вложение'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="text-center text-slate-600 text-[10px] font-mono my-4 flex items-center justify-center gap-2">
                 <span className="h-px w-8 bg-slate-800"></span> Начало защищенной сессии <span className="h-px w-8 bg-slate-800"></span>
               </div>
               
@@ -675,7 +754,7 @@ export default function Chats() {
                       <div
                         onContextMenu={(event) => {
                           event.preventDefault();
-                          setOpenMessageMenu(m.id);
+                          showMessageMenu(m.id, event.clientX, event.clientY);
                         }}
                         className={`chat-message max-w-full p-3.5 rounded-2xl text-xs leading-relaxed relative group ${
                           isMe
@@ -684,13 +763,13 @@ export default function Chats() {
                         }`}
                       >
                         {m.pinned && (
-                          <div className="mb-2 flex items-center gap-1 text-[10px] text-amber-200/90">
+                          <div className="pinned-message-label mb-2 flex items-center gap-1 text-[10px] text-amber-200/90">
                             <Pin size={12} /> Закреплено
                           </div>
                         )}
                         {m.type === 'image' && m.fileData ? (
                           localStorage.getItem('pulseMediaPreview') !== 'false'
-                            ? <button type="button" onClick={() => setLightboxImage(m)} aria-label={`Открыть изображение ${m.fileName || ''}`} className="mb-2 block max-w-full cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                            ? <button type="button" onClick={() => { setLightboxClosing(false); setLightboxImage(m); }} aria-label={`Открыть изображение ${m.fileName || ''}`} className="mb-2 block max-w-full cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300">
                                 <img src={m.fileData} alt={m.fileName || 'Изображение'} className="max-h-[55vh] max-w-full rounded-lg object-contain sm:max-h-72" />
                               </button>
                             : <a href={m.fileData} download={m.fileName || 'image'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{m.fileName || 'Скачать изображение'}</span></a>
@@ -706,32 +785,18 @@ export default function Chats() {
                           data-message-menu-trigger
                           aria-label="Действия с сообщением"
                           aria-expanded={openMessageMenu === m.id}
-                          onClick={() => setOpenMessageMenu((current) => current === m.id ? null : m.id)}
+                          onClick={(event) => {
+                            if (openMessageMenu === m.id) {
+                              closeMessageMenu();
+                              return;
+                            }
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            showMessageMenu(m.id, rect.right, rect.bottom);
+                          }}
                           className="absolute -top-2 -right-2 rounded-full border border-white/10 bg-slate-950 p-1.5 text-slate-300 opacity-100 shadow transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
                         >
                             <MoreHorizontal size={14} />
                           </button>
-                        {openMessageMenu === m.id && (
-                          <div data-message-menu className="absolute right-0 top-full z-30 mt-2 min-w-44 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
-                            <div className="flex items-center justify-between gap-1 pb-2">
-                              {REACTIONS.map((emoji) => (
-                                <button key={emoji} type="button" onClick={() => void handleReaction(m, emoji)} aria-label={`Поставить реакцию ${emoji}`} className="flex h-9 min-w-10 items-center justify-center rounded-lg text-lg transition hover:bg-white/10 active:scale-95">
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="border-t border-white/10 pt-1">
-                              <button type="button" onClick={() => void handleTogglePin(m)} className="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-xs text-slate-200 hover:bg-white/10">
-                                <Pin size={14} /> {m.pinned ? 'Открепить' : 'Закрепить'}
-                              </button>
-                              {isMe && (
-                                <button type="button" onClick={() => void handleDeleteMessage(m)} className="flex w-full items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-xs text-rose-300 hover:bg-rose-400/10">
-                                  <Trash2 size={14} /> Удалить сообщение
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
                         <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono ${isMe ? 'text-indigo-200/70' : 'text-slate-400/70'}`}>
                           <time>{m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time>
                           {isMe && localStorage.getItem('pulseShowReadReceipts') !== 'false' && (
@@ -748,7 +813,7 @@ export default function Chats() {
                             if (!matchingReactions.length) return null;
                             const mine = matchingReactions.some((reaction) => reaction.userId === currentUser?.id);
                             return (
-                              <button key={emoji} type="button" onClick={() => void handleReaction(m, emoji)} aria-label={`Снять реакцию ${emoji}`} className={`rounded-full border px-2 py-0.5 text-[10px] transition ${mine ? 'border-indigo-400/50 bg-indigo-500/20' : 'border-white/[0.07] bg-slate-900/50 hover:bg-slate-700/70'}`}>
+                              <button key={emoji} type="button" onClick={() => void handleReaction(m, emoji)} aria-label={`Снять реакцию ${emoji}`} className={`reaction-chip rounded-full border px-2.5 py-1 text-[10px] shadow-sm transition ${mine ? 'border-indigo-400/50 bg-indigo-500/20' : 'border-white/[0.07] bg-slate-900/50 hover:bg-slate-700/70'}`}>
                                 {emoji}<span className="ml-1 text-slate-300">{matchingReactions.length}</span>
                               </button>
                             );
@@ -809,21 +874,89 @@ export default function Chats() {
           </div>
         )}
       </div>
+      {openMessageMenu && (() => {
+        const menuMessage = messages.find((message) => message.id === openMessageMenu);
+        if (!menuMessage) return null;
+        const canDeleteMessage = menuMessage.senderId === currentUser?.id;
+        const position = {
+          left: Math.max(8, Math.min(messageMenuPosition.x, window.innerWidth - 216)),
+          top: Math.max(8, Math.min(messageMenuPosition.y, window.innerHeight - 190)),
+        };
+        return createPortal(
+          <div
+            data-message-menu
+            role="menu"
+            aria-label="Действия с сообщением"
+            onAnimationEnd={(event) => {
+              if (messageMenuClosing && event.currentTarget === event.target) setOpenMessageMenu(null);
+            }}
+            className={`message-action-menu fixed z-[100] w-52 rounded-2xl border border-white/10 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
+            style={position}
+          >
+            <div className="message-reaction-picker mb-2 rounded-xl bg-white/[0.035] p-1.5">
+              <p className="px-1.5 pb-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">Быстрая реакция</p>
+              <div className="flex items-center justify-between gap-1">
+                {REACTIONS.map((emoji) => {
+                  const active = menuMessage.reactions.some((reaction) =>
+                    reaction.userId === currentUser?.id && reaction.emoji === emoji,
+                  );
+                  return (
+                    <button
+                      key={emoji}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void handleReaction(menuMessage, emoji)}
+                      aria-label={`Поставить реакцию ${emoji}`}
+                      className={`message-reaction-option flex h-10 min-w-10 items-center justify-center rounded-xl text-xl transition ${active ? 'bg-indigo-400/20 ring-1 ring-indigo-300/30' : 'hover:bg-white/10'}`}
+                    >
+                      {emoji}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={pinningMessageId === menuMessage.id}
+              onClick={() => void handleTogglePin(menuMessage)}
+              className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-amber-300/10 hover:text-amber-200 disabled:opacity-50"
+            >
+              <Pin size={15} className={menuMessage.pinned ? 'text-amber-300' : ''} />
+              {pinningMessageId === menuMessage.id ? 'Сохраняю...' : menuMessage.pinned ? 'Открепить сообщение' : 'Закрепить сообщение'}
+            </button>
+            {canDeleteMessage && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => void handleDeleteMessage(menuMessage)}
+                className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-rose-300 transition hover:bg-rose-400/10"
+              >
+                <Trash2 size={15} /> Удалить сообщение
+              </button>
+            )}
+          </div>,
+          document.body,
+        );
+      })()}
       {lightboxImage?.fileData && (
         <div
           role="dialog"
           aria-modal="true"
           aria-label={lightboxImage.fileName || 'Просмотр изображения'}
-          onClick={() => setLightboxImage(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-3 sm:p-8"
+          onClick={closeLightbox}
+          className={`image-lightbox fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-3 sm:p-8 ${lightboxClosing ? 'image-lightbox-out' : 'image-lightbox-in'}`}
         >
-          <button type="button" onClick={() => setLightboxImage(null)} aria-label="Закрыть изображение" className="absolute right-3 top-3 z-10 rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 sm:right-5 sm:top-5">
+          <button type="button" onClick={closeLightbox} aria-label="Закрыть изображение" className="absolute right-3 top-3 z-10 rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 sm:right-5 sm:top-5">
             <X size={20} />
           </button>
           <img
             src={lightboxImage.fileData}
             alt={lightboxImage.fileName || 'Изображение'}
             onClick={(event) => event.stopPropagation()}
+            onAnimationEnd={(event) => {
+              if (lightboxClosing && event.currentTarget === event.target) setLightboxImage(null);
+            }}
             className="max-h-[90dvh] max-w-full rounded-lg object-contain shadow-2xl"
           />
         </div>

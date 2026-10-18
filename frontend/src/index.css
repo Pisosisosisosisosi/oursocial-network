@@ -1,5 +1,75 @@
 @import "tailwindcss";
 
+@keyframes message-menu-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes message-menu-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-4px) scale(0.97); }
+}
+
+@keyframes lightbox-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lightbox-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes lightbox-image-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.message-menu-in {
+  animation: message-menu-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: top left;
+}
+
+.message-menu-out {
+  animation: message-menu-out 130ms ease-in both;
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+.image-lightbox-in {
+  animation: lightbox-in 180ms ease-out both;
+}
+
+.image-lightbox-out {
+  animation: lightbox-out 180ms ease-in both;
+}
+
+.image-lightbox-in img {
+  animation: lightbox-image-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.message-action-item {
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.message-action-item:active,
+.message-reaction-option:active,
+.reaction-chip:active {
+  transform: scale(0.96);
+}
+
+.reaction-chip {
+  animation: message-menu-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.pinned-strip {
+  animation: message-menu-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.pinned-message-label {
+  animation: message-menu-in 180ms ease-out both;
+}
+
 html[data-theme="light"] body,
 html[data-theme="light"] #root {
   background: #f3f6fb !important;
@@ -87,4 +157,15 @@ html[data-reduce-motion="true"] *::after {
   animation-iteration-count: 1 !important;
   scroll-behavior: auto !important;
   transition-duration: 0.01ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

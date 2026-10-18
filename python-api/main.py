@@ -551,15 +551,21 @@ async def set_message_pin(
     current=Depends(get_current_user),
 ):
     message = find_message_for_user(message_id, current["userId"])
-    messages_collection().update_one(
+    update_result = messages_collection().update_one(
         {"_id": message["_id"]},
         {"$set": {"pinned": payload.pinned}},
     )
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    updated_message = find_message_for_user(message_id, current["userId"])
+    if updated_message.get("pinned", False) != payload.pinned:
+        raise HTTPException(status_code=500, detail="Message pin was not persisted")
 
     event = {"messageId": message_id, "action": "pin"}
     await sio.emit("message_changed", event, to=f"user:{message['receiverId']}")
     await sio.emit("message_changed", event, to=f"user:{message['senderId']}")
-    return {"status": "ok", "pinned": payload.pinned}
+    return {"status": "ok", "pinned": updated_message["pinned"]}
 
 
 # ---------- Encryption keys ----------
