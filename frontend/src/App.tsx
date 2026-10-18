@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { MessageCircle, Radio, UsersRound } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Chats from './pages/Chats';
 import Login from './pages/Login';
@@ -104,6 +105,8 @@ function GlobalNotifications() {
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -116,21 +119,57 @@ function AppRoutes() {
     );
   }
 
+  const currentTab = location.pathname.startsWith('/groups')
+    ? 'groups'
+    : location.pathname.startsWith('/channels') || location.pathname.startsWith('/join/')
+      ? 'channels'
+      : 'chats';
+  const showWorkspaceTabs = Boolean(user) && (
+    location.pathname === '/'
+    || location.pathname === '/groups'
+    || location.pathname === '/channels'
+    || location.pathname.startsWith('/join/')
+  );
+
   return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
-      <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
-      <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
-      <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
-      <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
-      <Route path="/groups" element={user ? <Groups /> : <Navigate to="/login" replace />} />
-      <Route path="/channels" element={user
-        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем каналы…</div>}><Channels /></Suspense>
-        : <Navigate to="/login" replace />} />
-      <Route path="/join/:inviteCode" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем канал…</div>}><Channels /></Suspense>} />
-      <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
-      <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
-    </Routes>
+    <div className="flex h-full min-h-0 flex-col">
+      {showWorkspaceTabs && (
+        <nav aria-label="Разделы Pulse" className="z-20 flex shrink-0 items-center gap-1 border-b border-white/[0.08] bg-[#0d1420] px-2 py-1.5 sm:gap-2 sm:px-4">
+          {([
+            { id: 'chats', label: 'Чаты', path: '/', icon: MessageCircle },
+            { id: 'groups', label: 'Группы', path: '/groups', icon: UsersRound },
+            { id: 'channels', label: 'Каналы', path: '/channels', icon: Radio },
+          ] as const).map(({ id, label, path, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => navigate(path)}
+              aria-current={currentTab === id ? 'page' : undefined}
+              className={`flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold transition sm:flex-none sm:min-w-28 sm:px-5 ${currentTab === id ? 'bg-indigo-500/15 text-indigo-200 shadow-inner shadow-indigo-400/5' : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'}`}
+            >
+              <Icon size={16} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+      <div className="min-h-0 flex-1">
+        <Routes>
+          <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+          <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
+          <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
+          <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
+          <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
+          <Route path="/groups" element={user ? <Groups /> : <Navigate to="/login" replace />} />
+          <Route path="/channels" element={user
+            ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем каналы…</div>}><Channels /></Suspense>
+            : <Navigate to="/login" replace />} />
+          <Route path="/join/:inviteCode" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем канал…</div>}><Channels /></Suspense>} />
+          <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
+        </Routes>
+      </div>
+    </div>
   );
 }
 
