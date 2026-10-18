@@ -42,27 +42,37 @@ export default function MessageList({ messages, currentUserId }: Props) {
             className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-xs md:max-w-md px-4 py-2 rounded-lg ${
+              className={`max-w-xs md:max-w-md rounded-lg overflow-hidden ${
                 isMine
                   ? 'bg-blue-500 text-white'
                   : 'bg-white text-gray-800 shadow'
               }`}
             >
               {!isMine && (
-                <div className="text-xs font-semibold text-gray-500 mb-1">
+                <div className="text-xs font-semibold text-gray-500 px-3 pt-2">
                   {msg.senderName || msg.senderId.slice(0, 6)}
                 </div>
               )}
-              <div className="break-words">
-                {/* ЗАЩИТА ОТ ОШИБКИ REACT #31: выводим только строку */}
-                {typeof msg.encryptedText === 'string' 
-                  ? msg.encryptedText 
-                  : '[Ошибка формата сообщения]'}
-              </div>
+              
+              {/* ЕСЛИ КАРТИНКА */}
+              {msg.type === 'image' ? (
+                <img 
+                  src={msg.encryptedText} 
+                  alt="Фото" 
+                  className="max-w-full h-auto object-cover cursor-pointer"
+                  onClick={() => window.open(msg.encryptedText, '_blank')} // Клик открывает в новой вкладке
+                />
+              ) : (
+                /* ЕСЛИ ТЕКСТ */
+                <div className="px-4 py-2 break-words">
+                  {typeof msg.encryptedText === 'string' ? msg.encryptedText : '[Ошибка]'}
+                </div>
+              )}
+
               {msg.createdAt && (
                 <div
-                  className={`text-xs mt-1 ${
-                    isMine ? 'text-blue-100' : 'text-gray-400'
+                  className={`text-xs px-3 pb-2 mt-1 ${
+                    isMine ? 'text-blue-100 text-right' : 'text-gray-400 text-left'
                   }`}
                 >
                   {new Date(msg.createdAt).toLocaleTimeString([], {
