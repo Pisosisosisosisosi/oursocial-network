@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { isAxiosError } from 'axios';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom'; // <--- Используем навигацию
 import { ArrowRight, LockKeyhole, MessageCircle, ShieldCheck, User as UserIcon, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
+  const navigate = useNavigate(); // <--- Хук для перехода
   const { register } = useAuth();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -33,7 +34,6 @@ export default function Register() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(99,102,241,0.18),transparent_55%)]" />
       <div className="relative w-full max-w-[430px]">
         
-        {/* Логотип */}
         <div className="mb-8 flex items-center justify-center gap-3">
           <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-lg shadow-indigo-500/25">
             <MessageCircle size={21} />
@@ -63,7 +63,6 @@ export default function Register() {
                 type="text"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                autoComplete="username"
                 required
                 placeholder="Например, darius_writer"
                 className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
@@ -77,7 +76,6 @@ export default function Register() {
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                autoComplete="email"
                 required
                 placeholder="name@example.com"
                 className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
@@ -91,7 +89,6 @@ export default function Register() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete="new-password"
                 required
                 placeholder="Минимум 6 символов"
                 className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
@@ -108,9 +105,14 @@ export default function Register() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Уже есть аккаунт?{' '}
-            <Link to="/login" className="font-semibold text-indigo-300 hover:text-indigo-200">
+            {/* ЗАМЕНИЛИ Link НА КНОПКУ */}
+            <button 
+              type="button"
+              onClick={() => navigate('/login')} 
+              className="font-semibold text-indigo-300 hover:text-indigo-200 cursor-pointer"
+            >
               Войти
-            </Link>
+            </button>
           </p>
         </section>
 
