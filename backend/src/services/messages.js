@@ -21,7 +21,7 @@ function safeObjectId(id) {
 /**
  * Сохранить новое сообщение в базе данных и обновить статус чата
  * @param {object} messageData - { chatId, senderId, senderName, encryptedText, type, giftId, replyTo }
- * @returns {Promise<ObjectId>} сохраненный идентификатор сообщения
+ * @returns {Promise<object>} сохраненный документ сообщения
  */
 async function saveMessage(messageData) {
   const db = getDB();
@@ -74,7 +74,10 @@ async function saveMessage(messageData) {
     console.error('Failed to update chat lastMessage:', err.message);
   }
 
-  return insertedId;
+  return {
+    _id: insertedId,
+    ...newDoc,
+  };
 }
 
 /**
@@ -92,6 +95,7 @@ async function getMessages(chatId, options = 50, legacyOffset = 0) {
     : { limit: options, offset: legacyOffset };
   const limit = Math.min(Math.max(Number(settings.limit) || 50, 1), 100);
   const offset = Math.max(Number(settings.offset ?? settings.skip) || 0, 0);
+  const sortDirection = settings.order === 'desc' ? -1 : 1;
   const chatIdStr = String(chatId);
   const objId = safeObjectId(chatId);
   const query = {
@@ -114,7 +118,7 @@ async function getMessages(chatId, options = 50, legacyOffset = 0) {
 
   return db.collection('messages')
     .find(query)
-    .sort({ createdAt: settings.order === 'asc' ? 1 : -1 })
+    .sort({ createdAt: sortDirection, _id: sortDirection })
     .skip(offset)
     .limit(limit)
     .toArray();

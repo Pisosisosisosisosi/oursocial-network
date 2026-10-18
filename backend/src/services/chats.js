@@ -686,9 +686,12 @@ async function recalculateLastMessage(chatId) {
     const latest = await db
       .collection('messages')
       .find({
-        $or: [{ chatId: String(chatId) }, { chatId: objId }],
+        $or: [
+          { chatId: String(chatId), deleted: { $ne: true } },
+          { chatId: objId, deleted: { $ne: true } },
+        ],
       })
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(1)
       .toArray();
 

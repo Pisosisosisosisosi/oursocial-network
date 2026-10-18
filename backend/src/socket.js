@@ -154,14 +154,11 @@ function initSocket(server) {
           createdAt: new Date(),
         };
 
-        const messageId = await saveMessage(message);
+        const savedMessage = await saveMessage(message);
+        const messageId = savedMessage._id;
 
         const broadcastMessage = {
-          ...message,
-          _id: messageId,
-          deliveredTo: [socket.userId],
-          readBy: [socket.userId],
-          deleted: false,
+          ...savedMessage,
         };
 
         // Отправить всем в комнате чата, включая отправителя

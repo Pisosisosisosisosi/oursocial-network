@@ -1244,5 +1244,8 @@ def get_key(user_id: str, current=Depends(get_current_user)):
     return {"userId": doc["userId"], "publicKey": doc["publicKey"]}
 
 
-# Serve Socket.IO alongside FastAPI so both share the same host and JWT secret.
-socket_app = socketio_server.ASGIApp(sio, other_asgi_app=app)
+# Keep the FastAPI app separately available, but make the conventional `main:app`
+# entry point serve Socket.IO as well as HTTP requests.
+fastapi_app = app
+socket_app = socketio_server.ASGIApp(sio, other_asgi_app=fastapi_app)
+app = socket_app

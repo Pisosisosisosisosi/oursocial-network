@@ -70,7 +70,7 @@ npm run dev
 
 Socket.IO использует тот же Python API origin и JWT secret. `frontend/.env.example` задаёт локальные адреса; для production задайте `VITE_API_URL` и `VITE_SOCKET_URL` на origin Python API перед сборкой фронтенда.
 
-Для production Python API также должен запускаться через Socket.IO ASGI-приложение: `uvicorn main:socket_app --host 0.0.0.0 --port $PORT`. Укажите эту команду в настройках Start Command хостинга; запуск `main:app` не обслуживает Socket.IO.
+Обычная точка входа Python API `main:app` обслуживает и FastAPI, и Socket.IO. Для production рекомендуемая команда запуска: `uvicorn main:app --host 0.0.0.0 --port $PORT`; `uvicorn main:socket_app --host 0.0.0.0 --port $PORT` также поддерживается. После изменений `python-api/` разверните backend и убедитесь, что `GET /socket.io/?EIO=4&transport=polling` возвращает `200`, а не `404`.
 
 После изменения `python-api/` требуется отдельно развернуть backend на его хостинге: GitHub Pages workflow публикует только frontend. Service worker кэширует оболочку приложения и статические ресурсы; отправка и синхронизация сообщений офлайн недоступны.
 
