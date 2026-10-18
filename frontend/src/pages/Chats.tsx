@@ -189,10 +189,10 @@ export default function Chats() {
       {/* ЛЕВАЯ ПАНЕЛЬ (СПИСОК ЧАТОВ) */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         
-                {/* ШАПКА ЛЕВОЙ ПАНЕЛИ */}
+        {/* ШАПКА ЛЕВОЙ ПАНЕЛИ */}
         <header className="p-4 border-b flex justify-between items-center bg-gray-50">
           <div className="flex items-center gap-3">
-            {/* Аватарка пользователя (теперь слева) */}
+            {/* Аватарка пользователя */}
             <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-lg">
               {user?.username?.charAt(0).toUpperCase()}
             </div>
@@ -200,7 +200,7 @@ export default function Chats() {
           </div>
           
           <div className="flex items-center gap-2">
-            {/* Кнопка создания группы (карандаш, теперь справа) */}
+            {/* Кнопка создания группы (карандаш) */}
             <button 
               onClick={() => setIsModalOpen(true)} 
               className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition"
@@ -229,20 +229,31 @@ export default function Chats() {
             ) : chats.length === 0 ? (
               <p className="text-xs text-gray-400">Нет чатов</p>
             ) : (
-              chats.map(chat => (
-                <div 
-                  key={chat._id} 
-                  onClick={() => openChat(chat)}
-                  className={`p-3 rounded-lg cursor-pointer mb-1 ${activeChatId === chat._id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
-                >
-                  <p className="font-semibold text-sm">
-                    {chat.type === 'group' ? `👥 ${chat.title}` : `Чат: ${chat._id.slice(-4)}`}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {chat.lastMessage?.encryptedText || 'Нет сообщений'}
-                  </p>
-                </div>
-              ))
+              chats.map(chat => {
+                // Ищем ID собеседника (не нас) и его имя
+                const otherId = chat.participants?.find((id: string) => id !== user?.id);
+                const otherUser = users.find(u => u.id === otherId);
+                
+                // Формируем красивое имя
+                const displayName = chat.type === 'group' 
+                  ? `👥 ${chat.title || 'Группа'}` 
+                  : (otherUser ? otherUser.username : 'Пользователь');
+
+                return (
+                  <div 
+                    key={chat._id} 
+                    onClick={() => openChat(chat)}
+                    className={`p-3 rounded-lg cursor-pointer mb-1 ${activeChatId === chat._id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+                  >
+                    <p className="font-semibold text-sm truncate">
+                      {displayName}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {chat.lastMessage?.encryptedText || 'Нет сообщений'}
+                    </p>
+                  </div>
+                );
+              })
             )}
           </div>
 
@@ -329,7 +340,6 @@ export default function Chats() {
               <button onClick={() => setIsSettingsOpen(false)} className="px-3 py-1 border rounded text-sm">Отмена</button>
               <button onClick={handleSaveSettings} className="bg-green-500 text-white px-3 py-1 rounded text-sm">Сохранить</button>
             </div>
-            {/* Кнопка выхода перенесена сюда */}
             <button onClick={logout} className="w-full mt-4 bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-100 transition text-sm font-medium">
               Выйти из аккаунта
             </button>
