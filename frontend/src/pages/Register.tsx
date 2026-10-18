@@ -105,11 +105,12 @@ export default function Register() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Уже есть аккаунт?{' '}
-            {/* ЗАМЕНИЛИ Link НА КНОПКУ */}
+            {/* ЗАМЕНИЛИ Link НА КНОПКУ С navigate */}
             <button 
               type="button"
               onClick={() => navigate('/login')} 
-              className="font-semibold text-indigo-300 hover:text-indigo-200 cursor-pointer"
+              style={{ position: 'relative', zIndex: 9999, pointerEvents: 'auto' }}
+              className="font-semibold text-indigo-300 hover:text-indigo-200 cursor-pointer relative z-50"
             >
               Войти
             </button>
