@@ -13,13 +13,13 @@ from crypto import validate_public_key, make_key_document
 
 app = FastAPI(title="Our Social Network API")
 
-# Явно указываем домены для CORS (звездочка не работает с credentials)
+# Явно указываем домены для CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://pipipipipi.3utilities.com",  # Ваш точный домен (4 буквы i)
+        "https://pipipipipi.3utilities.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -46,6 +46,13 @@ class UploadKeyRequest(BaseModel):
 
 class ExchangeRequest(BaseModel):
     targetUserId: str
+
+
+# НОВАЯ МОДЕЛЬ ДЛЯ ПРОФИЛЯ
+class UpdateProfileRequest(BaseModel):
+    displayName: str = Field(min_length=2, max_length=32)
+    username: str = Field(min_length=3, max_length=32)
+    avatarUrl: str = ""  # base64 строка
 
 
 # ---------- Startup ----------
@@ -82,6 +89,7 @@ def register(payload: RegisterRequest):
     doc = {
         "email": payload.email,
         "username": payload.username,
+        "displayName": payload.username,  # По умолчанию displayName = username
         "passwordHash": hash_password(payload.password),
         "avatarUrl": "",
         "createdAt": datetime.now(timezone.utc),
@@ -98,6 +106,7 @@ def register(payload: RegisterRequest):
             "id": user_id,
             "email": payload.email,
             "username": payload.username,
+            "displayName": payload.username,
         },
     }
 
@@ -126,6 +135,7 @@ def login(payload: LoginRequest):
             "id": user_id,
             "email": user["email"],
             "username": user["username"],
+            "displayName": user.get("displayName", user["username"]),
             "avatarUrl": user.get("avatarUrl", ""),
         },
     }
@@ -146,6 +156,7 @@ def me(current=Depends(get_current_user)):
         "id": str(user["_id"]),
         "email": user["email"],
         "username": user["username"],
+        "displayName": user.get("displayName", user["username"]),
         "avatarUrl": user.get("avatarUrl", ""),
         "createdAt": user.get("createdAt"),
     }
@@ -165,10 +176,35 @@ def search_users(q: str, current=Depends(get_current_user)):
         {
             "id": str(u["_id"]),
             "username": u["username"],
+            "displayName": u.get("displayName", u["username"]),
             "avatarUrl": u.get("avatarUrl", ""),
         }
         for u in results
     ]
+
+
+# НОВЫЙ ЭНДПОИНТ ДЛЯ ОБНОВЛЕНИЯ ПРОФИЛЯ
+@app.patch("/users/me/profile")
+def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_user)):
+    users = users_collection()
+    user_id = current["userId"]
+    
+    # Проверяем, не занят ли новый username кем-то другим
+    existing_user = users.find_one({"username": payload.username})
+    if existing_user and str(existing_user["_id"]) != user_id:
+        raise HTTPException(status_code=409, detail="Username already taken")
+
+    # Обновляем данные
+    users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {
+            "displayName": payload.displayName,
+            "username": payload.username,
+            "avatarUrl": payload.avatarUrl
+        }}
+    )
+    
+    return {"status": "ok", "message": "Profile updated"}
 
 
 @app.get("/users/{user_id}")
@@ -185,6 +221,7 @@ def get_user(user_id: str):
     return {
         "id": str(user["_id"]),
         "username": user["username"],
+        "displayName": user.get("displayName", user["username"]),
         "avatarUrl": user.get("avatarUrl", ""),
         "lastSeen": user.get("lastSeen"),
     }
@@ -250,7 +287,7 @@ def exchange_keys(payload: ExchangeRequest, current=Depends(get_current_user)):
 @app.get("/keys/{user_id}")
 def get_key(user_id: str, current=Depends(get_current_user)):
     keys = keys_collection()
-    doc = keys.findOne({"userId": user_id})
+    doc = keys.find_one({"userId": user_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Key not found")
     return {"userId": doc["userId"], "publicKey": doc["publicKey"]}
