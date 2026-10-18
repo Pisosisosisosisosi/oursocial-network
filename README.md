@@ -74,6 +74,8 @@ Socket.IO использует тот же Python API origin и JWT secret. `fro
 
 Обычная точка входа Python API `main:app` обслуживает и FastAPI, и Socket.IO. Для production рекомендуемая команда запуска: `uvicorn main:app --host 0.0.0.0 --port $PORT`; `uvicorn main:socket_app --host 0.0.0.0 --port $PORT` также поддерживается. После изменений `python-api/` разверните backend и убедитесь, что `GET /socket.io/?EIO=4&transport=polling` возвращает `200`, а не `404`.
 
+Python API предоставляет симуляционные endpoints Skyline Premium и Coins: `POST /premium/buy` продлевает Premium на 30 дней, `GET /premium/status` возвращает текущий статус, `GET /coins/balance` читает баланс, а `POST /coins/buy` принимает JSON `{"coins": 100}`, `{"coins": 500}` или `{"coins": 1000}`. Эти маршруты только обновляют баланс/срок в MongoDB и не выполняют реальную оплату.
+
 После изменения `python-api/` требуется отдельно развернуть backend на его хостинге: GitHub Pages workflow публикует только frontend. Service worker кэширует оболочку приложения и статические ресурсы; отправка и синхронизация сообщений офлайн недоступны.
 
 ## Сборка

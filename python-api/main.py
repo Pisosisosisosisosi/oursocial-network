@@ -26,6 +26,7 @@ from crypto import validate_public_key, make_key_document
 from realtime import sio
 import socketio as socketio_server
 from channels import router as channels_router
+from premium import router as premium_router, serialize_premium
 
 app = FastAPI(title="Our Social Network API")
 MESSAGE_RATE_LIMIT = 5
@@ -42,6 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(channels_router)
+app.include_router(premium_router)
 
 
 # ---------- Модели ----------
@@ -157,6 +159,9 @@ def register(payload: RegisterRequest):
         "showLastSeen": True,
         "hideOnlineStatus": False,
         "hideReadReceipts": False,
+        "isPremium": False,
+        "premiumUntil": None,
+        "coinsBalance": 0,
         "contacts": [],
         "createdAt": datetime.now(timezone.utc),
         "lastSeen": datetime.now(timezone.utc),
@@ -173,6 +178,9 @@ def register(payload: RegisterRequest):
             "email": payload.email,
             "username": payload.username,
             "displayName": payload.username,
+            "isPremium": False,
+            "premiumUntil": None,
+            "coinsBalance": 0,
         },
     }
 
@@ -208,6 +216,7 @@ def login(payload: LoginRequest):
             "showLastSeen": user.get("showLastSeen", True),
             "hideOnlineStatus": user.get("hideOnlineStatus", False),
             "hideReadReceipts": user.get("hideReadReceipts", False),
+            **serialize_premium(user),
         },
     }
 
@@ -235,6 +244,7 @@ def me(current=Depends(get_current_user)):
         "hideOnlineStatus": user.get("hideOnlineStatus", False),
         "hideReadReceipts": user.get("hideReadReceipts", False),
         "createdAt": user.get("createdAt"),
+        **serialize_premium(user),
     }
 
 
@@ -373,6 +383,7 @@ def get_contacts(current=Depends(get_current_user)):
             "avatarUrl": profile.get("avatarUrl", ""),
             "bio": profile.get("bio", ""),
             "statusText": profile.get("statusText", ""),
+            "isPremium": profile.get("isPremium", False),
             "chatHidden": bool(hidden_at and (
                 not latest_message or latest_message["createdAt"] <= hidden_at
             )),
@@ -471,6 +482,7 @@ def get_user(user_id: str, current=Depends(get_current_user)):
         "avatarUrl": user.get("avatarUrl", ""),
         "bio": user.get("bio", ""),
         "statusText": user.get("statusText", ""),
+        "isPremium": serialize_premium(user)["isPremium"],
     }
     if str(user["_id"]) == current["userId"] or user.get("showLastSeen", True):
         profile["lastSeen"] = user.get("lastSeen")
