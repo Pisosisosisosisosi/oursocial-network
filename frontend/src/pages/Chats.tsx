@@ -1,20 +1,55 @@
-import { useState, useEffect, useRef } from 'react';
-import { Check, CheckCheck, ContactRound, ExternalLink, Pencil, UserRoundPlus, UserRoundX } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
+import { Check, CheckCheck, ChevronDown, ChevronUp, ContactRound, ExternalLink, FileText, Paperclip, Pencil, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, type Contact, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 
+interface ChatMessage {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  text: string;
+  type: 'text' | 'image' | 'file';
+  fileName?: string;
+  contentType?: string;
+  fileData?: string;
+  reactions: { userId: string; emoji: string }[];
+  createdAt: string;
+  read: boolean;
+}
+
+const REACTIONS = ['❤️', '👍', '😂'] as const;
+const ALLOWED_ATTACHMENT_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'application/pdf', 'text/plain', 'text/csv', 'application/zip',
+]);
+
+function highlightText(text: string, query: string) {
+  if (!query.trim()) return text;
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.split(new RegExp(`(${escapedQuery})`, 'ig')).map((part, index) =>
+    part.toLocaleLowerCase().includes(query.toLocaleLowerCase())
+      ? <mark key={index} className="rounded bg-amber-300/30 text-inherit">{part}</mark>
+      : part,
+  );
+}
+
 export default function Chats() {
   const navigate = useNavigate();
-  const { logout, user: currentUser } = useAuth();
+  const { user: currentUser } = useAuth();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(() => new Set());
   const [activeChat, setActiveChat] = useState<(User & { nickname?: string }) | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
+  const [chatSearch, setChatSearch] = useState('');
+  const [activeSearchResult, setActiveSearchResult] = useState(0);
+  const [chatError, setChatError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [openMessageMenu, setOpenMessageMenu] = useState<string | null>(null);
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -22,6 +57,9 @@ export default function Chats() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef(new Map<string, HTMLDivElement>());
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const messageFormRef = useRef<HTMLFormElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const incomingTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingRecipientRef = useRef<string | null>(null);
@@ -162,18 +200,59 @@ export default function Chats() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [activeChat?.id, messages.length]);
+
+  const refreshMessages = async (userId: string) => {
+    const res = await api.get<ChatMessage[]>(`/messages/${userId}`);
+    setMessages(res.data);
+  };
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !activeChat) return;
+
+    const handleMessageChanged = (event: { messageId: string; action: string }) => {
+      if (!event?.messageId) return;
+      void api.get<ChatMessage[]>(`/messages/${activeChat.id}`).then((response) => {
+        setMessages(response.data);
+      }).catch((error: unknown) => {
+        console.error('Не удалось обновить сообщения:', error);
+        setChatError('Не удалось обновить переписку.');
+      });
+    };
+
+    socket.on('message_changed', handleMessageChanged);
+    return () => {
+      socket.off('message_changed', handleMessageChanged);
+    };
+  }, [activeChat, currentUser?.id]);
+
+  const searchMatches = useMemo(() => chatSearch.trim()
+    ? messages.filter((message) =>
+      `${message.text} ${message.fileName || ''}`.toLocaleLowerCase().includes(chatSearch.trim().toLocaleLowerCase()),
+    )
+    : [], [chatSearch, messages]);
+  const selectedSearchResult = Math.min(activeSearchResult, Math.max(0, searchMatches.length - 1));
+
+  useEffect(() => {
+    const message = searchMatches[selectedSearchResult];
+    if (message) {
+      messageRefs.current.get(message.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [searchMatches, selectedSearchResult]);
 
   const handleSelectChat = async (user: User & { nickname?: string }) => {
     stopTyping();
     setTypingUser(null);
     setActiveChat(user);
     setMessages([]);
+    setChatError('');
+    setChatSearch('');
     try {
-      const res = await api.get(`/messages/${user.id}`);
-      setMessages(res.data);
+      await refreshMessages(user.id);
     } catch (e) {
       console.error("Ошибка загрузки истории:", e);
+      setChatError('Не удалось загрузить историю сообщений.');
     }
   };
 
@@ -213,31 +292,100 @@ export default function Chats() {
     }
   };
 
-  const handleSend = async (e: React.FormEvent) => {
+  const handleSend = async (e: FormEvent) => {
     e.preventDefault();
-    if (!text.trim() || !activeChat) return;
+    if (!text.trim() || !activeChat || sending) return;
 
     const msgText = text;
     stopTyping(String(activeChat.id));
-    setText(''); 
+    setSending(true);
+    setChatError('');
 
     try {
-      await api.post('/messages', {
+      const response = await api.post<ChatMessage>('/messages', {
         receiverId: activeChat.id,
-        text: msgText
-      });
-
-      const newMsg = {
-        id: Date.now().toString(),
         text: msgText,
-        senderId: currentUser?.id,
-        createdAt: new Date().toISOString()
-      };
-      setMessages(prev => [...prev, newMsg]);
+        type: 'text',
+      });
+      setMessages((previous) => [...previous, response.data]);
+      setText('');
     } catch (err) {
       console.error("Ошибка отправки:", err);
-      alert("Не удалось отправить сообщение. Проверьте интернет.");
+      setChatError('Не удалось отправить сообщение. Проверьте соединение.');
+    } finally {
+      setSending(false);
     }
+  };
+
+  const handleAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !activeChat || sending) return;
+    if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
+      setChatError('Можно отправить JPG, PNG, GIF, WebP, PDF, TXT, CSV или ZIP.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setChatError('Размер вложения не должен превышать 2 МБ.');
+      return;
+    }
+
+    setSending(true);
+    setChatError('');
+    try {
+      const fileData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === 'string'
+          ? resolve(reader.result)
+          : reject(new Error('Не удалось прочитать выбранный файл.'));
+        reader.onerror = () => reject(new Error('Не удалось прочитать выбранный файл.'));
+        reader.readAsDataURL(file);
+      });
+      const type = file.type.startsWith('image/') ? 'image' : 'file';
+      const response = await api.post<ChatMessage>('/messages', {
+        receiverId: activeChat.id,
+        text: '',
+        type,
+        fileName: file.name,
+        contentType: file.type,
+        fileData,
+      });
+      setMessages((previous) => [...previous, response.data]);
+    } catch (error) {
+      console.error('Ошибка отправки вложения:', error);
+      setChatError('Не удалось отправить файл. Проверьте его формат и размер.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (message: ChatMessage) => {
+    if (!window.confirm('Удалить это сообщение без возможности восстановления?')) return;
+    try {
+      await api.delete(`/messages/${message.id}`);
+      setMessages((previous) => previous.filter((item) => item.id !== message.id));
+      setOpenMessageMenu(null);
+      setChatError('');
+    } catch (error) {
+      console.error('Ошибка удаления сообщения:', error);
+      setChatError('Не удалось удалить сообщение.');
+    }
+  };
+
+  const handleReaction = async (message: ChatMessage, emoji: string) => {
+    try {
+      await api.post(`/messages/${message.id}/reactions`, { emoji });
+      if (activeChat) await refreshMessages(String(activeChat.id));
+      setChatError('');
+    } catch (error) {
+      console.error('Ошибка сохранения реакции:', error);
+      setChatError('Не удалось сохранить реакцию.');
+    }
+  };
+
+  const handleChatSearch = (value: string) => {
+    setChatSearch(value);
+    setActiveSearchResult(0);
   };
 
   const handleTextChange = (value: string) => {
@@ -308,8 +456,8 @@ export default function Chats() {
                 </span>
              </div>
           </div>
-          <button onClick={() => { logout(); navigate('/login'); }} className="p-2 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all" title="Выйти">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+          <button onClick={() => navigate('/settings')} className="p-2 rounded-xl text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all" title="Настройки" aria-label="Открыть настройки">
+            <SettingsIcon size={19} />
           </button>
         </div>
 
@@ -350,7 +498,7 @@ export default function Chats() {
             <div 
               key={user.id} 
               onClick={() => handleSelectChat(contact ? { ...user, nickname: contact.nickname } : user)}
-              className={`p-2.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-200 ${
+              className={`chat-list-item p-2.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-200 ${
                 activeChat?.id === user.id 
                   ? 'glass-active shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
                   : 'hover:bg-slate-800/40 border-l-3 border-transparent'
@@ -439,35 +587,96 @@ export default function Chats() {
                   </p>
                 </div>
               </div>
-              <button type="button" onClick={() => navigate(`/users/${activeChat.id}`)} className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
-                <ContactRound size={15} /> Профиль
-              </button>
+              <div className="flex items-center gap-2">
+                <label className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    value={chatSearch}
+                    onChange={(event) => handleChatSearch(event.target.value)}
+                    placeholder="Поиск в переписке"
+                    aria-label="Поиск по сообщениям"
+                    className="w-32 rounded-xl border border-white/[0.08] bg-white/[0.03] py-2 pl-9 pr-2 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-400/50 sm:w-44"
+                  />
+                </label>
+                {chatSearch && (
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <span>{searchMatches.length ? `${selectedSearchResult + 1}/${searchMatches.length}` : '0/0'}</span>
+                    <button type="button" aria-label="Предыдущий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index - 1 + searchMatches.length) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronUp size={14} /></button>
+                    <button type="button" aria-label="Следующий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index + 1) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronDown size={14} /></button>
+                    <button type="button" aria-label="Закрыть поиск" onClick={() => handleChatSearch('')} className="rounded p-1 hover:bg-white/10"><X size={14} /></button>
+                  </div>
+                )}
+                <button type="button" onClick={() => navigate(`/users/${activeChat.id}`)} className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
+                  <ContactRound size={15} /> Профиль
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10">
+              {chatError && <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3 py-2 text-xs text-rose-200">{chatError}</div>}
               <div className="text-center text-slate-600 text-[10px] font-mono my-4 flex items-center justify-center gap-2">
                 <span className="h-px w-8 bg-slate-800"></span> Начало защищенной сессии <span className="h-px w-8 bg-slate-800"></span>
               </div>
               
-              {messages.map((m: any) => {
+              {messages.map((m) => {
                 const isMe = m.senderId === currentUser?.id;
                 return (
-                  <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-slide-in`}>
-                    <div className={`max-w-[70%] p-3.5 rounded-2xl text-xs leading-relaxed relative group ${
-                      isMe 
-                        ? 'bg-gradient-to-br from-indigo-600 to-indigo-800 text-white rounded-br-none shadow-[0_4px_20px_rgba(79,70,229,0.3)] border border-indigo-500/30' 
-                        : 'bg-slate-800/80 text-slate-200 rounded-bl-none border border-slate-700/50 shadow-lg'
-                    }`}>
-                      {m.text}
-                      <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono ${isMe ? 'text-indigo-200/70' : 'text-slate-400/70'}`}>
-                        <time>
-                          {m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                        </time>
+                  <div key={m.id} ref={(element) => { if (element) messageRefs.current.set(m.id, element); else messageRefs.current.delete(m.id); }} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-slide-in`}>
+                    <div className="max-w-[80%]">
+                      <div
+                        onContextMenu={(event) => {
+                          if (!isMe) return;
+                          event.preventDefault();
+                          setOpenMessageMenu(m.id);
+                        }}
+                        className={`chat-message max-w-full p-3.5 rounded-2xl text-xs leading-relaxed relative group ${
+                          isMe
+                            ? 'bg-gradient-to-br from-indigo-600 to-indigo-800 text-white rounded-br-none shadow-[0_4px_20px_rgba(79,70,229,0.3)] border border-indigo-500/30'
+                            : 'bg-slate-800/80 text-slate-200 rounded-bl-none border border-slate-700/50 shadow-lg'
+                        }`}
+                      >
+                        {m.type === 'image' && m.fileData ? (
+                          localStorage.getItem('pulseMediaPreview') !== 'false'
+                            ? <a href={m.fileData} target="_blank" rel="noreferrer" aria-label={`Открыть изображение ${m.fileName || ''}`}><img src={m.fileData} alt={m.fileName || 'Изображение'} className="mb-2 max-h-72 max-w-full rounded-lg object-contain" /></a>
+                            : <a href={m.fileData} download={m.fileName || 'image'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{m.fileName || 'Скачать изображение'}</span></a>
+                        ) : m.type === 'file' && m.fileData ? (
+                          <a href={m.fileData} download={m.fileName || 'attachment'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20">
+                            <FileText size={20} />
+                            <span className="max-w-56 break-all">{m.fileName || 'Скачать файл'}</span>
+                          </a>
+                        ) : null}
+                        {m.text && <div className="chat-message-content whitespace-pre-wrap break-words">{highlightText(m.text, chatSearch)}</div>}
                         {isMe && (
-                          m.read === true
-                            ? <CheckCheck size={13} aria-label="Прочитано" className="text-sky-300" />
-                            : <Check size={13} aria-label="Отправлено" />
+                          <button type="button" aria-label="Действия с сообщением" onClick={() => setOpenMessageMenu((current) => current === m.id ? null : m.id)} className="absolute -top-2 -right-2 rounded-full border border-white/10 bg-slate-950 p-1.5 text-slate-300 opacity-40 shadow transition-opacity group-hover:opacity-100 focus:opacity-100">
+                            <Trash2 size={12} />
+                          </button>
                         )}
+                        {openMessageMenu === m.id && isMe && (
+                          <div className="absolute right-0 top-7 z-20 rounded-xl border border-white/10 bg-slate-950 p-1 shadow-xl">
+                            <button type="button" onClick={() => void handleDeleteMessage(m)} className="flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs text-rose-300 hover:bg-rose-400/10">
+                              <Trash2 size={13} /> Удалить сообщение
+                            </button>
+                          </div>
+                        )}
+                        <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono ${isMe ? 'text-indigo-200/70' : 'text-slate-400/70'}`}>
+                          <time>{m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time>
+                          {isMe && localStorage.getItem('pulseShowReadReceipts') !== 'false' && (
+                            m.read
+                              ? <CheckCheck size={13} aria-label="Прочитано" className="text-sky-300" />
+                              : <Check size={13} aria-label="Отправлено" />
+                          )}
+                        </div>
+                      </div>
+                      <div className={`mt-1 flex gap-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        {REACTIONS.map((emoji) => {
+                          const matchingReactions = m.reactions.filter((reaction) => reaction.emoji === emoji);
+                          const mine = matchingReactions.some((reaction) => reaction.userId === currentUser?.id);
+                          return (
+                            <button key={emoji} type="button" onClick={() => void handleReaction(m, emoji)} aria-label={`Поставить реакцию ${emoji}`} className={`rounded-full border px-2 py-0.5 text-[10px] transition ${mine ? 'border-indigo-400/50 bg-indigo-500/20' : 'border-white/[0.07] bg-slate-900/50 hover:bg-slate-700/70'}`}>
+                              {emoji}{matchingReactions.length > 0 && <span className="ml-1 text-slate-300">{matchingReactions.length}</span>}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -487,17 +696,27 @@ export default function Chats() {
                   <span>{typingUser} печатает...</span>
                 </div>
               )}
-              <form onSubmit={handleSend} className="glass-panel p-2 rounded-2xl flex items-center gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-indigo-500/30 transition-all">
-                 <button type="button" className="p-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-all">
-                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+              <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void handleAttachment(event)} className="hidden" />
+              <form ref={messageFormRef} onSubmit={handleSend} className="glass-panel p-2 rounded-2xl flex items-center gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-indigo-500/30 transition-all">
+                 <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={sending} className="p-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-all disabled:opacity-50" title="Прикрепить изображение или файл" aria-label="Прикрепить файл">
+                   <Paperclip size={19} />
                  </button>
                  <input 
                     value={text}
                     onChange={e => handleTextChange(e.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        if (localStorage.getItem('pulseEnterToSend') !== 'false') {
+                          messageFormRef.current?.requestSubmit();
+                        }
+                      }
+                    }}
                     placeholder="Введите сообщение..."
                     className="flex-1 bg-transparent px-2 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none"
+                    disabled={sending}
                  />
-                 <button type="submit" className="p-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-emerald-400 text-slate-950 hover:opacity-90 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)]">
+                 <button type="submit" disabled={sending || !text.trim()} className="p-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-emerald-400 text-slate-950 hover:opacity-90 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] disabled:opacity-50">
                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                  </button>
               </form>

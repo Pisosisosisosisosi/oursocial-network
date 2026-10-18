@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from bson import ObjectId
 from datetime import datetime, timezone
+from typing import Literal
+import base64
+import binascii
+import os
 import re
 
 from db import users_collection, keys_collection, connect_db
@@ -65,8 +69,16 @@ class ContactRequest(BaseModel):
 
 # НОВАЯ МОДЕЛЬ ДЛЯ СООБЩЕНИЙ
 class MessageRequest(BaseModel):
-    receiverId: str
-    text: str
+    receiverId: str = Field(min_length=1, max_length=64)
+    text: str = Field(default="", max_length=4000)
+    type: Literal["text", "image", "file"] = "text"
+    fileName: str = Field(default="", max_length=200)
+    contentType: str = Field(default="", max_length=100)
+    fileData: str = Field(default="", max_length=2_800_000)
+
+
+class ReactionRequest(BaseModel):
+    emoji: Literal["❤️", "👍", "😂"]
 
 
 # ---------- Startup ----------
@@ -354,23 +366,107 @@ def get_user(user_id: str, current=Depends(get_current_user)):
 
 # ---------- Messages (НОВЫЙ РАЗДЕЛ) ----------
 
+MAX_ATTACHMENT_SIZE = 2 * 1024 * 1024
+ALLOWED_ATTACHMENT_TYPES = {
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf", "text/plain", "text/csv", "application/zip",
+}
+
+
+def serialize_message(message):
+    return {
+        "id": str(message["_id"]),
+        "senderId": message["senderId"],
+        "receiverId": message["receiverId"],
+        "text": message.get("text", ""),
+        "type": message.get("type", "text"),
+        "fileName": message.get("fileName", ""),
+        "contentType": message.get("contentType", ""),
+        "fileData": message.get("fileData", ""),
+        "reactions": message.get("reactions", []),
+        "createdAt": message["createdAt"].isoformat(),
+        "read": message.get("read", False),
+    }
+
+
+def find_message_for_user(message_id: str, user_id: str):
+    if not ObjectId.is_valid(message_id):
+        raise HTTPException(status_code=400, detail="Invalid message id")
+    message = messages_collection().find_one({"_id": ObjectId(message_id)})
+    if not message or user_id not in (message["senderId"], message["receiverId"]):
+        raise HTTPException(status_code=404, detail="Message not found")
+    return message
+
+
 @app.post("/messages")
-def send_message(payload: MessageRequest, current=Depends(get_current_user)):
+async def send_message(payload: MessageRequest, current=Depends(get_current_user)):
+    if not ObjectId.is_valid(payload.receiverId):
+        raise HTTPException(status_code=400, detail="Invalid receiver id")
+    if payload.receiverId == current["userId"]:
+        raise HTTPException(status_code=400, detail="Cannot send a message to yourself")
+
+    file_name = ""
+    content_type = ""
+    file_data = ""
+    if payload.type == "text":
+        if not payload.text.strip():
+            raise HTTPException(status_code=400, detail="Message text cannot be empty")
+    else:
+        if payload.contentType not in ALLOWED_ATTACHMENT_TYPES:
+            raise HTTPException(status_code=415, detail="Unsupported attachment type")
+        match = re.fullmatch(
+            r"data:([\w.+-]+/[\w.+-]+);base64,([A-Za-z0-9+/]*={0,2})",
+            payload.fileData,
+        )
+        if not match or match.group(1) != payload.contentType:
+            raise HTTPException(status_code=400, detail="Invalid attachment data")
+        try:
+            decoded = base64.b64decode(match.group(2), validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid attachment encoding")
+        if not decoded or len(decoded) > MAX_ATTACHMENT_SIZE:
+            raise HTTPException(status_code=413, detail="Attachment must be no larger than 2 MB")
+        is_image = payload.contentType.startswith("image/")
+        if (payload.type == "image") != is_image:
+            raise HTTPException(status_code=400, detail="Attachment type does not match its content")
+        file_name = os.path.basename(payload.fileName.strip().replace("\\", "/"))
+        if not file_name or file_name in {".", ".."}:
+            raise HTTPException(status_code=400, detail="Attachment filename is required")
+        content_type = payload.contentType
+        file_data = payload.fileData
+
     messages = messages_collection()
-    
     doc = {
         "senderId": current["userId"],
         "receiverId": payload.receiverId,
         "text": payload.text,
+        "type": payload.type,
+        "fileName": file_name,
+        "contentType": content_type,
+        "fileData": file_data,
+        "reactions": [],
         "createdAt": datetime.now(timezone.utc),
-        "read": False
+        "read": False,
     }
-    messages.insert_one(doc)
-    return {"status": "ok"}
+    result = messages.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    await sio.emit(
+        "message_changed",
+        {
+            "messageId": str(result.inserted_id),
+            "senderId": current["userId"],
+            "receiverId": payload.receiverId,
+            "action": "created",
+        },
+        to=f"user:{payload.receiverId}",
+    )
+    return serialize_message(doc)
 
 
 @app.get("/messages/{user_id}")
 def get_messages(user_id: str, current=Depends(get_current_user)):
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user id")
     messages = messages_collection()
     my_id = current["userId"]
 
@@ -392,17 +488,54 @@ def get_messages(user_id: str, current=Depends(get_current_user)):
         ]
     }).sort("createdAt", 1))
 
-    return [
-        {
-            "id": str(m["_id"]),
-            "senderId": m["senderId"],
-            "receiverId": m["receiverId"],
-            "text": m["text"],
-            "createdAt": m["createdAt"].isoformat(),
-            "read": m.get("read", False)
-        }
-        for m in chat
-    ]
+    return [serialize_message(message) for message in chat]
+
+
+@app.delete("/messages/{message_id}")
+async def delete_message(message_id: str, current=Depends(get_current_user)):
+    message = find_message_for_user(message_id, current["userId"])
+    if message["senderId"] != current["userId"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own messages")
+
+    messages_collection().delete_one({"_id": message["_id"], "senderId": current["userId"]})
+    await sio.emit(
+        "message_changed",
+        {"messageId": message_id, "action": "deleted"},
+        to=f"user:{message['receiverId']}",
+    )
+    await sio.emit(
+        "message_changed",
+        {"messageId": message_id, "action": "deleted"},
+        to=f"user:{message['senderId']}",
+    )
+    return {"status": "ok"}
+
+
+@app.post("/messages/{message_id}/reactions")
+async def toggle_reaction(
+    message_id: str,
+    payload: ReactionRequest,
+    current=Depends(get_current_user),
+):
+    message = find_message_for_user(message_id, current["userId"])
+    reaction = {"userId": current["userId"], "emoji": payload.emoji}
+    messages = messages_collection()
+    if reaction in message.get("reactions", []):
+        messages.update_one({"_id": message["_id"]}, {"$pull": {"reactions": reaction}})
+    else:
+        messages.update_one({"_id": message["_id"]}, {"$addToSet": {"reactions": reaction}})
+
+    await sio.emit(
+        "message_changed",
+        {"messageId": message_id, "action": "reaction"},
+        to=f"user:{message['receiverId']}",
+    )
+    await sio.emit(
+        "message_changed",
+        {"messageId": message_id, "action": "reaction"},
+        to=f"user:{message['senderId']}",
+    )
+    return {"status": "ok"}
 
 
 # ---------- Encryption keys ----------

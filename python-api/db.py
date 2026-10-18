@@ -29,4 +29,4 @@ def keys_collection():
     return get_db()["keys"]
 
 def messages_collection():
-    return db["messages"]
+    return get_db()["messages"]

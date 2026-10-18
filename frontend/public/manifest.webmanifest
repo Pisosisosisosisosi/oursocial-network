@@ -1,0 +1,19 @@
+{
+  "name": "Pulse — мессенджер",
+  "short_name": "Pulse",
+  "description": "Личные разговоры и контакты в Pulse.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "icons": [
+    {
+      "src": "./pulse-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
