@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // ЕДИНСТВЕННЫЙ СЕРВЕР (PYTHON)
-const PYTHON_API_URL = 'https://oursocial-python.onrender.com';
+const PYTHON_API_URL = import.meta.env.VITE_API_URL || 'https://oursocial-python.onrender.com';
 
 export const api = axios.create({
   baseURL: PYTHON_API_URL,

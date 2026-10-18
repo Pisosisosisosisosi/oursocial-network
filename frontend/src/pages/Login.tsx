@@ -1,12 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { isAxiosError } from 'axios';
 import { Link } from 'react-router-dom';
-import { ArrowRight, LockKeyhole, MessageCircle, ShieldCheck, User as UserIcon, Mail } from 'lucide-react';
+import { ArrowRight, LockKeyhole, Mail, MessageCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function Register() {
-  const { register } = useAuth();
-  const [username, setUsername] = useState('');
+export default function Login() {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,12 +16,12 @@ export default function Register() {
     setError('');
     setLoading(true);
     try {
-      await register(email.trim(), password, username.trim());
-    } catch (regError: unknown) {
-      const data = isAxiosError(regError)
-        ? regError.response?.data as { detail?: string; error?: string } | undefined
+      await login(email.trim(), password);
+    } catch (loginError: unknown) {
+      const data = isAxiosError(loginError)
+        ? loginError.response?.data as { detail?: string; error?: string } | undefined
         : undefined;
-      setError(data?.detail || data?.error || 'Не удалось зарегистрироваться. Возможно, email или имя занято.');
+      setError(data?.detail || data?.error || 'Не удалось войти. Проверьте email и пароль.');
     } finally {
       setLoading(false);
     }
@@ -41,9 +40,9 @@ export default function Register() {
 
         <section className="rounded-[28px] border border-white/[0.08] bg-[#101725]/90 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-9">
           <div className="mb-7">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-300">Присоединяйтесь</p>
-            <h1 className="text-2xl font-semibold tracking-tight">Создайте аккаунт</h1>
-            <p className="mt-2 text-sm text-slate-500">Начните общаться с близкими и друзьями.</p>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-300">С возвращением</p>
+            <h1 className="text-2xl font-semibold tracking-tight">Войти в Pulse</h1>
+            <p className="mt-2 text-sm text-slate-500">Войдите, чтобы открыть чаты и контакты.</p>
           </div>
 
           {error && (
@@ -53,20 +52,6 @@ export default function Register() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <label className="block">
-              <span className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400">
-                <UserIcon size={14} className="text-slate-600" /> Имя пользователя
-              </span>
-              <input
-                type="text"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                autoComplete="username"
-                required
-                placeholder="Например, darius_writer"
-                className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
-              />
-            </label>
             <label className="block">
               <span className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400">
                 <Mail size={14} className="text-slate-600" /> Электронная почта
@@ -89,29 +74,29 @@ export default function Register() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete="new-password"
+                autoComplete="current-password"
                 required
-                placeholder="Минимум 6 символов"
+                placeholder="Ваш пароль"
                 className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
               />
             </label>
             <button
               type="submit"
-              disabled={loading || !email.trim() || !password || !username.trim()}
+              disabled={loading || !email.trim() || !password}
               className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? 'Создаем…' : <>Зарегистрироваться <ArrowRight size={16} /></>}
+              {loading ? 'Входим…' : <>Войти <ArrowRight size={16} /></>}
             </button>
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500">
-            Уже есть аккаунт?{' '}
-            <Link to="/login" className="font-semibold text-indigo-300 hover:text-indigo-200">Войти</Link>
+            Ещё нет аккаунта?{' '}
+            <Link to="/register" className="font-semibold text-indigo-300 hover:text-indigo-200">Зарегистрироваться</Link>
           </p>
         </section>
 
         <p className="mt-5 flex items-center justify-center gap-2 text-[11px] text-slate-600">
-          <ShieldCheck size={14} className="text-emerald-400/70" /> Регистрация занимает всего минуту
+          <ShieldCheck size={14} className="text-emerald-400/70" /> Ваша переписка защищена.
         </p>
       </div>
     </main>
