@@ -4,18 +4,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from bson import ObjectId
 from datetime import date, datetime, timedelta, timezone
+from email.message import EmailMessage
+from pymongo import ReturnDocument
 from typing import Literal
 import base64
 import binascii
+import hashlib
+import hmac
 import html
 import json
 import os
 import re
+import secrets
+import smtplib
+import ssl
 import time
 from collections import defaultdict, deque
 from threading import Lock
 
-from db import users_collection, keys_collection, connect_db, groups_collection
+from db import (
+    users_collection, keys_collection, connect_db, groups_collection,
+    email_verifications_collection, verified_email_tokens_collection,
+)
 # Импортируем новую функцию для сообщений (ее нужно будет добавить в db.py)
 from db import messages_collection 
 from auth import (
@@ -52,6 +62,16 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
+    verificationToken: str = Field(min_length=32, max_length=256)
+
+
+class SendEmailCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyEmailCodeRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(pattern=r"^\d{6}$")
 
 
 class LoginRequest(BaseModel):
@@ -131,6 +151,9 @@ class PrivacyRequest(BaseModel):
 @app.on_event("startup")
 def startup():
     connect_db()
+    email_verifications_collection().create_index("email", unique=True)
+    email_verifications_collection().create_index("expiresAt", expireAfterSeconds=0)
+    verified_email_tokens_collection().create_index("expiresAt", expireAfterSeconds=0)
     print("DEBUG startup: MongoDB connected (python-api)")
 
 
@@ -151,17 +174,31 @@ def health():
 @app.post("/auth/register")
 def register(payload: RegisterRequest):
     users = users_collection()
+    email = str(payload.email).lower()
 
-    if users.find_one({"email": payload.email}):
-        raise HTTPException(status_code=409, detail="Email already registered")
     if users.find_one({"username": payload.username}):
         raise HTTPException(status_code=409, detail="Username already taken")
 
+    registration_token_hash = hashlib.sha256(payload.verificationToken.encode()).hexdigest()
+    verified_email_token = verified_email_tokens_collection().find_one_and_delete({
+        "email": email,
+        "tokenHash": registration_token_hash,
+        "expiresAt": {"$gt": datetime.now(timezone.utc)},
+    })
+    if not verified_email_token:
+        raise HTTPException(status_code=400, detail="Подтвердите email перед регистрацией.")
+    if users.find_one({"email": email}):
+        raise HTTPException(
+            status_code=400,
+            detail="Не удалось создать аккаунт. Проверьте данные и попробуйте снова.",
+        )
+
     created_at = datetime.now(timezone.utc)
     doc = {
-        "email": payload.email,
+        "email": email,
         "username": payload.username,
         "displayName": payload.username,
+        "isEmailVerified": True,
         "passwordHash": hash_password(payload.password),
         "avatarUrl": "",
         "bio": "",
@@ -180,15 +217,16 @@ def register(payload: RegisterRequest):
     result = users.insert_one(doc)
     user_id = str(result.inserted_id)
 
-    token = create_token(user_id, payload.email, payload.username)
+    token = create_token(user_id, email, payload.username)
 
     return {
         "token": token,
         "user": {
             "id": user_id,
-            "email": payload.email,
+            "email": email,
             "username": payload.username,
             "displayName": payload.username,
+            "isEmailVerified": True,
             "isPremium": False,
             "premiumUntil": None,
             "coinsBalance": 0,
@@ -199,10 +237,145 @@ def register(payload: RegisterRequest):
     }
 
 
+def send_email_verification_message(email: str, code: str) -> None:
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    if not smtp_user or not smtp_password:
+        raise RuntimeError("SMTP_USER and SMTP_PASSWORD must be configured")
+
+    message = EmailMessage()
+    message["Subject"] = "Код подтверждения Skyline"
+    message["From"] = smtp_user
+    message["To"] = email
+    message.set_content(
+        f"Ваш код подтверждения для Skyline: {code}. "
+        "Код действителен 10 минут."
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
+        smtp.ehlo()
+        smtp.starttls(context=ssl.create_default_context())
+        smtp.ehlo()
+        smtp.login(smtp_user, smtp_password)
+        smtp.send_message(message)
+
+
+@app.post("/auth/send-email-code")
+def send_email_code(payload: SendEmailCodeRequest):
+    email = str(payload.email).lower()
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    now = datetime.now(timezone.utc)
+
+    email_verifications_collection().update_one(
+        {"email": email},
+        {"$set": {
+            "email": email,
+            "code": code,
+            "expiresAt": now + timedelta(minutes=10),
+            "failedAttempts": 0,
+        }},
+        upsert=True,
+    )
+    verified_email_tokens_collection().delete_many({"email": email})
+    try:
+        send_email_verification_message(email, code)
+    except (OSError, smtplib.SMTPException, RuntimeError, ValueError) as error:
+        email_verifications_collection().delete_one({"email": email, "code": code})
+        print(f"Email verification delivery failed: {type(error).__name__}")
+        raise HTTPException(
+            status_code=503,
+            detail="Не удалось отправить код. Проверьте настройки почты и попробуйте позже.",
+        ) from error
+
+    return {
+        "status": "ok",
+        "message": "Если адрес может принять письмо, код отправлен. Проверьте почту.",
+        "expiresInSeconds": 600,
+    }
+
+
+@app.post("/auth/verify-email-code")
+def verify_email_code(payload: VerifyEmailCodeRequest):
+    email = str(payload.email).lower()
+    verifications = email_verifications_collection()
+    verification = verifications.find_one({"email": email})
+    if not verification:
+        raise HTTPException(status_code=400, detail="Код не запрошен.")
+
+    now = datetime.now(timezone.utc)
+    expires_at = verification["expiresAt"]
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now:
+        verifications.delete_one({"_id": verification["_id"]})
+        raise HTTPException(status_code=400, detail="Код истёк. Запросите новый код.")
+
+    failed_attempts = int(verification.get("failedAttempts", 0))
+    if failed_attempts >= 5:
+        verifications.update_one(
+            {"_id": verification["_id"]},
+            {"$set": {"failedAttempts": 0}},
+        )
+        verifications.delete_one({"_id": verification["_id"]})
+        raise HTTPException(
+            status_code=429,
+            detail="Слишком много попыток. Запросите новый код.",
+        )
+
+    if not hmac.compare_digest(str(verification["code"]), payload.code):
+        updated_verification = verifications.find_one_and_update(
+            {"_id": verification["_id"]},
+            {"$inc": {"failedAttempts": 1}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if not updated_verification:
+            raise HTTPException(status_code=400, detail="Код не запрошен.")
+        failed_attempts = int(updated_verification.get("failedAttempts", 0))
+        if failed_attempts >= 5:
+            verifications.delete_one({"_id": verification["_id"]})
+            raise HTTPException(
+                status_code=429,
+                detail="Слишком много попыток. Запросите новый код.",
+            )
+        remaining = 5 - failed_attempts
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неверный код. Осталось попыток: {remaining}.",
+        )
+
+    consumed_verification = verifications.find_one_and_delete({
+        "_id": verification["_id"],
+        "code": payload.code,
+    })
+    if not consumed_verification:
+        raise HTTPException(status_code=400, detail="Код не запрошен или уже использован.")
+
+    registration_token = secrets.token_urlsafe(32)
+    registration_token_hash = hashlib.sha256(registration_token.encode()).hexdigest()
+    verified_tokens = verified_email_tokens_collection()
+    verified_tokens.delete_many({"email": email})
+    users_collection().update_one(
+        {"email": email},
+        {"$set": {"isEmailVerified": True}},
+    )
+    verified_tokens.insert_one({
+        "email": email,
+        "tokenHash": registration_token_hash,
+        "expiresAt": now + timedelta(minutes=10),
+    })
+    return {
+        "status": "ok",
+        "message": "Email подтверждён.",
+        "registrationToken": registration_token,
+    }
+
+
 @app.post("/auth/login")
 def login(payload: LoginRequest):
     users = users_collection()
-    user = users.find_one({"email": payload.email})
+    user = users.find_one({"email": str(payload.email).lower()})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -222,6 +395,7 @@ def login(payload: LoginRequest):
         "user": {
             "id": user_id,
             "email": user["email"],
+            "isEmailVerified": user.get("isEmailVerified", False),
             "username": user["username"],
             "displayName": user.get("displayName", user["username"]),
             "avatarUrl": user.get("avatarUrl", ""),
@@ -252,6 +426,7 @@ def me(current=Depends(get_current_user)):
     return {
         "id": str(user["_id"]),
         "email": user["email"],
+        "isEmailVerified": user.get("isEmailVerified", False),
         "username": user["username"],
         "displayName": user.get("displayName", user["username"]),
         "avatarUrl": user.get("avatarUrl", ""),

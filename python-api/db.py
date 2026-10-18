@@ -39,3 +39,9 @@ def channels_collection():
 
 def channel_posts_collection():
     return get_db()["channel_posts"]
+
+def email_verifications_collection():
+    return get_db()["email_verifications"]
+
+def verified_email_tokens_collection():
+    return get_db()["verified_email_tokens"]

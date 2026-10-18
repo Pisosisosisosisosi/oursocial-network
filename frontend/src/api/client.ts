@@ -19,6 +19,7 @@ api.interceptors.request.use((config) => {
 export interface User {
   id: string;
   email?: string;
+  isEmailVerified?: boolean;
   username: string;
   displayName?: string;
   name?: string;
@@ -49,8 +50,12 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  register: (email: string, password: string, username: string) =>
-    api.post<AuthResponse>('/auth/register', { email, password, username }),
+  register: (email: string, password: string, username: string, verificationToken: string) =>
+    api.post<AuthResponse>('/auth/register', { email, password, username, verificationToken }),
+  sendEmailCode: (email: string) =>
+    api.post<{ status: string; message: string; expiresInSeconds: number }>('/auth/send-email-code', { email }),
+  verifyEmailCode: (email: string, code: string) =>
+    api.post<{ status: string; message: string; registrationToken: string }>('/auth/verify-email-code', { email, code }),
   login: (email: string, password: string) =>
     api.post<AuthResponse>('/auth/login', { email, password }),
   me: () => api.get<User>('/auth/me'),

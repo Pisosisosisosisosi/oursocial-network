@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { isAxiosError } from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, LockKeyhole, MessageCircle, ShieldCheck, User as UserIcon, Mail } from 'lucide-react';
+import { ArrowRight, LockKeyhole, Mail, MessageCircle, ShieldCheck, User as UserIcon, X } from 'lucide-react';
+import { authApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
@@ -12,25 +13,89 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verificationOpen, setVerificationOpen] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationError, setVerificationError] = useState('');
+  const [verificationNotice, setVerificationNotice] = useState('');
+  const [secondsRemaining, setSecondsRemaining] = useState(600);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+
+  useEffect(() => {
+    if (!verificationOpen || secondsRemaining <= 0) return;
+    const timer = window.setTimeout(() => {
+      setSecondsRemaining((remaining) => Math.max(0, remaining - 1));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [verificationOpen, secondsRemaining]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await register(email.trim(), password, username.trim());
-      const redirectPath = sessionStorage.getItem('pulseAfterLogin');
-      sessionStorage.removeItem('pulseAfterLogin');
-      navigate(redirectPath || '/', { replace: true });
-    } catch (regError: unknown) {
-      const data = isAxiosError(regError)
-        ? regError.response?.data as { detail?: string; error?: string } | undefined
+      await authApi.sendEmailCode(email.trim());
+      setSecondsRemaining(600);
+      setVerificationCode('');
+      setVerificationError('');
+      setVerificationNotice('');
+      setVerificationOpen(true);
+    } catch (sendError: unknown) {
+      const data = isAxiosError(sendError)
+        ? sendError.response?.data as { detail?: string; error?: string } | undefined
         : undefined;
-      setError(data?.detail || data?.error || 'Не удалось зарегистрироваться. Возможно, email или имя занято.');
+      setError(data?.detail || data?.error || 'Не удалось отправить код подтверждения. Попробуйте ещё раз.');
     } finally {
       setLoading(false);
     }
   };
+
+  const handleResendCode = async () => {
+    setVerificationError('');
+    setVerificationNotice('');
+    setVerificationCode('');
+    setVerificationLoading(true);
+    try {
+      await authApi.sendEmailCode(email.trim());
+      setSecondsRemaining(600);
+      setVerificationNotice('Если адрес может принять письмо, новый код отправлен.');
+    } catch (sendError: unknown) {
+      const data = isAxiosError(sendError)
+        ? sendError.response?.data as { detail?: string; error?: string } | undefined
+        : undefined;
+      setVerificationError(data?.detail || data?.error || 'Не удалось отправить новый код.');
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (verificationCode.length !== 6 || verificationLoading) return;
+    setVerificationError('');
+    setVerificationNotice('');
+    setVerificationLoading(true);
+    try {
+      const response = await authApi.verifyEmailCode(email.trim(), verificationCode);
+      await register(email.trim(), password, username.trim(), response.data.registrationToken);
+      const redirectPath = sessionStorage.getItem('pulseAfterLogin');
+      sessionStorage.removeItem('pulseAfterLogin');
+      navigate(redirectPath || '/', { replace: true });
+    } catch (verifyError: unknown) {
+      const data = isAxiosError(verifyError)
+        ? verifyError.response?.data as { detail?: string; error?: string } | undefined
+        : undefined;
+      const message = data?.detail || data?.error || 'Не удалось подтвердить email.';
+      setVerificationError(message);
+      if (message.toLocaleLowerCase('ru-RU').includes('слишком много попыток')) {
+        setVerificationCode('');
+      }
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
+  const formatCountdown = (seconds: number) =>
+    `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
 
   return (
     <main className="relative grid h-full w-full place-items-center overflow-y-auto bg-[#090d16] px-4 py-8 text-slate-100">
@@ -118,6 +183,70 @@ export default function Register() {
             <Link to="/login" className="font-semibold text-indigo-300 hover:text-indigo-200">Войти</Link>
           </p>
         </section>
+
+        {verificationOpen && (
+          <div
+            className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !verificationLoading) setVerificationOpen(false);
+            }}
+          >
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="email-verification-title"
+              className="w-full max-w-md rounded-[28px] border border-white/[0.1] bg-[#101725] p-6 shadow-2xl sm:p-8"
+            >
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-300">Подтверждение почты</p>
+                  <h2 id="email-verification-title" className="text-xl font-semibold">Введите код из письма</h2>
+                </div>
+                <button type="button" onClick={() => setVerificationOpen(false)} aria-label="Закрыть" className="rounded-xl p-2 text-slate-500 transition hover:bg-white/5 hover:text-white">
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="mb-5 text-sm leading-relaxed text-slate-400">
+                Если адрес может принять письмо, код отправлен на <span className="text-slate-200">{email.trim()}</span>.
+                Он действует ещё <span className="font-mono text-indigo-300">{formatCountdown(secondsRemaining)}</span>.
+              </p>
+              {verificationError && (
+                <div role="status" className="mb-4 rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3.5 py-3 text-sm text-rose-200">
+                  {verificationError}
+                </div>
+              )}
+              {verificationNotice && (
+                <div role="status" className="mb-4 rounded-xl border border-indigo-400/20 bg-indigo-400/[0.08] px-3.5 py-3 text-sm text-indigo-200">
+                  {verificationNotice}
+                </div>
+              )}
+              <form onSubmit={handleVerifyCode} className="space-y-4">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-medium text-slate-400">Шестизначный код</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    value={verificationCode}
+                    onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    aria-label="Код подтверждения"
+                    className="h-14 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] text-center font-mono text-2xl tracking-[0.45em] text-white outline-none transition placeholder:text-slate-700 focus:border-indigo-400/50"
+                    required
+                  />
+                </label>
+                <button type="submit" disabled={verificationLoading || verificationCode.length !== 6} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50">
+                  {verificationLoading ? 'Проверяем…' : <>Подтвердить и создать аккаунт <ArrowRight size={16} /></>}
+                </button>
+              </form>
+              <button type="button" onClick={() => void handleResendCode()} disabled={verificationLoading} className="mt-4 w-full rounded-xl px-3 py-2 text-xs font-medium text-indigo-300 transition hover:bg-indigo-400/10 disabled:opacity-50">
+                {verificationLoading ? 'Отправляем…' : 'Отправить код повторно'}
+              </button>
+            </section>
+          </div>
+        )}
 
         <p className="mt-5 flex items-center justify-center gap-2 text-[11px] text-slate-600">
           <ShieldCheck size={14} className="text-emerald-400/70" /> Регистрация занимает всего минуту
