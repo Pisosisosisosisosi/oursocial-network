@@ -718,72 +718,76 @@ export default function Chats() {
 
         {activeChat ? (
           <>
-            <div className="p-2.5 sm:p-4 border-b border-slate-800/60 glass-panel flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 relative z-10">
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <button type="button" onClick={() => {
-                  stopTyping(String(activeChat.id));
-                  setTypingUser(null);
-                  setActiveChat(null);
-                }} className="md:hidden rounded-xl p-2 text-slate-300 hover:bg-white/10" aria-label="Назад к контактам">
-                  <ArrowLeft size={19} />
-                </button>
-                <div className="w-10 h-10 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center font-bold text-slate-200 border border-slate-600/50">
-                  {activeChat.avatarUrl
-                    ? <img src={activeChat.avatarUrl} alt="" className="h-full w-full rounded-xl object-cover" />
-                    : activeChat.username?.[0]?.toUpperCase()}
+            <div className="relative z-10 flex flex-col gap-2 border-b border-slate-800/60 p-2.5 glass-panel sm:gap-3 sm:p-4">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                  <button type="button" onClick={() => {
+                    stopTyping(String(activeChat.id));
+                    setTypingUser(null);
+                    setActiveChat(null);
+                  }} className="md:hidden rounded-xl p-2 text-slate-300 hover:bg-white/10" aria-label="Назад к контактам">
+                    <ArrowLeft size={19} />
+                  </button>
+                  <div className="w-10 h-10 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center font-bold text-slate-200 border border-slate-600/50">
+                    {activeChat.avatarUrl
+                      ? <img src={activeChat.avatarUrl} alt="" className="h-full w-full rounded-xl object-cover" />
+                      : activeChat.username?.[0]?.toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="flex min-w-0 items-center gap-2 font-bold text-sm text-slate-100">
+                      <button type="button" onClick={() => void openChatProfile()} aria-label={`Профиль ${activeChat.displayName || activeChat.username}`} className="truncate text-left transition hover:text-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60">
+                        {activeChat.nickname || activeChat.displayName || activeChat.username}
+                      </button>
+                      <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Pulse</span>
+                    </h3>
+                    <p className={`text-[10px] flex items-center gap-1 ${onlineUsers.has(String(activeChat.id)) ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${onlineUsers.has(String(activeChat.id)) ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
+                      {onlineUsers.has(String(activeChat.id)) ? 'В сети' : 'Не в сети'}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h3 className="flex min-w-0 items-center gap-2 font-bold text-sm text-slate-100">
-                    <button type="button" onClick={() => void openChatProfile()} aria-label={`Профиль ${activeChat.displayName || activeChat.username}`} className="truncate text-left transition hover:text-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60">
-                      {activeChat.nickname || activeChat.displayName || activeChat.username}
-                    </button>
-                    <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Pulse</span>
-                  </h3>
-                  <p className={`text-[10px] flex items-center gap-1 ${onlineUsers.has(String(activeChat.id)) ? 'text-emerald-400' : 'text-slate-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${onlineUsers.has(String(activeChat.id)) ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
-                    {onlineUsers.has(String(activeChat.id)) ? 'В сети' : 'Не в сети'}
-                  </p>
-                  {pinnedMessages.length > 0 && (
-                    <div className="mt-1 flex max-w-full flex-col gap-0.5">
-                      {pinnedMessages.map((message) => (
-                        <button
-                          key={message.id}
-                          type="button"
-                          title={message.text || message.fileName || 'Перейти к закреплённому сообщению'}
-                          onClick={() => messageRefs.current.get(message.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-                          className="pinned-header-link flex max-w-full items-center gap-1.5 rounded-md pr-1 text-left text-[10px] text-amber-200/90 transition hover:text-amber-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-300/60"
-                        >
-                          <Pin size={11} className="shrink-0 text-amber-300" />
-                          <span className="max-w-full truncate">{message.text || message.fileName || 'Вложение'}</span>
-                        </button>
-                      ))}
+                <div className="flex min-w-0 items-center gap-2">
+                  <label className="relative min-w-0 flex-1 sm:flex-initial">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      value={chatSearch}
+                      onChange={(event) => handleChatSearch(event.target.value)}
+                      placeholder="Поиск в переписке"
+                      aria-label="Поиск по сообщениям"
+                      className="w-full sm:w-36 md:w-44 rounded-xl border border-white/[0.08] bg-white/[0.03] py-2 pl-9 pr-2 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-400/50"
+                    />
+                  </label>
+                  {chatSearch && (
+                    <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                      <span>{searchMatches.length ? `${selectedSearchResult + 1}/${searchMatches.length}` : '0/0'}</span>
+                      <button type="button" aria-label="Предыдущий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index - 1 + searchMatches.length) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronUp size={14} /></button>
+                      <button type="button" aria-label="Следующий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index + 1) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronDown size={14} /></button>
+                      <button type="button" aria-label="Закрыть поиск" onClick={() => handleChatSearch('')} className="rounded p-1 hover:bg-white/10"><X size={14} /></button>
                     </div>
                   )}
+                  <button type="button" onClick={() => void openChatProfile()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
+                    <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
+                  </button>
                 </div>
               </div>
-              <div className="flex min-w-0 items-center gap-2">
-              <label className="relative min-w-0 flex-1 sm:flex-initial">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input
-                    value={chatSearch}
-                    onChange={(event) => handleChatSearch(event.target.value)}
-                    placeholder="Поиск в переписке"
-                    aria-label="Поиск по сообщениям"
-                    className="w-full sm:w-36 md:w-44 rounded-xl border border-white/[0.08] bg-white/[0.03] py-2 pl-9 pr-2 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-400/50"
-                  />
-                </label>
-                {chatSearch && (
-                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                    <span>{searchMatches.length ? `${selectedSearchResult + 1}/${searchMatches.length}` : '0/0'}</span>
-                    <button type="button" aria-label="Предыдущий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index - 1 + searchMatches.length) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronUp size={14} /></button>
-                    <button type="button" aria-label="Следующий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index + 1) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronDown size={14} /></button>
-                    <button type="button" aria-label="Закрыть поиск" onClick={() => handleChatSearch('')} className="rounded p-1 hover:bg-white/10"><X size={14} /></button>
-                  </div>
-                )}
-                <button type="button" onClick={() => void openChatProfile()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
-                  <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
-                </button>
-              </div>
+              {pinnedMessages.length > 0 && (
+                <div className="pinned-strip flex min-w-0 items-center gap-2 overflow-x-auto rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] p-2.5 shadow-lg sm:ml-[3.25rem]">
+                  <Pin size={15} className="shrink-0 text-amber-300" />
+                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-300">Закреплено</span>
+                  <div className="h-5 w-px shrink-0 bg-amber-200/15" />
+                  {pinnedMessages.map((message) => (
+                    <button
+                      key={message.id}
+                      type="button"
+                      title={message.text || message.fileName || 'Перейти к закреплённому сообщению'}
+                      onClick={() => messageRefs.current.get(message.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                      className="max-w-[70vw] shrink-0 truncate rounded-xl px-2.5 py-1.5 text-left text-xs text-amber-100/90 transition hover:bg-amber-200/10 sm:max-w-[min(55vw,540px)]"
+                    >
+                      {message.text || message.fileName || 'Вложение'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex-1 min-h-0 p-3 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10">

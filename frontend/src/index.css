@@ -86,10 +86,6 @@
   animation: message-menu-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.pinned-header-link {
-  max-width: min(42vw, 420px);
-}
-
 .profile-layer-in .profile-panel-backdrop {
   animation: profile-backdrop-enter 180ms ease-out both;
 }
@@ -138,8 +134,13 @@ html[data-theme="light"] .profile-info-card {
   background-color: rgba(30, 41, 59, 0.035) !important;
 }
 
-html[data-theme="light"] .pinned-header-link {
-  color: #8a5a05 !important;
+html[data-theme="light"] .pinned-strip {
+  border-color: rgba(180, 120, 20, 0.2) !important;
+  background: rgba(245, 180, 50, 0.1) !important;
+}
+
+html[data-theme="light"] .pinned-strip button {
+  color: #62440d !important;
 }
 
 html[data-theme="light"] .glass-active {
