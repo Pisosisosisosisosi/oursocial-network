@@ -1,5 +1,5 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
-import { ArrowLeft, Bell, Check, Contrast, Download, LogOut, MessageSquare, Monitor, Moon, Shield, Smartphone, Sun, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Bell, Contrast, Download, LogOut, MessageSquare, Monitor, Shield, Smartphone, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { applyAppPreferences } from '../preferences';
@@ -10,22 +10,30 @@ interface InstallPromptEvent extends Event {
 }
 
 const cardClass = 'rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6';
-const toggleClass = 'h-4 w-4 accent-indigo-500';
 
 function SettingToggle({ checked, onChange, title, description }: {
   checked: boolean;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onChange: (checked: boolean) => void;
   title: string;
   description: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-start justify-between gap-4 py-3">
-      <span>
+    <div className="flex items-start justify-between gap-4 py-3">
+      <span className="cursor-pointer" onClick={() => onChange(!checked)}>
         <span className="block text-sm font-medium text-slate-200">{title}</span>
         <span className="mt-1 block text-xs leading-relaxed text-slate-500">{description}</span>
       </span>
-      <input type="checkbox" checked={checked} onChange={onChange} className={`${toggleClass} mt-1 shrink-0`} />
-    </label>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={title}
+        onClick={() => onChange(!checked)}
+        className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101725] ${checked ? 'border-indigo-400/60 bg-indigo-500' : 'border-white/10 bg-slate-700'}`}
+      >
+        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-1'}`} />
+      </button>
+    </div>
   );
 }
 
@@ -62,8 +70,8 @@ export default function Settings() {
     savePreference('pulseTheme', value);
   };
 
-  const handleNotifications = async (event: ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.checked) {
+  const handleNotifications = async (enabled: boolean) => {
+    if (!enabled) {
       setDesktopNotifications(false);
       savePreference('pulseNotifications', 'false');
       return;
@@ -118,23 +126,45 @@ export default function Settings() {
               <Contrast size={18} className="text-indigo-300" />
               <div><h2 className="text-sm font-semibold">Внешний вид</h2><p className="mt-1 text-xs text-slate-500">Настройте тему и плотность интерфейса.</p></div>
             </div>
-            <div className="grid grid-cols-2 gap-3 py-3">
-              <button type="button" onClick={() => chooseTheme('dark')} aria-pressed={theme === 'dark'} className={`flex items-center justify-between rounded-xl border p-3 text-sm transition ${theme === 'dark' ? 'border-indigo-400/50 bg-indigo-500/10 text-indigo-200' : 'border-white/[0.08] text-slate-400 hover:bg-white/[0.04]'}`}>
-                <span className="flex items-center gap-2"><Moon size={16} /> Тёмная</span>{theme === 'dark' && <Check size={15} />}
-              </button>
-              <button type="button" onClick={() => chooseTheme('light')} aria-pressed={theme === 'light'} className={`flex items-center justify-between rounded-xl border p-3 text-sm transition ${theme === 'light' ? 'border-indigo-400/50 bg-indigo-500/10 text-indigo-200' : 'border-white/[0.08] text-slate-400 hover:bg-white/[0.04]'}`}>
-                <span className="flex items-center gap-2"><Sun size={16} /> Светлая</span>{theme === 'light' && <Check size={15} />}
+            <div className="flex items-center justify-between gap-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-slate-200">Светлая тема</p>
+                <p className="mt-1 text-xs text-slate-500">Переключить оформление приложения.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={theme === 'light'}
+                aria-label="Светлая тема"
+                onClick={() => chooseTheme(theme === 'dark' ? 'light' : 'dark')}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#101725] ${theme === 'light' ? 'border-indigo-400/60 bg-indigo-500' : 'border-white/10 bg-slate-700'}`}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${theme === 'light' ? 'translate-x-5' : 'translate-x-1'}`} />
               </button>
             </div>
-            <label className="flex items-center justify-between gap-4 border-t border-white/[0.06] py-4 text-sm text-slate-200">
-              Размер текста сообщений
-              <select value={messageSize} onChange={(event) => { setMessageSize(event.target.value); savePreference('pulseMessageSize', event.target.value); }} className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs text-slate-200">
-                <option value="small">Маленький</option><option value="medium">Обычный</option><option value="large">Крупный</option>
-              </select>
-            </label>
+            <fieldset className="border-t border-white/[0.06] py-4">
+              <legend className="mb-3 text-sm font-medium text-slate-200">Размер текста сообщений</legend>
+              <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/[0.07] bg-slate-950/30 p-1.5">
+                {([
+                  ['small', 'Маленький'],
+                  ['medium', 'Обычный'],
+                  ['large', 'Крупный'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={messageSize === value}
+                    onClick={() => { setMessageSize(value); savePreference('pulseMessageSize', value); }}
+                    className={`min-h-10 rounded-xl px-2 text-xs font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${messageSize === value ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-200'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
             <div className="divide-y divide-white/[0.06] border-t border-white/[0.06]">
-              <SettingToggle checked={compactMode} onChange={(event) => { setCompactMode(event.target.checked); savePreference('pulseCompactMode', String(event.target.checked)); }} title="Компактный интерфейс" description="Уменьшает отступы в списке диалогов и истории сообщений." />
-              <SettingToggle checked={reduceMotion} onChange={(event) => { setReduceMotion(event.target.checked); savePreference('pulseReduceMotion', String(event.target.checked)); }} title="Уменьшить анимацию" description="Отключает декоративные переходы и анимации интерфейса." />
+              <SettingToggle checked={compactMode} onChange={(enabled) => { setCompactMode(enabled); savePreference('pulseCompactMode', String(enabled)); }} title="Компактный интерфейс" description="Уменьшает отступы в списке диалогов и истории сообщений." />
+              <SettingToggle checked={reduceMotion} onChange={(enabled) => { setReduceMotion(enabled); savePreference('pulseReduceMotion', String(enabled)); }} title="Уменьшить анимацию" description="Отключает декоративные переходы и анимации интерфейса." />
             </div>
           </section>
 
@@ -144,9 +174,9 @@ export default function Settings() {
               <div><h2 className="text-sm font-semibold">Чаты и сообщения</h2><p className="mt-1 text-xs text-slate-500">Поведение ввода, квитанций и вложений.</p></div>
             </div>
             <div className="divide-y divide-white/[0.06]">
-              <SettingToggle checked={enterToSend} onChange={(event) => { setEnterToSend(event.target.checked); savePreference('pulseEnterToSend', String(event.target.checked)); }} title="Enter отправляет сообщение" description="При выключении Enter создаёт новую строку, а отправка выполняется кнопкой." />
-              <SettingToggle checked={showReadReceipts} onChange={(event) => { setShowReadReceipts(event.target.checked); savePreference('pulseShowReadReceipts', String(event.target.checked)); }} title="Показывать отметки прочтения" description="Включает или скрывает ваши галочки рядом со временем отправки." />
-              <SettingToggle checked={mediaPreview} onChange={(event) => { setMediaPreview(event.target.checked); savePreference('pulseMediaPreview', String(event.target.checked)); }} title="Предпросмотр изображений" description="Показывать изображения прямо в переписке; при отключении останется ссылка на файл." />
+              <SettingToggle checked={enterToSend} onChange={(enabled) => { setEnterToSend(enabled); savePreference('pulseEnterToSend', String(enabled)); }} title="Enter отправляет сообщение" description="При выключении Enter создаёт новую строку, а отправка выполняется кнопкой." />
+              <SettingToggle checked={showReadReceipts} onChange={(enabled) => { setShowReadReceipts(enabled); savePreference('pulseShowReadReceipts', String(enabled)); }} title="Показывать отметки прочтения" description="Включает или скрывает ваши галочки рядом со временем отправки." />
+              <SettingToggle checked={mediaPreview} onChange={(enabled) => { setMediaPreview(enabled); savePreference('pulseMediaPreview', String(enabled)); }} title="Предпросмотр изображений" description="Показывать изображения прямо в переписке; при отключении останется ссылка на файл." />
             </div>
           </section>
 
@@ -155,7 +185,7 @@ export default function Settings() {
               <Bell size={18} className="text-amber-300" />
               <div><h2 className="text-sm font-semibold">Уведомления</h2><p className="mt-1 text-xs text-slate-500">Уведомления браузера работают, когда вкладка не активна.</p></div>
             </div>
-            <SettingToggle checked={desktopNotifications} onChange={(event) => void handleNotifications(event)} title="Уведомления на рабочем столе" description="Разрешить браузеру показывать уведомления о новых сообщениях." />
+            <SettingToggle checked={desktopNotifications} onChange={(enabled) => void handleNotifications(enabled)} title="Уведомления на рабочем столе" description="Разрешить браузеру показывать уведомления о новых сообщениях." />
             {typeof Notification !== 'undefined' && <p className="border-t border-white/[0.06] pt-3 text-[11px] text-slate-600">Разрешение браузера: {Notification.permission === 'granted' ? 'разрешено' : Notification.permission === 'denied' ? 'запрещено' : 'не запрошено'}.</p>}
           </section>
 
