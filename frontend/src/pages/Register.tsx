@@ -1,11 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { isAxiosError } from 'axios';
-import { useNavigate } from 'react-router-dom'; // <--- Используем навигацию
+import { Link } from 'react-router-dom';
 import { ArrowRight, LockKeyhole, MessageCircle, ShieldCheck, User as UserIcon, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
-  const navigate = useNavigate(); // <--- Хук для перехода
   const { register } = useAuth();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -105,15 +104,7 @@ export default function Register() {
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Уже есть аккаунт?{' '}
-            {/* ЗАМЕНИЛИ Link НА КНОПКУ С navigate */}
-            <button 
-              type="button"
-              onClick={() => navigate('/login')} 
-              style={{ position: 'relative', zIndex: 9999, pointerEvents: 'auto' }}
-              className="font-semibold text-indigo-300 hover:text-indigo-200 cursor-pointer relative z-50"
-            >
-              Войти
-            </button>
+            <Link to="/login" className="font-semibold text-indigo-300 hover:text-indigo-200">Войти</Link>
           </p>
         </section>
 
