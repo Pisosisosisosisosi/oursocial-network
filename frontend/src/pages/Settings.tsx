@@ -3,6 +3,8 @@ import { ArrowLeft, Bell, Contrast, Download, LogOut, MessageSquare, Monitor, Sh
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { applyAppPreferences } from '../preferences';
+import { api } from '../api/client';
+import { useToast } from '../context/useToast';
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -19,7 +21,7 @@ function SettingToggle({ checked, onChange, title, description }: {
 }) {
   return (
     <div className="flex items-start justify-between gap-4 py-3">
-      <span className="cursor-pointer" onClick={() => onChange(!checked)}>
+      <span>
         <span className="block text-sm font-medium text-slate-200">{title}</span>
         <span className="mt-1 block text-xs leading-relaxed text-slate-500">{description}</span>
       </span>
@@ -39,13 +41,16 @@ function SettingToggle({ checked, onChange, title, description }: {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
+  const showToast = useToast();
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('pulseTheme') === 'light' ? 'light' : 'dark');
   const [compactMode, setCompactMode] = useState(() => localStorage.getItem('pulseCompactMode') === 'true');
   const [reduceMotion, setReduceMotion] = useState(() => localStorage.getItem('pulseReduceMotion') === 'true');
   const [messageSize, setMessageSize] = useState(() => localStorage.getItem('pulseMessageSize') || 'medium');
   const [enterToSend, setEnterToSend] = useState(() => localStorage.getItem('pulseEnterToSend') !== 'false');
   const [showReadReceipts, setShowReadReceipts] = useState(() => localStorage.getItem('pulseShowReadReceipts') !== 'false');
+  const [hideOnlineStatus, setHideOnlineStatus] = useState(user?.hideOnlineStatus ?? false);
+  const [hideReadReceipts, setHideReadReceipts] = useState(user?.hideReadReceipts ?? false);
   const [mediaPreview, setMediaPreview] = useState(() => localStorage.getItem('pulseMediaPreview') !== 'false');
   const [desktopNotifications, setDesktopNotifications] = useState(() => localStorage.getItem('pulseNotifications') === 'true');
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
@@ -103,6 +108,23 @@ export default function Settings() {
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const savePrivacy = async (updates: { hideOnlineStatus?: boolean; hideReadReceipts?: boolean }) => {
+    const next = {
+      hideOnlineStatus: updates.hideOnlineStatus ?? hideOnlineStatus,
+      hideReadReceipts: updates.hideReadReceipts ?? hideReadReceipts,
+    };
+    try {
+      await api.patch('/users/me/privacy', next);
+      setHideOnlineStatus(next.hideOnlineStatus);
+      setHideReadReceipts(next.hideReadReceipts);
+      updateUser(next);
+      showToast('Настройки приватности сохранены.', 'success');
+    } catch (error) {
+      console.error('Не удалось сохранить настройки приватности:', error);
+      showToast('Не удалось сохранить настройки приватности.', 'error');
+    }
   };
 
   return (
@@ -175,7 +197,7 @@ export default function Settings() {
             </div>
             <div className="divide-y divide-white/[0.06]">
               <SettingToggle checked={enterToSend} onChange={(enabled) => { setEnterToSend(enabled); savePreference('pulseEnterToSend', String(enabled)); }} title="Enter отправляет сообщение" description="При выключении Enter создаёт новую строку, а отправка выполняется кнопкой." />
-              <SettingToggle checked={showReadReceipts} onChange={(enabled) => { setShowReadReceipts(enabled); savePreference('pulseShowReadReceipts', String(enabled)); }} title="Показывать отметки прочтения" description="Включает или скрывает ваши галочки рядом со временем отправки." />
+              <SettingToggle checked={showReadReceipts} onChange={(enabled) => { setShowReadReceipts(enabled); savePreference('pulseShowReadReceipts', String(enabled)); }} title="Показывать отметки прочтения" description="Включает или скрывает ваши галочки рядом со временем отправки на этом устройстве." />
               <SettingToggle checked={mediaPreview} onChange={(enabled) => { setMediaPreview(enabled); savePreference('pulseMediaPreview', String(enabled)); }} title="Предпросмотр изображений" description="Показывать изображения прямо в переписке; при отключении останется ссылка на файл." />
             </div>
           </section>
@@ -198,6 +220,10 @@ export default function Settings() {
               <span className="flex items-center gap-3"><UserRound size={17} className="text-slate-400" /><span><span className="block text-sm text-slate-200">Настройки профиля</span><span className="mt-1 block text-xs text-slate-500">Имя, username, аватар, описание и last seen</span></span></span>
               <ArrowLeft size={15} className="rotate-180 text-slate-500" />
             </button>
+            <div className="mt-3 divide-y divide-white/[0.06] border-t border-white/[0.06]">
+              <SettingToggle checked={hideOnlineStatus} onChange={(enabled) => void savePrivacy({ hideOnlineStatus: enabled })} title="Скрыть статус онлайн" description="Другие пользователи не будут видеть вашу зелёную точку присутствия." />
+              <SettingToggle checked={hideReadReceipts} onChange={(enabled) => void savePrivacy({ hideReadReceipts: enabled })} title="Скрыть отметки о прочтении" description="Сообщения не будут отмечаться прочитанными, пока настройка включена." />
+            </div>
           </section>
 
           <section className={cardClass}>

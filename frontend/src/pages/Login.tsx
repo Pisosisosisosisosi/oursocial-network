@@ -46,7 +46,7 @@ export default function Login() {
           </div>
 
           {error && (
-            <div role="alert" className="mb-5 rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3.5 py-3 text-sm text-rose-200">
+            <div role="alert" className="login-error-shake mb-5 rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3.5 py-3 text-sm text-rose-200">
               {error}
             </div>
           )}

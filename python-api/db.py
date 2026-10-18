@@ -30,3 +30,6 @@ def keys_collection():
 
 def messages_collection():
     return get_db()["messages"]
+
+def groups_collection():
+    return get_db()["groups"]

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Chats from './pages/Chats';
@@ -7,20 +7,31 @@ import Profile from './pages/Profile';
 import Register from './pages/Register';
 import UserProfile from './pages/UserProfile';
 import Settings from './pages/Settings';
+import Groups from './pages/Groups';
 import { applyAppPreferences } from './preferences';
 import { api } from './api/client';
 import { getSocket } from './api/socket';
+import { ToastProvider } from './context/ToastContext';
+import { useToast } from './context/useToast';
 
 function GlobalNotifications() {
   const { user } = useAuth();
+  const showToast = useToast();
   const userId = user?.id;
-  const username = user?.username;
+  const [connectionLost, setConnectionLost] = useState(!navigator.onLine);
 
   useEffect(() => {
     const socket = getSocket();
-    if (!userId || !username || !socket) return;
+    if (!userId || !socket) return;
+    const handleConnect = () => setConnectionLost(false);
+    const handleDisconnect = () => setConnectionLost(true);
+    const handleConnectError = () => setConnectionLost(true);
+    const handleOffline = () => setConnectionLost(true);
+    const handleOnline = () => {
+      if (socket.connected) setConnectionLost(false);
+    };
 
-    const handleMessageChanged = (event: { action: string; senderId?: string }) => {
+    const handleMessageChanged = (event: { action: string; senderId?: string; groupId?: string }) => {
       if (
         event.action !== 'created'
         || !event.senderId
@@ -31,10 +42,13 @@ function GlobalNotifications() {
         || Notification.permission !== 'granted'
       ) return;
 
-      void api.get(`/messages/${event.senderId}`).then((response) => {
+      const messagePath = typeof event.groupId === 'string'
+        ? `/groups/${event.groupId}/messages`
+        : `/messages/${event.senderId}`;
+      void api.get(messagePath, { params: { limit: 20 } }).then((response) => {
         const newest = response.data[response.data.length - 1];
         if (!newest || newest.senderId !== event.senderId) return;
-        new Notification(`Новое сообщение от @${username}`, {
+        new Notification('Новое сообщение в Pulse', {
           body: newest.type === 'text' ? newest.text : `Отправлен файл: ${newest.fileName || 'вложение'}`,
           icon: `${import.meta.env.BASE_URL}pulse-icon.svg`,
         });
@@ -42,14 +56,48 @@ function GlobalNotifications() {
         console.error('Не удалось загрузить данные для уведомления:', error);
       });
     };
+    const handleGroupMention = (event: { groupTitle?: string; senderUsername?: string }) => {
+      const title = `Упоминание в группе «${event.groupTitle || 'Общая группа'}»`;
+      const body = `@${event.senderUsername || 'пользователь'} упомянул вас.`;
+      showToast(`${title}: ${body}`, 'info');
+      if (
+        document.hidden
+        && localStorage.getItem('pulseNotifications') === 'true'
+        && 'Notification' in window
+        && Notification.permission === 'granted'
+      ) {
+        new Notification(title, {
+          body,
+          icon: `${import.meta.env.BASE_URL}pulse-icon.svg`,
+        });
+      }
+    };
 
     socket.on('message_changed', handleMessageChanged);
+    socket.on('group_mention', handleGroupMention);
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
     return () => {
       socket.off('message_changed', handleMessageChanged);
+      socket.off('group_mention', handleGroupMention);
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
     };
-  }, [userId, username]);
+  }, [userId, showToast]);
 
-  return null;
+  if (!userId || !connectionLost) return null;
+  return (
+    <div role="status" className="fixed inset-x-0 top-0 z-[190] flex items-center justify-center gap-2 bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-lg">
+      <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+      {navigator.onLine ? 'Переподключение к Pulse…' : 'Нет соединения с интернетом'}
+    </div>
+  );
 }
 
 function AppRoutes() {
@@ -73,6 +121,7 @@ function AppRoutes() {
       <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
       <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
+      <Route path="/groups" element={user ? <Groups /> : <Navigate to="/login" replace />} />
       <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>
@@ -101,10 +150,12 @@ export default function App() {
   return (
     <AuthProvider>
       <HashRouter>
+      <ToastProvider>
         <GlobalNotifications />
         <div className="app-shell relative h-[100dvh] w-screen overflow-hidden bg-[#090d16] font-sans text-slate-100">
           <AppRoutes />
         </div>
+      </ToastProvider>
       </HashRouter>
     </AuthProvider>
   );

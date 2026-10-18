@@ -26,11 +26,14 @@ export interface User {
   bio?: string;
   statusText?: string;
   showLastSeen?: boolean;
+  hideOnlineStatus?: boolean;
+  hideReadReceipts?: boolean;
   lastSeen?: string | null;
 }
 
 export interface Contact extends User {
   nickname: string;
+  chatHidden?: boolean;
 }
 
 export interface AuthResponse {

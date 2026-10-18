@@ -2,9 +2,11 @@ from collections import defaultdict
 from typing import Any
 
 import socketio
+from bson import ObjectId
 from fastapi import HTTPException
 
 from auth import decode_token
+from db import users_collection
 
 
 sio = socketio.AsyncServer(
@@ -16,6 +18,7 @@ sio = socketio.AsyncServer(
 
 online_users: dict[str, set[str]] = defaultdict(set)
 sid_users: dict[str, str] = {}
+hidden_online_users: set[str] = set()
 
 
 @sio.event
@@ -38,15 +41,20 @@ async def connect(sid: str, environ: dict[str, Any], auth_data: dict[str, Any] |
     sid_users[sid] = user_id
     await sio.save_session(sid, {"user_id": user_id, "username": username})
     await sio.enter_room(sid, f"user:{user_id}")
+    user = users_collection().find_one({"_id": ObjectId(user_id)}, {"hideOnlineStatus": 1}) or {}
+    if user.get("hideOnlineStatus", False):
+        hidden_online_users.add(user_id)
+    else:
+        hidden_online_users.discard(user_id)
     was_offline = not online_users[user_id]
     online_users[user_id].add(sid)
 
     await sio.emit(
         "presence_snapshot",
-        {"userIds": sorted(online_users.keys())},
+        {"userIds": sorted((set(online_users.keys()) - hidden_online_users) | {user_id})},
         to=sid,
     )
-    if was_offline:
+    if was_offline and user_id not in hidden_online_users:
         await sio.emit(
             "user_online",
             {"userId": user_id, "username": username},
@@ -57,11 +65,32 @@ async def connect(sid: str, environ: dict[str, Any], auth_data: dict[str, Any] |
 
 @sio.on("get_presence")
 async def get_presence(sid: str) -> None:
+    user_id = sid_users.get(sid)
+    visible_ids = set(online_users.keys()) - hidden_online_users
+    if user_id:
+        visible_ids.add(user_id)
     await sio.emit(
         "presence_snapshot",
-        {"userIds": sorted(online_users.keys())},
+        {"userIds": sorted(visible_ids)},
         to=sid,
     )
+
+
+async def set_user_online_hidden(user_id: str, hidden: bool) -> None:
+    was_hidden = user_id in hidden_online_users
+    if hidden:
+        hidden_online_users.add(user_id)
+        if not was_hidden and online_users.get(user_id):
+            await sio.emit("user_offline", {"userId": user_id})
+            await sio.emit(
+                "presence_snapshot",
+                {"userIds": sorted((set(online_users.keys()) - hidden_online_users) | {user_id})},
+                to=f"user:{user_id}",
+            )
+    else:
+        hidden_online_users.discard(user_id)
+        if was_hidden and online_users.get(user_id):
+            await sio.emit("user_online", {"userId": user_id})
 
 
 @sio.on("typing")
@@ -105,4 +134,5 @@ async def disconnect(sid: str, _reason: str | None = None) -> None:
     sessions.discard(sid)
     if not sessions:
         online_users.pop(user_id, None)
+        hidden_online_users.discard(user_id)
         await sio.emit("user_offline", {"userId": user_id})

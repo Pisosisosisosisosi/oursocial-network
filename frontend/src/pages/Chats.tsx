@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Download, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, UsersRound, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { api, type Contact, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/useToast';
 
 interface ChatMessage {
   id: string;
@@ -19,6 +20,7 @@ interface ChatMessage {
   reactions: { userId: string; emoji: string }[];
   pinned?: boolean;
   pinnedAt?: string | null;
+  edited?: boolean;
   createdAt: string;
   read: boolean;
 }
@@ -42,12 +44,15 @@ function highlightText(text: string, query: string) {
 export default function Chats() {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const showToast = useToast();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(() => new Set());
   const [activeChat, setActiveChat] = useState<(User & { nickname?: string }) | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [text, setText] = useState('');
   const [chatSearch, setChatSearch] = useState('');
   const [activeSearchResult, setActiveSearchResult] = useState(0);
@@ -68,11 +73,16 @@ export default function Chats() {
   const [profileError, setProfileError] = useState('');
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [searching, setSearching] = useState(false);
   const [panelError, setPanelError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [messageEditDraft, setMessageEditDraft] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesListRef = useRef<HTMLDivElement>(null);
+  const pendingScrollHeightRef = useRef<number | null>(null);
   const messageRefs = useRef(new Map<string, HTMLDivElement>());
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const messageFormRef = useRef<HTMLFormElement>(null);
@@ -84,6 +94,12 @@ export default function Chats() {
   const pinnedHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileRequestRef = useRef(0);
   const typingRecipientRef = useRef<string | null>(null);
+  const activeChatIdRef = useRef<string | null>(null);
+  const activeChatId = activeChat ? String(activeChat.id) : null;
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
 
   const stopTyping = (recipientId = typingRecipientRef.current) => {
     if (typingTimeoutRef.current) {
@@ -101,20 +117,43 @@ export default function Chats() {
     async function loadUsers() {
       try {
         const res = await api.get<Contact[]>('/contacts');
-        setContacts(res.data.filter((contact) => contact.id !== currentUser?.id));
+        setContacts(res.data.filter((contact) => contact.id !== currentUser?.id && !contact.chatHidden));
       } catch (e) {
         console.error('Ошибка загрузки контактов:', e);
         setPanelError('Не удалось загрузить контакты.');
+        showToast('Не удалось загрузить контакты.', 'error');
       } finally {
         setLoading(false);
       }
     }
     loadUsers();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, showToast]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !currentUser?.id) return;
+
+    const handleNewMessage = (event: { action: string; senderId?: string }) => {
+      if (event.action !== 'created') return;
+      if (event.senderId && event.senderId !== currentUser.id && event.senderId !== activeChatIdRef.current) {
+        showToast('Новое сообщение в другом чате.', 'info');
+      }
+      void api.get<Contact[]>('/contacts').then((response) => {
+        setContacts(response.data.filter((contact) => contact.id !== currentUser.id && !contact.chatHidden));
+      }).catch((error: unknown) => {
+        console.error('Не удалось обновить список контактов после нового сообщения:', error);
+      });
+    };
+
+    socket.on('message_changed', handleNewMessage);
+    return () => {
+      socket.off('message_changed', handleNewMessage);
+    };
+  }, [currentUser?.id, showToast]);
 
   useEffect(() => {
     const query = searchQuery.trim();
-    if (!query) return;
+    if (!query.startsWith('@') || query.length < 4) return;
 
     let isCurrentSearch = true;
     const timeout = setTimeout(async () => {
@@ -127,7 +166,10 @@ export default function Chats() {
         }
       } catch (error) {
         console.error('Ошибка поиска пользователей:', error);
-        if (isCurrentSearch) setPanelError('Не удалось выполнить поиск пользователей.');
+        if (isCurrentSearch) {
+          setPanelError('Не удалось выполнить поиск пользователей.');
+          showToast('Не удалось выполнить поиск пользователей.', 'error');
+        }
       } finally {
         if (isCurrentSearch) setSearching(false);
       }
@@ -137,7 +179,7 @@ export default function Chats() {
       isCurrentSearch = false;
       clearTimeout(timeout);
     };
-  }, [searchQuery, currentUser?.id]);
+  }, [searchQuery, currentUser?.id, showToast]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -277,13 +319,44 @@ export default function Chats() {
     };
   }, [openMessageMenu, lightboxImage, profilePanelOpen, messageMenuClosing, lightboxClosing, closeMessageMenu, closeLightbox, closeProfilePanel]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (pendingScrollHeightRef.current !== null && messagesListRef.current) {
+      const heightDifference = messagesListRef.current.scrollHeight - pendingScrollHeightRef.current;
+      messagesListRef.current.scrollTop += heightDifference;
+      pendingScrollHeightRef.current = null;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeChat?.id, messages.length]);
 
-  const refreshMessages = async (userId: string) => {
-    const res = await api.get<ChatMessage[]>(`/messages/${userId}`);
-    setMessages(res.data);
+  const refreshMessages = async (userId: string, before?: string) => {
+    const response = await api.get<ChatMessage[]>(`/messages/${userId}`, {
+      params: { limit: 20, ...(before ? { before } : {}) },
+    });
+    if (before) {
+      pendingScrollHeightRef.current = messagesListRef.current?.scrollHeight ?? null;
+      setMessages((current) => {
+        const existingIds = new Set(current.map((message) => message.id));
+        return [...response.data.filter((message) => !existingIds.has(message.id)), ...current];
+      });
+    } else {
+      setMessages(response.data);
+    }
+    setHasMoreMessages(response.data.length === 20);
+    return response.data;
+  };
+
+  const loadOlderMessages = async () => {
+    if (!activeChat || loadingOlderMessages || !hasMoreMessages || !messages.length) return;
+    setLoadingOlderMessages(true);
+    try {
+      await refreshMessages(String(activeChat.id), messages[0].id);
+    } catch (error) {
+      console.error('Не удалось загрузить предыдущие сообщения:', error);
+      showToast('Не удалось загрузить более старые сообщения.', 'error');
+    } finally {
+      setLoadingOlderMessages(false);
+    }
   };
 
   const openChatProfile = async () => {
@@ -312,13 +385,33 @@ export default function Chats() {
     const socket = getSocket();
     if (!socket || !activeChat) return;
 
-    const handleMessageChanged = (event: { messageId: string; action: string }) => {
+    const handleMessageChanged = (event: { messageId: string; action: string; senderId?: string; receiverId?: string; groupId?: string; message?: Partial<ChatMessage> }) => {
       if (!event?.messageId) return;
-      void api.get<ChatMessage[]>(`/messages/${activeChat.id}`).then((response) => {
-        setMessages(response.data);
+      if (event.groupId) return;
+      if (
+        event.senderId
+        && event.receiverId
+        && event.senderId !== activeChat.id
+        && event.receiverId !== activeChat.id
+      ) return;
+      if (event.action === 'deleted') {
+        setMessages((previous) => previous.filter((message) => message.id !== event.messageId));
+        return;
+      }
+      if (event.message) {
+        const updatedMessage = event.message;
+        setMessages((previous) => previous.map((message) => message.id === event.messageId ? { ...message, ...updatedMessage } : message));
+        return;
+      }
+      void api.get<ChatMessage[]>(`/messages/${activeChat.id}`, { params: { limit: 20 } }).then((response) => {
+        setMessages((previous) => {
+          const refreshedIds = new Set(response.data.map((message) => message.id));
+          const olderLoaded = previous.filter((message) => !refreshedIds.has(message.id));
+          return [...olderLoaded, ...response.data];
+        });
       }).catch((error: unknown) => {
         console.error('Не удалось обновить сообщения:', error);
-        setChatError('Не удалось обновить переписку.');
+        showToast('Не удалось обновить переписку.', 'error');
       });
     };
 
@@ -326,7 +419,7 @@ export default function Chats() {
     return () => {
       socket.off('message_changed', handleMessageChanged);
     };
-  }, [activeChat, currentUser?.id]);
+  }, [activeChat, currentUser?.id, showToast]);
 
   const searchMatches = useMemo(() => chatSearch.trim()
     ? messages.filter((message) =>
@@ -376,6 +469,8 @@ export default function Chats() {
     setChatProfile(null);
     setActiveChat(user);
     setMessages([]);
+    setHasMoreMessages(false);
+    setLoadingMessages(true);
     setChatError('');
     setChatSearch('');
     try {
@@ -383,6 +478,9 @@ export default function Chats() {
     } catch (e) {
       console.error("Ошибка загрузки истории:", e);
       setChatError('Не удалось загрузить историю сообщений.');
+      showToast('Не удалось загрузить историю сообщений.', 'error');
+    } finally {
+      setLoadingMessages(false);
     }
   };
 
@@ -394,6 +492,7 @@ export default function Chats() {
     if (nickname === null) return;
     if (!nickname.trim()) {
       setPanelError('Имя контакта не может быть пустым.');
+      showToast('Имя контакта не может быть пустым.', 'error');
       return;
     }
 
@@ -408,6 +507,7 @@ export default function Chats() {
     } catch (error) {
       console.error('Ошибка сохранения контакта:', error);
       setPanelError('Не удалось сохранить контакт.');
+      showToast('Не удалось сохранить контакт.', 'error');
     }
   };
 
@@ -419,6 +519,24 @@ export default function Chats() {
     } catch (error) {
       console.error('Ошибка удаления контакта:', error);
       setPanelError('Не удалось удалить контакт.');
+      showToast('Не удалось удалить контакт.', 'error');
+    }
+  };
+
+  const handleDeleteChat = async (contact: Contact) => {
+    if (!window.confirm(`Удалить историю чата с «${contact.nickname}» только у вас?`)) return;
+    try {
+      await api.delete(`/chats/${contact.id}`);
+      setContacts((current) => current.filter((item) => item.id !== contact.id));
+      if (activeChat?.id === contact.id) {
+        stopTyping(contact.id);
+        setMessages([]);
+        setActiveChat(null);
+      }
+      showToast('История чата удалена только у вас.', 'success');
+    } catch (error) {
+      console.error('Не удалось удалить чат:', error);
+      showToast('Не удалось удалить чат.', 'error');
     }
   };
 
@@ -442,6 +560,12 @@ export default function Chats() {
     } catch (err) {
       console.error("Ошибка отправки:", err);
       setChatError('Не удалось отправить сообщение. Проверьте соединение.');
+      showToast(
+        isAxiosError(err) && err.response?.status === 429
+          ? 'Слишком часто отправляете сообщения. Подождите немного.'
+          : 'Сообщение не отправлено. Проверьте подключение.',
+        'error',
+      );
     } finally {
       setSending(false);
     }
@@ -453,10 +577,12 @@ export default function Chats() {
     if (!file || !activeChat || sending) return;
     if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
       setChatError('Можно отправить JPG, PNG, GIF, WebP, PDF, TXT, CSV или ZIP.');
+      showToast('Неподдерживаемый формат файла.', 'error');
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
       setChatError('Размер вложения не должен превышать 2 МБ.');
+      showToast('Размер вложения не должен превышать 2 МБ.', 'error');
       return;
     }
 
@@ -481,9 +607,11 @@ export default function Chats() {
         fileData,
       });
       setMessages((previous) => [...previous, response.data]);
+      showToast('Файл отправлен.', 'success');
     } catch (error) {
       console.error('Ошибка отправки вложения:', error);
       setChatError('Не удалось отправить файл. Проверьте его формат и размер.');
+      showToast('Не удалось отправить файл. Проверьте формат и размер.', 'error');
     } finally {
       setSending(false);
     }
@@ -496,9 +624,47 @@ export default function Chats() {
       setMessages((previous) => previous.filter((item) => item.id !== message.id));
       closeMessageMenu();
       setChatError('');
+      showToast('Сообщение удалено.', 'success');
     } catch (error) {
       console.error('Ошибка удаления сообщения:', error);
       setChatError('Не удалось удалить сообщение.');
+      showToast('Не удалось удалить сообщение.', 'error');
+    }
+  };
+
+  const handleEditMessage = async (message: ChatMessage) => {
+    if (!messageEditDraft.trim()) return;
+    try {
+      const response = await api.patch<ChatMessage>(`/messages/${message.id}`, { text: messageEditDraft });
+      setMessages((previous) => previous.map((item) => item.id === message.id ? response.data : item));
+      setEditingMessageId(null);
+      setMessageEditDraft('');
+      showToast('Сообщение изменено.', 'success');
+    } catch (error) {
+      console.error('Не удалось изменить сообщение:', error);
+      showToast('Не удалось изменить сообщение.', 'error');
+    }
+  };
+
+  const handleExportChat = async (format: 'json' | 'html') => {
+    if (!activeChat) return;
+    try {
+      const response = await api.get(`/messages/${activeChat.id}/export`, {
+        params: { format },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `pulse-chat-${activeChat.username}.${format}`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast(`История скачана в формате ${format.toUpperCase()}.`, 'success');
+    } catch (error) {
+      console.error('Не удалось экспортировать переписку:', error);
+      showToast('Не удалось экспортировать историю чата.', 'error');
     }
   };
 
@@ -523,6 +689,7 @@ export default function Chats() {
         item.id === message.id ? { ...item, reactions: previousReactions } : item,
       ));
       setChatError('Не удалось сохранить реакцию.');
+      showToast('Не удалось сохранить реакцию.', 'error');
     }
   };
 
@@ -542,12 +709,14 @@ export default function Chats() {
       if (!message.pinned) setActivePinnedIndex(0);
       closeMessageMenu();
       setChatError('');
+      showToast(message.pinned ? 'Сообщение откреплено.' : 'Сообщение закреплено.', 'success');
     } catch (error) {
       console.error('Ошибка закрепления сообщения:', error);
       const detail = isAxiosError(error) && error.response?.status === 404
         ? 'На сервере не найден маршрут закрепления. Обновите Python API и повторите попытку.'
         : 'Не удалось сохранить закрепление. Проверьте соединение и повторите попытку.';
       setChatError(detail);
+      showToast(detail, 'error');
     } finally {
       setPinningMessageId(null);
     }
@@ -596,6 +765,8 @@ export default function Chats() {
     setSearchResults([]);
     setSearching(false);
     setPanelError('');
+    if (!value.trim().startsWith('@') || value.trim().length < 4) return;
+    setSearching(true);
   };
 
   const visibleUsers: (User & { nickname?: string })[] = searchQuery.trim() ? searchResults : contacts;
@@ -636,9 +807,14 @@ export default function Chats() {
                 </span>
              </div>
           </div>
-          <button onClick={() => navigate('/settings')} className="p-2 rounded-xl text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all" title="Настройки" aria-label="Открыть настройки">
-            <SettingsIcon size={19} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => navigate('/groups')} className="rounded-xl p-2 text-slate-500 transition-all hover:bg-indigo-500/10 hover:text-indigo-300" title="Общие группы" aria-label="Открыть общие группы">
+              <UsersRound size={18} />
+            </button>
+            <button onClick={() => navigate('/settings')} className="rounded-xl p-2 text-slate-500 transition-all hover:bg-indigo-500/10 hover:text-indigo-300" title="Настройки" aria-label="Открыть настройки">
+              <SettingsIcon size={19} />
+            </button>
+          </div>
         </div>
 
         <div className="p-3">
@@ -646,12 +822,15 @@ export default function Chats() {
             <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input 
               type="text" 
-              placeholder="Найти по username..."
+              placeholder="Найти по @username целиком..."
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl pl-9 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-900/80 transition-all shadow-inner"
             />
           </div>
+          {searchQuery.trim() && !searchQuery.trim().startsWith('@') && (
+            <p className="mt-2 px-1 text-[10px] text-slate-500">Укажите полный username вместе с @, например @darius_writer.</p>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
@@ -662,13 +841,25 @@ export default function Chats() {
             </span>
           </h3>
           
-          {loading && <p className="text-xs text-slate-500 px-2 animate-pulse">Сканирование сети...</p>}
+          {loading && (
+            <div role="status" aria-label="Загрузка контактов" className="space-y-2 px-1">
+              {[0, 1, 2, 3].map((item) => (
+                <div key={item} className="flex animate-pulse items-center gap-3 rounded-2xl p-2.5">
+                  <div className="h-10 w-10 rounded-xl bg-slate-800" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-2/3 rounded bg-slate-800" />
+                    <div className="h-2 w-1/2 rounded bg-slate-800/70" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {searching && <p className="text-xs text-slate-500 px-2 animate-pulse">Ищем пользователей...</p>}
           {panelError && <p role="alert" className="px-2 py-1 text-xs text-rose-300">{panelError}</p>}
           
           {!loading && !searching && visibleUsers.length === 0 && (
             <p className="px-2 py-3 text-xs text-slate-500">
-              {searchQuery.trim() ? 'По этому username ничего не найдено.' : 'Контактов пока нет. Найдите пользователя по username.'}
+              {searchQuery.trim() ? 'Точный username не найден. Проверьте @ и написание.' : 'Контактов пока нет. Найдите пользователя по полному @username.'}
             </p>
           )}
 
@@ -716,6 +907,15 @@ export default function Chats() {
                     className="rounded-lg p-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-200"
                   >
                     <Pencil size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Удалить чат"
+                    aria-label={`Удалить историю чата с ${contact.nickname}`}
+                    onClick={(event) => { event.stopPropagation(); void handleDeleteChat(contact); }}
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"
+                  >
+                    <Trash2 size={15} />
                   </button>
                   <button
                     type="button"
@@ -799,6 +999,10 @@ export default function Chats() {
                   <button type="button" onClick={() => void openChatProfile()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
                     <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
                   </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button type="button" title="Скачать переписку JSON" aria-label="Экспортировать историю чата в JSON" onClick={() => void handleExportChat('json')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-indigo-300"><Download size={15} /></button>
+                    <button type="button" title="Скачать переписку HTML" aria-label="Экспортировать историю чата в HTML" onClick={() => void handleExportChat('html')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-indigo-300"><FileText size={15} /></button>
+                  </div>
                 </div>
               </div>
               {activePinnedMessage && (
@@ -843,8 +1047,27 @@ export default function Chats() {
               )}
             </div>
 
-            <div className="flex-1 min-h-0 p-3 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10">
+            <div
+              ref={messagesListRef}
+              onScroll={(event) => {
+                if (event.currentTarget.scrollTop <= 48) void loadOlderMessages();
+              }}
+              className="flex-1 min-h-0 p-3 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10"
+            >
               {chatError && <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3 py-2 text-xs text-rose-200">{chatError}</div>}
+              {loadingOlderMessages && (
+                <div role="status" aria-label="Загружаем сообщения" className="space-y-2 py-2">
+                  <div className="h-10 w-2/3 animate-pulse rounded-2xl bg-slate-800/70" />
+                  <div className="ml-auto h-10 w-1/2 animate-pulse rounded-2xl bg-indigo-900/50" />
+                </div>
+              )}
+              {loadingMessages && messages.length === 0 && (
+                <div role="status" aria-label="Загружаем переписку" className="space-y-3 py-4">
+                  {[0, 1, 2, 3].map((item) => (
+                    <div key={item} className={`h-12 animate-pulse rounded-2xl bg-slate-800/70 ${item % 2 ? 'ml-auto w-2/3' : 'w-3/4'}`} />
+                  ))}
+                </div>
+              )}
             <div className="text-center text-slate-600 text-[10px] font-mono my-4 flex items-center justify-center gap-2">
                 <span className="h-px w-8 bg-slate-800"></span> Начало защищенной сессии <span className="h-px w-8 bg-slate-800"></span>
               </div>
@@ -882,7 +1105,20 @@ export default function Chats() {
                             <span className="max-w-56 break-all">{m.fileName || 'Скачать файл'}</span>
                           </a>
                         ) : null}
-                        {m.text && <div className="chat-message-content whitespace-pre-wrap break-words">{highlightText(m.text, chatSearch)}</div>}
+                        {editingMessageId === m.id ? (
+                          <div className="min-w-48 space-y-2">
+                            <textarea value={messageEditDraft} onChange={(event) => setMessageEditDraft(event.target.value)} maxLength={4000} className="w-full rounded-lg border border-white/10 bg-slate-950/50 p-2 text-xs text-white outline-none focus:border-indigo-300/50" />
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setEditingMessageId(null)} className="text-[10px] text-slate-300">Отмена</button>
+                              <button type="button" onClick={() => void handleEditMessage(m)} className="text-[10px] font-semibold text-indigo-200">Сохранить</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {m.text && <div className="chat-message-content whitespace-pre-wrap break-words">{highlightText(m.text, chatSearch)}</div>}
+                            {m.edited && <span className="mt-1 block text-right text-[9px] text-slate-400">изменено</span>}
+                          </>
+                        )}
                         <button
                           type="button"
                           data-message-menu-trigger
@@ -1097,6 +1333,22 @@ export default function Chats() {
               <Pin size={15} className={menuMessage.pinned ? 'text-amber-300' : ''} />
               {pinningMessageId === menuMessage.id ? 'Сохраняю...' : menuMessage.pinned ? 'Открепить сообщение' : 'Закрепить сообщение'}
             </button>
+            {canDeleteMessage && (
+              menuMessage.type === 'text' && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setEditingMessageId(menuMessage.id);
+                    setMessageEditDraft(menuMessage.text);
+                    closeMessageMenu();
+                  }}
+                  className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-indigo-400/10 hover:text-indigo-200"
+                >
+                  <Pencil size={15} /> Редактировать
+                </button>
+              )
+            )}
             {canDeleteMessage && (
               <button
                 type="button"
