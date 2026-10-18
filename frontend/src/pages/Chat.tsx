@@ -32,7 +32,10 @@ export default function Chat() {
           headers: { Authorization: `Bearer ${token}` }
         });
 
-        const history = res.data.messages || res.data || [];
+        let history = res.data.messages || res.data || [];
+	if (!Array.isArray(history)) {
+ 	 history = [];
+	}
         
         const decryptedHistory = await Promise.all(
           history.map(async (msg: any) => {
