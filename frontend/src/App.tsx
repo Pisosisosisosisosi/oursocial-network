@@ -5,6 +5,7 @@ import Chats from './pages/Chats';
 import Login from './pages/Login';
 import Profile from './pages/Profile';
 import Register from './pages/Register';
+import UserProfile from './pages/UserProfile';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -26,6 +27,7 @@ function AppRoutes() {
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
       <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
+      <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>
   );

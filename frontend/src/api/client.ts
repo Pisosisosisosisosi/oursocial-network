@@ -23,6 +23,14 @@ export interface User {
   displayName?: string;
   name?: string;
   avatarUrl?: string;
+  bio?: string;
+  statusText?: string;
+  showLastSeen?: boolean;
+  lastSeen?: string | null;
+}
+
+export interface Contact extends User {
+  nickname: string;
 }
 
 export interface AuthResponse {

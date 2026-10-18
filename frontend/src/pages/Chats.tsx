@@ -1,23 +1,24 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { Check, CheckCheck } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Check, CheckCheck, ContactRound, ExternalLink, Pencil, UserRoundPlus, UserRoundX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, type Contact, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 
 export default function Chats() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
-  const userString = localStorage.getItem('user');
-  const currentUser = useMemo(() => userString ? JSON.parse(userString) : null, [userString]);
+  const { logout, user: currentUser } = useAuth();
 
-  const [users, setUsers] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [searchResults, setSearchResults] = useState<User[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(() => new Set());
-  const [activeChat, setActiveChat] = useState<any>(null);
+  const [activeChat, setActiveChat] = useState<(User & { nickname?: string }) | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState('');
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [panelError, setPanelError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -40,17 +41,44 @@ export default function Chats() {
   useEffect(() => {
     async function loadUsers() {
       try {
-        const res = await api.get('/users/search', { params: { q: '' } });
-        const filtered = res.data.filter((u: any) => u.id !== currentUser?.id);
-        setUsers(filtered);
+        const res = await api.get<Contact[]>('/contacts');
+        setContacts(res.data.filter((contact) => contact.id !== currentUser?.id));
       } catch (e) {
-        console.error("Ошибка загрузки пользователей:", e);
+        console.error('Ошибка загрузки контактов:', e);
+        setPanelError('Не удалось загрузить контакты.');
       } finally {
         setLoading(false);
       }
     }
     loadUsers();
-  }, [currentUser]);
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    let isCurrentSearch = true;
+    const timeout = setTimeout(async () => {
+      setSearching(true);
+      setPanelError('');
+      try {
+        const res = await api.get<User[]>('/users/search', { params: { q: query } });
+        if (isCurrentSearch) {
+          setSearchResults(res.data.filter((user) => user.id !== currentUser?.id));
+        }
+      } catch (error) {
+        console.error('Ошибка поиска пользователей:', error);
+        if (isCurrentSearch) setPanelError('Не удалось выполнить поиск пользователей.');
+      } finally {
+        if (isCurrentSearch) setSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      isCurrentSearch = false;
+      clearTimeout(timeout);
+    };
+  }, [searchQuery, currentUser?.id]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -136,7 +164,7 @@ export default function Chats() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSelectChat = async (user: any) => {
+  const handleSelectChat = async (user: User & { nickname?: string }) => {
     stopTyping();
     setTypingUser(null);
     setActiveChat(user);
@@ -146,6 +174,42 @@ export default function Chats() {
       setMessages(res.data);
     } catch (e) {
       console.error("Ошибка загрузки истории:", e);
+    }
+  };
+
+  const handleSaveContact = async (user: User, existingNickname = '') => {
+    const nickname = window.prompt(
+      existingNickname ? 'Изменить имя контакта' : 'Как записать пользователя в контактах?',
+      existingNickname || user.displayName || user.username,
+    );
+    if (nickname === null) return;
+    if (!nickname.trim()) {
+      setPanelError('Имя контакта не может быть пустым.');
+      return;
+    }
+
+    try {
+      const res = await api.put('/contacts', { userId: user.id, nickname: nickname.trim() });
+      setContacts((current) => {
+        const updated = { ...user, nickname: res.data.contact.nickname };
+        return [updated, ...current.filter((contact) => contact.id !== user.id)];
+      });
+      setActiveChat((current) => current?.id === user.id ? { ...current, nickname: res.data.contact.nickname } : current);
+      setPanelError('');
+    } catch (error) {
+      console.error('Ошибка сохранения контакта:', error);
+      setPanelError('Не удалось сохранить контакт.');
+    }
+  };
+
+  const handleRemoveContact = async (contact: Contact) => {
+    if (!window.confirm(`Удалить «${contact.nickname}» из контактов?`)) return;
+    try {
+      await api.delete(`/contacts/${contact.id}`);
+      setContacts((current) => current.filter((item) => item.id !== contact.id));
+    } catch (error) {
+      console.error('Ошибка удаления контакта:', error);
+      setPanelError('Не удалось удалить контакт.');
     }
   };
 
@@ -199,10 +263,14 @@ export default function Chats() {
     typingTimeoutRef.current = setTimeout(() => stopTyping(recipientId), 1500);
   };
 
-  const filteredUsers = users.filter(u => 
-    (u.displayName || u.username).toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setSearchResults([]);
+    setSearching(false);
+    setPanelError('');
+  };
+
+  const visibleUsers: (User & { nickname?: string })[] = searchQuery.trim() ? searchResults : contacts;
 
   return (
     <div className="flex h-full w-full bg-[#090d16] text-slate-100 font-sans absolute top-0 left-0 overflow-hidden selection:bg-indigo-500/30">
@@ -226,8 +294,10 @@ export default function Chats() {
         <div className="p-5 flex items-center justify-between border-b border-slate-800/50">
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => navigate('/profile')}>
              <div className="relative">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center font-bold text-slate-950 text-lg shadow-lg group-hover:scale-105 transition-transform duration-300">
-                   {currentUser?.username?.[0]?.toUpperCase() || 'U'}
+                <div className="w-10 h-10 overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center font-bold text-slate-950 text-lg shadow-lg group-hover:scale-105 transition-transform duration-300">
+                   {currentUser?.avatarUrl
+                     ? <img src={currentUser.avatarUrl} alt="" className="h-full w-full object-cover" />
+                     : currentUser?.username?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-[#0f172a] ${onlineUsers.has(String(currentUser?.id)) ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-600'}`}></span>
              </div>
@@ -248,9 +318,9 @@ export default function Chats() {
             <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input 
               type="text" 
-              placeholder="Поиск пользователей..." 
+              placeholder="Найти по username..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl pl-9 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-900/80 transition-all shadow-inner"
             />
           </div>
@@ -258,18 +328,28 @@ export default function Chats() {
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex justify-between">
-            <span>Все узлы ({filteredUsers.length})</span>
+            <span>{searchQuery.trim() ? `Результаты (${visibleUsers.length})` : `Контакты (${contacts.length})`}</span>
             <span className="text-[10px] normal-case tracking-normal text-slate-600">
               {onlineUsers.size} в сети
             </span>
           </h3>
           
           {loading && <p className="text-xs text-slate-500 px-2 animate-pulse">Сканирование сети...</p>}
+          {searching && <p className="text-xs text-slate-500 px-2 animate-pulse">Ищем пользователей...</p>}
+          {panelError && <p role="alert" className="px-2 py-1 text-xs text-rose-300">{panelError}</p>}
           
-          {filteredUsers.map((user, idx) => (
+          {!loading && !searching && visibleUsers.length === 0 && (
+            <p className="px-2 py-3 text-xs text-slate-500">
+              {searchQuery.trim() ? 'По этому username ничего не найдено.' : 'Контактов пока нет. Найдите пользователя по username.'}
+            </p>
+          )}
+
+          {visibleUsers.map((user, idx) => {
+            const contact = contacts.find((item) => item.id === user.id);
+            return (
             <div 
               key={user.id} 
-              onClick={() => handleSelectChat(user)}
+              onClick={() => handleSelectChat(contact ? { ...user, nickname: contact.nickname } : user)}
               className={`p-2.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-200 ${
                 activeChat?.id === user.id 
                   ? 'glass-active shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
@@ -278,17 +358,60 @@ export default function Chats() {
               style={{ animationDelay: `${idx * 30}ms` }}
             >
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-slate-300">
-                  {user.username?.[0]?.toUpperCase()}
+                <div className="w-10 h-10 overflow-hidden rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-sm font-bold text-slate-300">
+                  {user.avatarUrl
+                    ? <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    : user.username?.[0]?.toUpperCase()}
                 </div>
                 <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#0f172a] ${onlineUsers.has(String(user.id)) ? 'bg-emerald-500' : 'bg-slate-600'}`}></span>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-slate-200 truncate">{user.displayName || user.username}</div>
+                <div className="text-xs font-bold text-slate-200 truncate">{contact?.nickname || user.nickname || user.displayName || user.username}</div>
                 <div className="text-[10px] text-slate-500 truncate font-mono">@{user.username}</div>
               </div>
+              <button
+                type="button"
+                title="Открыть профиль"
+                aria-label={`Открыть профиль @${user.username}`}
+                onClick={(event) => { event.stopPropagation(); navigate(`/users/${user.id}`); }}
+                className="rounded-lg p-2 text-slate-500 transition hover:bg-indigo-400/10 hover:text-indigo-300"
+              >
+                <ExternalLink size={15} />
+              </button>
+              {contact ? (
+                <>
+                  <button
+                    type="button"
+                    title="Изменить имя контакта"
+                    aria-label={`Переименовать ${contact.nickname}`}
+                    onClick={(event) => { event.stopPropagation(); void handleSaveContact(user, contact.nickname); }}
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-200"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Удалить из контактов"
+                    aria-label={`Удалить ${contact.nickname} из контактов`}
+                    onClick={(event) => { event.stopPropagation(); void handleRemoveContact(contact); }}
+                    className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"
+                  >
+                    <UserRoundX size={15} />
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  title="Добавить в контакты"
+                  aria-label={`Добавить @${user.username} в контакты`}
+                  onClick={(event) => { event.stopPropagation(); void handleSaveContact(user); }}
+                  className="rounded-lg p-2 text-slate-500 transition hover:bg-emerald-400/10 hover:text-emerald-300"
+                >
+                  <UserRoundPlus size={15} />
+                </button>
+              )}
             </div>
-          ))}
+          );})}
         </div>
       </div>
 
@@ -300,12 +423,14 @@ export default function Chats() {
           <>
             <div className="p-4 border-b border-slate-800/60 glass-panel flex items-center justify-between relative z-10">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center font-bold text-slate-200 border border-slate-600/50">
-                  {activeChat.username?.[0]?.toUpperCase()}
+                <div className="w-10 h-10 overflow-hidden rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center font-bold text-slate-200 border border-slate-600/50">
+                  {activeChat.avatarUrl
+                    ? <img src={activeChat.avatarUrl} alt="" className="h-full w-full rounded-xl object-cover" />
+                    : activeChat.username?.[0]?.toUpperCase()}
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                    {activeChat.displayName || activeChat.username}
+                    {activeChat.nickname || activeChat.displayName || activeChat.username}
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Pulse</span>
                   </h3>
                   <p className={`text-[10px] flex items-center gap-1 ${onlineUsers.has(String(activeChat.id)) ? 'text-emerald-400' : 'text-slate-500'}`}>
@@ -314,6 +439,9 @@ export default function Chats() {
                   </p>
                 </div>
               </div>
+              <button type="button" onClick={() => navigate(`/users/${activeChat.id}`)} className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
+                <ContactRound size={15} /> Профиль
+              </button>
             </div>
 
             <div className="flex-1 p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10">

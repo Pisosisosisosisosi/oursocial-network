@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from bson import ObjectId
 from datetime import datetime, timezone
+import re
 
 from db import users_collection, keys_collection, connect_db
 # Импортируем новую функцию для сообщений (ее нужно будет добавить в db.py)
@@ -32,7 +33,7 @@ app.add_middleware(
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
-    username: str = Field(min_length=2, max_length=32)
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
 
 
 class LoginRequest(BaseModel):
@@ -50,8 +51,16 @@ class ExchangeRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     displayName: str = Field(min_length=2, max_length=32)
-    username: str = Field(min_length=3, max_length=32)
-    avatarUrl: str = ""  # base64 строка
+    username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
+    avatarUrl: str = Field(default="", max_length=1_400_000)
+    bio: str = Field(default="", max_length=300)
+    statusText: str = Field(default="", max_length=80)
+    showLastSeen: bool = True
+
+
+class ContactRequest(BaseModel):
+    userId: str = Field(min_length=1, max_length=64)
+    nickname: str = Field(min_length=1, max_length=40)
 
 
 # НОВАЯ МОДЕЛЬ ДЛЯ СООБЩЕНИЙ
@@ -97,6 +106,10 @@ def register(payload: RegisterRequest):
         "displayName": payload.username,
         "passwordHash": hash_password(payload.password),
         "avatarUrl": "",
+        "bio": "",
+        "statusText": "",
+        "showLastSeen": True,
+        "contacts": [],
         "createdAt": datetime.now(timezone.utc),
         "lastSeen": datetime.now(timezone.utc),
     }
@@ -142,6 +155,9 @@ def login(payload: LoginRequest):
             "username": user["username"],
             "displayName": user.get("displayName", user["username"]),
             "avatarUrl": user.get("avatarUrl", ""),
+            "bio": user.get("bio", ""),
+            "statusText": user.get("statusText", ""),
+            "showLastSeen": user.get("showLastSeen", True),
         },
     }
 
@@ -163,6 +179,9 @@ def me(current=Depends(get_current_user)):
         "username": user["username"],
         "displayName": user.get("displayName", user["username"]),
         "avatarUrl": user.get("avatarUrl", ""),
+        "bio": user.get("bio", ""),
+        "statusText": user.get("statusText", ""),
+        "showLastSeen": user.get("showLastSeen", True),
         "createdAt": user.get("createdAt"),
     }
 
@@ -170,12 +189,13 @@ def me(current=Depends(get_current_user)):
 # ---------- Users ----------
 
 @app.get("/users/search")
-def search_users(q: str, current=Depends(get_current_user)):
+def search_users(q: str = "", current=Depends(get_current_user)):
+    query = re.escape(q.strip())
     users = users_collection()
     results = users.find(
-        {"username": {"$regex": q, "$options": "i"}},
+        {"username": {"$regex": query, "$options": "i"}},
         {"email": 0, "passwordHash": 0},
-    ).limit(20)
+    ).sort("username", 1).limit(20)
 
     return [
         {
@@ -183,6 +203,8 @@ def search_users(q: str, current=Depends(get_current_user)):
             "username": u["username"],
             "displayName": u.get("displayName", u["username"]),
             "avatarUrl": u.get("avatarUrl", ""),
+            "bio": u.get("bio", ""),
+            "statusText": u.get("statusText", ""),
         }
         for u in results
     ]
@@ -202,31 +224,132 @@ def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_us
         {"$set": {
             "displayName": payload.displayName,
             "username": payload.username,
-            "avatarUrl": payload.avatarUrl
+            "avatarUrl": payload.avatarUrl,
+            "bio": payload.bio,
+            "statusText": payload.statusText,
+            "showLastSeen": payload.showLastSeen,
         }}
     )
     
     return {"status": "ok", "message": "Profile updated"}
 
 
-@app.get("/users/{user_id}")
-def get_user(user_id: str):
+@app.get("/contacts")
+def get_contacts(current=Depends(get_current_user)):
     users = users_collection()
-    try:
-        user = users.find_one({"_id": ObjectId(user_id)})
-    except Exception:
+    owner = users.find_one(
+        {"_id": ObjectId(current["userId"])},
+        {"contacts": 1},
+    )
+    if not owner:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    contacts = owner.get("contacts", [])
+    contact_ids = []
+    for contact in contacts:
+        try:
+            contact_ids.append(ObjectId(contact["userId"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    if not contact_ids:
+        return []
+
+    profile_by_id = {
+        str(user["_id"]): user
+        for user in users.find(
+            {"_id": {"$in": contact_ids}},
+            {"email": 0, "passwordHash": 0, "contacts": 0},
+        )
+    }
+
+    return [
+        {
+            "id": contact["userId"],
+            "nickname": contact["nickname"],
+            "username": profile_by_id[contact["userId"]]["username"],
+            "displayName": profile_by_id[contact["userId"]].get(
+                "displayName", profile_by_id[contact["userId"]]["username"]
+            ),
+            "avatarUrl": profile_by_id[contact["userId"]].get("avatarUrl", ""),
+            "bio": profile_by_id[contact["userId"]].get("bio", ""),
+            "statusText": profile_by_id[contact["userId"]].get("statusText", ""),
+        }
+        for contact in contacts
+        if contact.get("userId") in profile_by_id
+    ]
+
+
+@app.put("/contacts")
+def add_or_update_contact(payload: ContactRequest, current=Depends(get_current_user)):
+    if not ObjectId.is_valid(payload.userId):
         raise HTTPException(status_code=400, detail="Invalid user id")
+
+    owner_id = ObjectId(current["userId"])
+    target_id = ObjectId(payload.userId)
+    if owner_id == target_id:
+        raise HTTPException(status_code=400, detail="Cannot add yourself to contacts")
+
+    users = users_collection()
+    target = users.find_one({"_id": target_id}, {"_id": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    owner = users.find_one({"_id": owner_id}, {"_id": 1})
+    if not owner:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    contact = {"userId": payload.userId, "nickname": payload.nickname.strip()}
+    updated = users.update_one(
+        {"_id": owner_id, "contacts.userId": payload.userId},
+        {"$set": {"contacts.$.nickname": contact["nickname"]}},
+    )
+    if not updated.matched_count:
+        users.update_one({"_id": owner_id}, {"$push": {"contacts": contact}})
+
+    return {"status": "ok", "contact": contact}
+
+
+@app.delete("/contacts/{user_id}")
+def remove_contact(user_id: str, current=Depends(get_current_user)):
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
+    users = users_collection()
+    result = users.update_one(
+        {"_id": ObjectId(current["userId"])},
+        {"$pull": {"contacts": {"userId": user_id}}},
+    )
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"status": "ok"}
+
+
+@app.get("/users/{user_id}")
+def get_user(user_id: str, current=Depends(get_current_user)):
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
+    users = users_collection()
+    user = users.find_one(
+        {"_id": ObjectId(user_id)},
+        {"email": 0, "passwordHash": 0, "contacts": 0},
+    )
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return {
+    profile = {
         "id": str(user["_id"]),
         "username": user["username"],
         "displayName": user.get("displayName", user["username"]),
         "avatarUrl": user.get("avatarUrl", ""),
-        "lastSeen": user.get("lastSeen"),
+        "bio": user.get("bio", ""),
+        "statusText": user.get("statusText", ""),
     }
+    if str(user["_id"]) == current["userId"] or user.get("showLastSeen", True):
+        profile["lastSeen"] = user.get("lastSeen")
+    return profile
 
 
 # ---------- Messages (НОВЫЙ РАЗДЕЛ) ----------
