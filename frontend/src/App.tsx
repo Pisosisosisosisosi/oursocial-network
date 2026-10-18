@@ -102,7 +102,7 @@ export default function App() {
     <AuthProvider>
       <HashRouter>
         <GlobalNotifications />
-        <div className="app-shell relative h-screen w-screen overflow-hidden bg-[#090d16] font-sans text-slate-100">
+        <div className="app-shell relative h-[100dvh] w-screen overflow-hidden bg-[#090d16] font-sans text-slate-100">
           <AppRoutes />
         </div>
       </HashRouter>

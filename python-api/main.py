@@ -81,6 +81,10 @@ class ReactionRequest(BaseModel):
     emoji: Literal["❤️", "👍", "😂"]
 
 
+class PinRequest(BaseModel):
+    pinned: bool
+
+
 # ---------- Startup ----------
 
 @app.on_event("startup")
@@ -384,6 +388,7 @@ def serialize_message(message):
         "contentType": message.get("contentType", ""),
         "fileData": message.get("fileData", ""),
         "reactions": message.get("reactions", []),
+        "pinned": message.get("pinned", False),
         "createdAt": message["createdAt"].isoformat(),
         "read": message.get("read", False),
     }
@@ -445,6 +450,7 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
         "contentType": content_type,
         "fileData": file_data,
         "reactions": [],
+        "pinned": False,
         "createdAt": datetime.now(timezone.utc),
         "read": False,
     }
@@ -536,6 +542,24 @@ async def toggle_reaction(
         to=f"user:{message['senderId']}",
     )
     return {"status": "ok"}
+
+
+@app.post("/messages/{message_id}/pin")
+async def set_message_pin(
+    message_id: str,
+    payload: PinRequest,
+    current=Depends(get_current_user),
+):
+    message = find_message_for_user(message_id, current["userId"])
+    messages_collection().update_one(
+        {"_id": message["_id"]},
+        {"$set": {"pinned": payload.pinned}},
+    )
+
+    event = {"messageId": message_id, "action": "pin"}
+    await sio.emit("message_changed", event, to=f"user:{message['receiverId']}")
+    await sio.emit("message_changed", event, to=f"user:{message['senderId']}")
+    return {"status": "ok", "pinned": payload.pinned}
 
 
 # ---------- Encryption keys ----------
