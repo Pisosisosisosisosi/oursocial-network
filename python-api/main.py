@@ -5,6 +5,8 @@ from bson import ObjectId
 from datetime import datetime, timezone
 
 from db import users_collection, keys_collection, connect_db
+# Импортируем новую функцию для сообщений (ее нужно будет добавить в db.py)
+from db import messages_collection 
 from auth import (
     hash_password, verify_password, create_token,
     get_current_user,
@@ -48,11 +50,16 @@ class ExchangeRequest(BaseModel):
     targetUserId: str
 
 
-# НОВАЯ МОДЕЛЬ ДЛЯ ПРОФИЛЯ
 class UpdateProfileRequest(BaseModel):
     displayName: str = Field(min_length=2, max_length=32)
     username: str = Field(min_length=3, max_length=32)
     avatarUrl: str = ""  # base64 строка
+
+
+# НОВАЯ МОДЕЛЬ ДЛЯ СООБЩЕНИЙ
+class MessageRequest(BaseModel):
+    receiverId: str
+    text: str
 
 
 # ---------- Startup ----------
@@ -89,7 +96,7 @@ def register(payload: RegisterRequest):
     doc = {
         "email": payload.email,
         "username": payload.username,
-        "displayName": payload.username,  # По умолчанию displayName = username
+        "displayName": payload.username,
         "passwordHash": hash_password(payload.password),
         "avatarUrl": "",
         "createdAt": datetime.now(timezone.utc),
@@ -183,18 +190,15 @@ def search_users(q: str, current=Depends(get_current_user)):
     ]
 
 
-# НОВЫЙ ЭНДПОИНТ ДЛЯ ОБНОВЛЕНИЯ ПРОФИЛЯ
 @app.patch("/users/me/profile")
 def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_user)):
     users = users_collection()
     user_id = current["userId"]
     
-    # Проверяем, не занят ли новый username кем-то другим
     existing_user = users.find_one({"username": payload.username})
     if existing_user and str(existing_user["_id"]) != user_id:
         raise HTTPException(status_code=409, detail="Username already taken")
 
-    # Обновляем данные
     users.update_one(
         {"_id": ObjectId(user_id)},
         {"$set": {
@@ -225,6 +229,49 @@ def get_user(user_id: str):
         "avatarUrl": user.get("avatarUrl", ""),
         "lastSeen": user.get("lastSeen"),
     }
+
+
+# ---------- Messages (НОВЫЙ РАЗДЕЛ) ----------
+
+@app.post("/messages")
+def send_message(payload: MessageRequest, current=Depends(get_current_user)):
+    messages = messages_collection()
+    
+    doc = {
+        "senderId": current["userId"],
+        "receiverId": payload.receiverId,
+        "text": payload.text,
+        "createdAt": datetime.now(timezone.utc),
+        "read": False
+    }
+    messages.insert_one(doc)
+    return {"status": "ok"}
+
+
+@app.get("/messages/{user_id}")
+def get_messages(user_id: str, current=Depends(get_current_user)):
+    messages = messages_collection()
+    my_id = current["userId"]
+
+    # Ищем переписку между мной и другим пользователем
+    chat = list(messages.find({
+        "$or": [
+            {"senderId": my_id, "receiverId": user_id},
+            {"senderId": user_id, "receiverId": my_id}
+        ]
+    }).sort("createdAt", 1))
+
+    return [
+        {
+            "id": str(m["_id"]),
+            "senderId": m["senderId"],
+            "receiverId": m["receiverId"],
+            "text": m["text"],
+            "createdAt": m["createdAt"].isoformat(),
+            "read": m.get("read", False)
+        }
+        for m in chat
+    ]
 
 
 # ---------- Encryption keys ----------
