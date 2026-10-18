@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Download, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Download, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceTabs from '../components/WorkspaceTabs';
+import WorkspaceSidebarHeader from '../components/WorkspaceSidebarHeader';
 
 interface ChatMessage {
   id: string;
@@ -791,47 +792,15 @@ export default function Chats() {
 
       {/* 1. ЛЕВАЯ КОЛОНКА */}
       <div className={`${activeChat ? 'hidden md:flex' : 'flex'} w-full md:w-[340px] shrink-0 flex-col glass-panel border-r border-slate-800/60 h-full z-10 relative`}>
-        <div className="p-4 sm:p-5 flex items-center justify-between border-b border-slate-800/50">
-          <div className="flex items-center gap-3 group cursor-pointer" onClick={() => navigate('/profile')}>
-             <div className="relative">
-                <div className="w-10 h-10 overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center font-bold text-slate-950 text-lg shadow-lg group-hover:scale-105 transition-transform duration-300">
-                   {currentUser?.avatarUrl
-                     ? <img src={currentUser.avatarUrl} alt="" className="h-full w-full object-cover" />
-                     : currentUser?.username?.[0]?.toUpperCase() || 'U'}
-                </div>
-                <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-[#0f172a] ${onlineUsers.has(String(currentUser?.id)) ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-slate-600'}`}></span>
-             </div>
-             <div>
-                <span className="font-bold text-sm truncate block text-slate-100 group-hover:text-indigo-300 transition-colors">{currentUser?.displayName || currentUser?.username || 'Пользователь'}</span>
-                <span className={`text-[10px] font-mono tracking-wider ${onlineUsers.has(String(currentUser?.id)) ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  {onlineUsers.has(String(currentUser?.id)) ? 'В сети' : 'Не в сети'}
-                </span>
-             </div>
-          </div>
-          <div className="flex items-center gap-1">
-            <button onClick={() => navigate('/settings')} className="rounded-xl p-2 text-slate-500 transition-all hover:bg-indigo-500/10 hover:text-indigo-300" title="Настройки" aria-label="Открыть настройки">
-              <SettingsIcon size={19} />
-            </button>
-          </div>
-        </div>
-
-        <div className="p-3">
-          <div className="relative group">
-            <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            <input 
-              type="text" 
-              placeholder="Найти по @username целиком..."
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full bg-slate-900/50 border border-slate-700/50 rounded-2xl pl-9 pr-4 py-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:bg-slate-900/80 transition-all shadow-inner"
-            />
-          </div>
-          {searchQuery.trim() && !searchQuery.trim().startsWith('@') && (
-            <p className="mt-2 px-1 text-[10px] text-slate-500">Укажите полный username вместе с @, например @darius_writer.</p>
-          )}
-        </div>
-
+        <WorkspaceSidebarHeader
+          searchValue={searchQuery}
+          onSearchChange={handleSearchChange}
+          searchPlaceholder="Найти по @username целиком..."
+        />
         <WorkspaceTabs />
+        {searchQuery.trim() && !searchQuery.trim().startsWith('@') && (
+          <p className="px-4 pt-2 text-[10px] text-slate-500">Укажите полный username вместе с @, например @darius_writer.</p>
+        )}
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex justify-between">

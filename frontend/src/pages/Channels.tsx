@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Search, Send, Settings2, Share2, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Send, Settings2, Share2, Trash2, Users, X } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceTabs from '../components/WorkspaceTabs';
+import WorkspaceSidebarHeader from '../components/WorkspaceSidebarHeader';
 
 interface Channel {
   id: string;
@@ -414,6 +415,12 @@ export default function Channels() {
   return (
     <main className="flex h-full min-h-0 w-full bg-[#090d16] text-slate-100">
       <aside className={`${activeChannel ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-[#0d1420] md:w-[340px]`}>
+        <WorkspaceSidebarHeader
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Поиск каналов"
+        />
+        <WorkspaceTabs />
         <header className="flex items-center gap-3 border-b border-white/[0.08] px-4 py-4">
           <button type="button" onClick={() => navigate('/')} aria-label="Назад к чатам" className="rounded-xl p-2 text-slate-400 transition hover:bg-white/[0.06] hover:text-white"><ArrowLeft size={18} /></button>
           <div className="min-w-0 flex-1">
@@ -422,17 +429,12 @@ export default function Channels() {
           </div>
           <button type="button" onClick={() => { setVisibility('public'); setCreating(true); }} title="Создать канал" aria-label="Создать канал" className="rounded-xl p-2 text-indigo-300 transition hover:bg-indigo-400/10"><Plus size={19} /></button>
         </header>
-        <div className="space-y-3 border-b border-white/[0.08] p-4">
-          <label className="relative block">
-            <Search size={15} className="absolute left-3 top-3 text-slate-500" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск каналов" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400/50" />
-          </label>
+        <div className="border-b border-white/[0.08] p-3">
           <div className="grid grid-cols-2 rounded-xl bg-slate-950/50 p-1">
             <button type="button" onClick={() => setListMode('mine')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'mine' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}>Мои каналы</button>
             <button type="button" onClick={() => setListMode('discover')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'discover' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}>Найти каналы</button>
           </div>
         </div>
-        <WorkspaceTabs />
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {loading && <div className="space-y-2 p-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-[70px] animate-pulse rounded-2xl bg-white/[0.04]" />)}</div>}
           {!loading && visibleChannels.length === 0 && <div className="px-5 py-12 text-center">

@@ -6,6 +6,7 @@ import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceTabs from '../components/WorkspaceTabs';
+import WorkspaceSidebarHeader from '../components/WorkspaceSidebarHeader';
 
 interface GroupMember extends User {
   userId: string;
@@ -46,6 +47,7 @@ export default function Groups() {
   const [creating, setCreating] = useState(false);
   const [addingMembers, setAddingMembers] = useState(false);
   const [groupTitle, setGroupTitle] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
   const [memberResults, setMemberResults] = useState<User[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<User[]>([]);
@@ -55,6 +57,10 @@ export default function Groups() {
   const activeGroup = activeGroupId === ''
     ? null
     : groups.find((group) => group.id === activeGroupId) || groups[0] || null;
+  const visibleGroups = useMemo(() => {
+    const query = groupSearch.trim().toLocaleLowerCase();
+    return query ? groups.filter((group) => group.title.toLocaleLowerCase().includes(query)) : groups;
+  }, [groupSearch, groups]);
   const loadingMessages = Boolean(activeGroup && activeGroup.id !== loadedGroupId);
 
   const loadGroups = useCallback(async () => {
@@ -289,6 +295,12 @@ export default function Groups() {
   return (
     <main className="flex h-full min-h-0 w-full bg-[#090d16] text-slate-100">
       <aside className={`${activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-[#0d1420] md:w-80`}>
+        <WorkspaceSidebarHeader
+          searchValue={groupSearch}
+          onSearchChange={setGroupSearch}
+          searchPlaceholder="Поиск групп"
+        />
+        <WorkspaceTabs />
         <header className="flex items-center justify-between border-b border-white/[0.08] p-4">
           <button type="button" onClick={() => navigate('/')} className="rounded-xl p-2 text-slate-400 transition hover:bg-white/[0.06] hover:text-white" aria-label="Назад к чатам">
             <ArrowLeft size={18} />
@@ -298,8 +310,6 @@ export default function Groups() {
             <Plus size={18} />
           </button>
         </header>
-
-        <WorkspaceTabs />
 
         {creating && (
           <form onSubmit={(event) => void createGroup(event)} className="space-y-3 border-b border-white/[0.08] p-4">
@@ -328,9 +338,9 @@ export default function Groups() {
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {loading ? (
             <div role="status" className="space-y-2 p-2">{[0, 1, 2].map((item) => <div key={item} className="chat-skeleton h-14 rounded-xl" />)}</div>
-          ) : groups.length === 0 ? (
-            <p className="p-3 text-xs leading-relaxed text-slate-500">Вы пока не состоите в группах. Создайте группу и найдите участников по полному @username.</p>
-          ) : groups.map((group) => (
+          ) : visibleGroups.length === 0 ? (
+            <p className="p-3 text-xs leading-relaxed text-slate-500">{groupSearch.trim() ? 'Группы не найдены.' : 'Вы пока не состоите в группах. Создайте группу и найдите участников по полному @username.'}</p>
+          ) : visibleGroups.map((group) => (
             <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`mb-1 flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${activeGroup?.id === group.id ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/[0.04]'}`}>
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-500/15 text-indigo-200"><Users size={18} /></span>
               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{group.title}</span><span className="mt-1 block text-[10px] text-slate-500">{group.memberCount} участников</span></span>
