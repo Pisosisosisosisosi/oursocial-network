@@ -24,19 +24,16 @@ interface Chat {
 export default function Chats() {
   const { user, logout } = useAuth();
   
-  // Состояния для левой панели
   const [chats, setChats] = useState<Chat[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Состояния для правой панели (активный чат)
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [activeChatName, setActiveChatName] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [recipientId, setRecipientId] = useState<string>('');
 
-  // Модалки
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
@@ -107,7 +104,6 @@ export default function Chats() {
 
     loadHistory();
 
-    // Подключаем сокет к чату
     const socket = getSocket();
     if (socket) {
       socket.emit('join_chat', { chatId: activeChatId });
@@ -132,7 +128,6 @@ export default function Chats() {
     }
   }, [activeChatId, user, token]);
 
-  // Открытие личного чата
   const startDirectChat = async (targetUser: User) => {
     if (!user) return;
     try {
@@ -153,7 +148,6 @@ export default function Chats() {
     }
   };
 
-  // Открытие существующего чата
   const openChat = (chat: Chat) => {
     setActiveChatId(chat._id);
     const otherId = chat.participants?.find((id: string) => id !== user?.id);
@@ -162,7 +156,6 @@ export default function Chats() {
     if (otherId) setRecipientId(otherId);
   };
 
-  // Создание группы
   const handleCreateGroup = async () => {
     if (!groupName.trim() || selectedUsers.length === 0) return alert('Введите название и выберите участников');
     setCreating(true);
@@ -186,7 +179,6 @@ export default function Chats() {
     }
   };
 
-  // Сохранение настроек
   const handleSaveSettings = () => {
     localStorage.setItem('moderationEnabled', String(moderationEnabled));
     setIsSettingsOpen(false);
@@ -214,24 +206,31 @@ export default function Chats() {
           {/* СПИСОК ЧАТОВ */}
           <div className="p-2">
             <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Мои чаты</h3>
-            {chats.length === 0 && <p className="text-xs text-gray-400">Нет чатов</p>}
-            {chats.map(chat => (
-              <div 
-                key={chat._id} 
-                onClick={() => openChat(chat)}
-                className={`p-3 rounded-lg cursor-pointer mb-1 ${activeChatId === chat._id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
-              >
-                <p className="font-semibold text-sm">
-                  {chat.type === 'group' ? `👥 ${chat.title}` : `Чат: ${chat._id.slice(-4)}`}
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {chat.lastMessage?.encryptedText || 'Нет сообщений'}
-                </p>
-              </div>
-            ))}
+            
+            {/* ВОТ ЗДЕСЬ МЫ ИСПОЛЬЗУЕМ loading */}
+            {loading ? (
+              <p className="text-xs text-gray-400">Загрузка...</p>
+            ) : chats.length === 0 ? (
+              <p className="text-xs text-gray-400">Нет чатов</p>
+            ) : (
+              chats.map(chat => (
+                <div 
+                  key={chat._id} 
+                  onClick={() => openChat(chat)}
+                  className={`p-3 rounded-lg cursor-pointer mb-1 ${activeChatId === chat._id ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+                >
+                  <p className="font-semibold text-sm">
+                    {chat.type === 'group' ? `👥 ${chat.title}` : `Чат: ${chat._id.slice(-4)}`}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {chat.lastMessage?.encryptedText || 'Нет сообщений'}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
 
-          {/* СПИСОК ПОЛЬЗОВАТЕЛЕЙ (КЛИК НА ВСЮ СТРОКУ) */}
+          {/* СПИСОК ПОЛЬЗОВАТЕЛЕЙ */}
           <div className="p-2">
             <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Пользователи</h3>
             {users.map(u => (
