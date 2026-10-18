@@ -67,7 +67,7 @@ export default function Settings() {
 
   const savePreference = (key: string, value: string) => {
     localStorage.setItem(key, value);
-    applyAppPreferences();
+    applyAppPreferences(Boolean(user?.isPremium));
   };
 
   const chooseTheme = (value: 'dark' | 'light') => {

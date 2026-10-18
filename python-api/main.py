@@ -292,6 +292,7 @@ def search_users(q: str = "", current=Depends(get_current_user)):
             "avatarUrl": u.get("avatarUrl", ""),
             "bio": u.get("bio", ""),
             "statusText": u.get("statusText", ""),
+            "isPremium": serialize_premium(u)["isPremium"],
         }
         for u in results
     ]
@@ -383,7 +384,7 @@ def get_contacts(current=Depends(get_current_user)):
             "avatarUrl": profile.get("avatarUrl", ""),
             "bio": profile.get("bio", ""),
             "statusText": profile.get("statusText", ""),
-            "isPremium": profile.get("isPremium", False),
+            "isPremium": serialize_premium(profile)["isPremium"],
             "chatHidden": bool(hidden_at and (
                 not latest_message or latest_message["createdAt"] <= hidden_at
             )),

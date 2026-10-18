@@ -1,6 +1,10 @@
-export function applyAppPreferences() {
+export function applyAppPreferences(isPremium = false) {
   const root = document.documentElement;
   root.dataset.theme = localStorage.getItem('pulseTheme') === 'light' ? 'light' : 'dark';
+  const premiumTheme = localStorage.getItem('pulsePremiumTheme');
+  root.dataset.premiumTheme = isPremium && ['cyber', 'cosmos', 'sakura'].includes(premiumTheme || '')
+    ? premiumTheme!
+    : 'default';
   root.dataset.compact = localStorage.getItem('pulseCompactMode') === 'true' ? 'true' : 'false';
   root.dataset.reduceMotion = localStorage.getItem('pulseReduceMotion') === 'true' ? 'true' : 'false';
   const messageSize = localStorage.getItem('pulseMessageSize');

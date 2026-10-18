@@ -29,6 +29,9 @@ export interface User {
   hideOnlineStatus?: boolean;
   hideReadReceipts?: boolean;
   lastSeen?: string | null;
+  isPremium?: boolean;
+  premiumUntil?: string | null;
+  coinsBalance?: number;
 }
 
 export interface Contact extends User {

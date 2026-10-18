@@ -253,6 +253,33 @@ html[data-theme="light"] .bg-gradient-to-br.from-indigo-600.to-indigo-800 {
   color: #fff !important;
 }
 
+html[data-premium-theme="cyber"] .app-shell,
+html[data-premium-theme="cyber"] main.bg-\[\#090d16\] {
+  background-image: radial-gradient(ellipse at 15% 0%, rgba(34, 211, 238, 0.13), transparent 42%), linear-gradient(145deg, #080f1d, #10102a 58%, #07151d) !important;
+}
+
+html[data-premium-theme="cosmos"] .app-shell,
+html[data-premium-theme="cosmos"] main.bg-\[\#090d16\] {
+  background-image: radial-gradient(ellipse at 80% 0%, rgba(168, 85, 247, 0.16), transparent 44%), linear-gradient(145deg, #0b0a1a, #19102c 58%, #0b1021) !important;
+}
+
+html[data-premium-theme="sakura"] .app-shell,
+html[data-premium-theme="sakura"] main.bg-\[\#090d16\] {
+  background-image: radial-gradient(ellipse at 85% 0%, rgba(244, 114, 182, 0.15), transparent 42%), linear-gradient(145deg, #130e1c, #211222 58%, #121329) !important;
+}
+
+html[data-premium-theme="cyber"] .glass-panel {
+  border-color: rgba(34, 211, 238, 0.12) !important;
+}
+
+html[data-premium-theme="cosmos"] .glass-panel {
+  border-color: rgba(192, 132, 252, 0.13) !important;
+}
+
+html[data-premium-theme="sakura"] .glass-panel {
+  border-color: rgba(244, 114, 182, 0.13) !important;
+}
+
 html[data-compact="true"] .chat-message {
   padding: 0.55rem 0.7rem !important;
 }

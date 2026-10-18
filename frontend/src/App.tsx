@@ -15,6 +15,7 @@ import { ToastProvider } from './context/ToastContext';
 import { useToast } from './context/useToast';
 
 const Channels = lazy(() => import('./pages/Channels'));
+const Premium = lazy(() => import('./pages/Premium'));
 
 function GlobalNotifications() {
   const { user } = useAuth();
@@ -105,6 +106,10 @@ function GlobalNotifications() {
 function AppRoutes() {
   const { user, loading } = useAuth();
 
+  useEffect(() => {
+    applyAppPreferences(Boolean(user?.isPremium));
+  }, [user?.isPremium]);
+
   if (loading) {
     return (
       <div className="grid h-full w-full place-items-center bg-[#090d16] text-sm text-slate-400">
@@ -122,6 +127,9 @@ function AppRoutes() {
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
       <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
+      <Route path="/premium" element={user
+        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем Skyline Premium…</div>}><Premium /></Suspense>
+        : <Navigate to="/login" replace />} />
       <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
       <Route path="/groups" element={user ? <Groups /> : <Navigate to="/login" replace />} />
       <Route path="/channels" element={user

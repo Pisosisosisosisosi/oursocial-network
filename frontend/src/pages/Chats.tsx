@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Download, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Crown, Download, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -854,7 +854,10 @@ export default function Chats() {
                 <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#0f172a] ${onlineUsers.has(String(user.id)) ? 'bg-emerald-500' : 'bg-slate-600'}`}></span>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-slate-200 truncate">{contact?.nickname || user.nickname || user.displayName || user.username}</div>
+                <div className="flex min-w-0 items-center gap-1 text-xs font-bold text-slate-200">
+                  <span className="truncate">{contact?.nickname || user.nickname || user.displayName || user.username}</span>
+                  {user.isPremium && <Crown size={12} className="shrink-0 fill-amber-300/20 text-amber-300" aria-label="Skyline Premium" />}
+                </div>
                 <div className="text-[10px] text-slate-500 truncate font-mono">@{user.username}</div>
               </div>
               <button
@@ -938,6 +941,7 @@ export default function Chats() {
                       <button type="button" onClick={() => void openChatProfile()} aria-label={`Профиль ${activeChat.displayName || activeChat.username}`} className="truncate text-left transition hover:text-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60">
                         {activeChat.nickname || activeChat.displayName || activeChat.username}
                       </button>
+                      {activeChat.isPremium && <Crown size={14} className="shrink-0 fill-amber-300/20 text-amber-300" aria-label="Skyline Premium" />}
                       <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Pulse</span>
                     </h3>
                     <p className={`text-[10px] flex items-center gap-1 ${onlineUsers.has(String(activeChat.id)) ? 'text-emerald-400' : 'text-slate-500'}`}>

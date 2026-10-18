@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, UserRoundCheck, UserRoundPlus } from 'lucide-react';
+import { ArrowLeft, Crown, UserRoundCheck, UserRoundPlus } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, type Contact, type User } from '../api/client';
@@ -105,7 +105,7 @@ export default function UserProfile() {
                   : profile.username[0]?.toLocaleUpperCase('ru-RU')}
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-semibold">{profile.displayName || profile.username}</h1>
+                <h1 className="flex items-center gap-2 truncate text-2xl font-semibold">{profile.displayName || profile.username}{profile.isPremium && <Crown size={19} className="shrink-0 fill-amber-300/20 text-amber-300" aria-label="Skyline Premium" />}</h1>
                 <p className="mt-1 truncate text-sm text-slate-500">@{profile.username}</p>
                 {profile.statusText && <p className="mt-2 text-sm text-indigo-200">{profile.statusText}</p>}
               </div>

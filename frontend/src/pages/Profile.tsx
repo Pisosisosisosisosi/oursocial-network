@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { ArrowLeft, Eye, EyeOff, ImagePlus, Save, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowLeft, Coins, Crown, Eye, EyeOff, ImagePlus, Save, ShieldCheck, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import { api } from '../api/client';
@@ -96,6 +96,23 @@ export default function Profile() {
           <p className="mt-2 text-sm text-slate-500">Управляйте публичной информацией и приватностью.</p>
         </div>
 
+        <section className="mb-7 overflow-hidden rounded-2xl border border-amber-300/15 bg-gradient-to-r from-amber-300/[0.08] via-white/[0.025] to-indigo-400/[0.06] p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-amber-200/15 bg-amber-300/10 text-amber-200"><Coins size={21} /></span>
+              <span>
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200/70">Skyline Coins</span>
+                <span className="mt-0.5 block text-lg font-bold text-amber-100">{user?.coinsBalance ?? 0} <span className="text-xs font-medium text-slate-400">монет</span></span>
+                <span className="block text-[10px] text-slate-500">{user?.isPremium ? 'Premium активен' : 'Откройте больше возможностей'}</span>
+              </span>
+            </div>
+            <button type="button" onClick={() => navigate('/premium')} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 px-4 text-xs font-bold text-slate-950 transition hover:brightness-110">
+              <Crown size={15} />{user?.isPremium ? 'Premium и монеты' : 'Купить Premium'}
+            </button>
+          </div>
+          {user?.isPremium && user.premiumUntil && <p className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] text-slate-500">Premium действует до {new Date(user.premiumUntil).toLocaleDateString('ru-RU')}</p>}
+        </section>
+
         <div className="mb-7 flex items-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
           <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 text-xl font-bold text-white">
             {avatarUrl
@@ -103,7 +120,7 @@ export default function Profile() {
               : username?.[0]?.toLocaleUpperCase('ru-RU') || 'U'}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{displayName || username}</p>
+            <p className="flex items-center gap-1.5 truncate text-sm font-semibold">{displayName || username}{user?.isPremium && <Crown size={14} className="shrink-0 fill-amber-300/20 text-amber-300" aria-label="Skyline Premium" />}</p>
             <p className="mt-1 truncate text-xs text-slate-500">@{username}</p>
           </div>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5">
