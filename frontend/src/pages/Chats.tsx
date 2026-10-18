@@ -189,10 +189,18 @@ export default function Chats() {
       {/* ЛЕВАЯ ПАНЕЛЬ (СПИСОК ЧАТОВ) */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         
-        {/* ШАПКА ЛЕВОЙ ПАНЕЛИ */}
+                {/* ШАПКА ЛЕВОЙ ПАНЕЛИ */}
         <header className="p-4 border-b flex justify-between items-center bg-gray-50">
           <div className="flex items-center gap-3">
-            {/* Кнопка создания группы (кружок с карандашом) */}
+            {/* Аватарка пользователя (теперь слева) */}
+            <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-lg">
+              {user?.username?.charAt(0).toUpperCase()}
+            </div>
+            <span className="font-bold text-lg">{user?.username}</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {/* Кнопка создания группы (карандаш, теперь справа) */}
             <button 
               onClick={() => setIsModalOpen(true)} 
               className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition"
@@ -202,10 +210,6 @@ export default function Chats() {
                 <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
               </svg>
             </button>
-            <span className="font-bold text-lg">{user?.username}</span>
-          </div>
-          
-          <div className="flex items-center gap-2">
             {/* Кнопка настроек (SVG шестеренка) */}
             <button onClick={() => setIsSettingsOpen(true)} className="text-gray-500 hover:text-black p-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -213,10 +217,6 @@ export default function Chats() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </button>
-            {/* Аватарка пользователя (просто для красоты) */}
-            <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-sm">
-              {user?.username?.charAt(0).toUpperCase()}
-            </div>
           </div>
         </header>
 
