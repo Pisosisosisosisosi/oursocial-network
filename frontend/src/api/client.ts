@@ -30,6 +30,7 @@ export interface User {
   createdAt?: string | null;
   hideOnlineStatus?: boolean;
   hideReadReceipts?: boolean;
+  hideDateOfBirth?: boolean;
   lastSeen?: string | null;
   isPremium?: boolean;
   premiumUntil?: string | null;

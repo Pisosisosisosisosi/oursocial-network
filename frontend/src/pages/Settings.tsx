@@ -51,6 +51,7 @@ export default function Settings() {
   const [showReadReceipts, setShowReadReceipts] = useState(() => localStorage.getItem('pulseShowReadReceipts') !== 'false');
   const [hideOnlineStatus, setHideOnlineStatus] = useState(user?.hideOnlineStatus ?? false);
   const [hideReadReceipts, setHideReadReceipts] = useState(user?.hideReadReceipts ?? false);
+  const [hideDateOfBirth, setHideDateOfBirth] = useState(user?.hideDateOfBirth ?? false);
   const [mediaPreview, setMediaPreview] = useState(() => localStorage.getItem('pulseMediaPreview') !== 'false');
   const [desktopNotifications, setDesktopNotifications] = useState(() => localStorage.getItem('pulseNotifications') === 'true');
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
@@ -110,15 +111,17 @@ export default function Settings() {
     navigate('/login', { replace: true });
   };
 
-  const savePrivacy = async (updates: { hideOnlineStatus?: boolean; hideReadReceipts?: boolean }) => {
+  const savePrivacy = async (updates: { hideOnlineStatus?: boolean; hideReadReceipts?: boolean; hideDateOfBirth?: boolean }) => {
     const next = {
       hideOnlineStatus: updates.hideOnlineStatus ?? hideOnlineStatus,
       hideReadReceipts: updates.hideReadReceipts ?? hideReadReceipts,
+      hideDateOfBirth: updates.hideDateOfBirth ?? hideDateOfBirth,
     };
     try {
       await api.patch('/users/me/privacy', next);
       setHideOnlineStatus(next.hideOnlineStatus);
       setHideReadReceipts(next.hideReadReceipts);
+      setHideDateOfBirth(next.hideDateOfBirth);
       updateUser(next);
       showToast('Настройки приватности сохранены.', 'success');
     } catch (error) {
@@ -214,7 +217,7 @@ export default function Settings() {
           <section className={cardClass}>
             <div className="mb-3 flex items-center gap-3">
               <Shield size={18} className="text-emerald-300" />
-              <div><h2 className="text-sm font-semibold">Профиль и приватность</h2><p className="mt-1 text-xs text-slate-500">Публичная информация и видимость последнего посещения.</p></div>
+              <div><h2 className="text-sm font-semibold">Профиль и приватность</h2><p className="mt-1 text-xs text-slate-500">Публичная информация, дата рождения и время последнего посещения.</p></div>
             </div>
             <button type="button" onClick={() => navigate('/profile')} className="flex w-full items-center justify-between rounded-xl border border-white/[0.08] px-4 py-3 text-left transition hover:bg-white/[0.04]">
               <span className="flex items-center gap-3"><UserRound size={17} className="text-slate-400" /><span><span className="block text-sm text-slate-200">Настройки профиля</span><span className="mt-1 block text-xs text-slate-500">Имя, username, аватар, описание и last seen</span></span></span>
@@ -222,6 +225,7 @@ export default function Settings() {
             </button>
             <div className="mt-3 divide-y divide-white/[0.06] border-t border-white/[0.06]">
               <SettingToggle checked={hideOnlineStatus} onChange={(enabled) => void savePrivacy({ hideOnlineStatus: enabled })} title="Скрыть статус онлайн" description="Другие пользователи не будут видеть вашу зелёную точку присутствия." />
+              <SettingToggle checked={hideDateOfBirth} onChange={(enabled) => void savePrivacy({ hideDateOfBirth: enabled })} title="Скрыть дату рождения" description="Скрыть дату рождения в публичном профиле. Она останется видна только вам." />
               <SettingToggle checked={hideReadReceipts} onChange={(enabled) => void savePrivacy({ hideReadReceipts: enabled })} title="Скрыть отметки о прочтении" description="Сообщения не будут отмечаться прочитанными, пока настройка включена." />
             </div>
           </section>

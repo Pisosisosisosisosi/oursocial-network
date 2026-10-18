@@ -47,6 +47,41 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(update["dateOfBirth"], "1995-04-23")
         self.assertEqual(users.update_one.call_args.args[0]["_id"], ObjectId(USER_ID))
 
+    def test_public_profile_hides_birth_date_when_privacy_enabled(self) -> None:
+        users = Mock()
+        users.find_one.return_value = {
+            "_id": ObjectId(USER_ID),
+            "username": "test_user",
+            "dateOfBirth": "1995-04-23",
+            "hideDateOfBirth": True,
+        }
+
+        with patch("main.users_collection", return_value=users):
+            profile = main.get_user(USER_ID, {"userId": "507f1f77bcf86cd799439012"})
+
+        self.assertNotIn("dateOfBirth", profile)
+
+    def test_public_profile_includes_birth_date_by_default(self) -> None:
+        users = Mock()
+        users.find_one.return_value = {
+            "_id": ObjectId(USER_ID),
+            "username": "test_user",
+            "dateOfBirth": "1995-04-23",
+            "showLastSeen": True,
+            "lastSeen": None,
+        }
+
+        with patch("main.users_collection", return_value=users):
+            profile = main.get_user(USER_ID, {"userId": "507f1f77bcf86cd799439012"})
+
+        self.assertEqual(profile["dateOfBirth"], "1995-04-23")
+        self.assertIn("lastSeen", profile)
+
+    def test_privacy_request_leaves_birth_date_visibility_unchanged_for_older_clients(self) -> None:
+        privacy = main.PrivacyRequest(hideOnlineStatus=False, hideReadReceipts=False)
+
+        self.assertIsNone(privacy.hideDateOfBirth)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -123,6 +123,7 @@ class AddGroupMembersRequest(BaseModel):
 class PrivacyRequest(BaseModel):
     hideOnlineStatus: bool
     hideReadReceipts: bool
+    hideDateOfBirth: bool | None = None
 
 
 # ---------- Startup ----------
@@ -168,6 +169,7 @@ def register(payload: RegisterRequest):
         "showLastSeen": True,
         "hideOnlineStatus": False,
         "hideReadReceipts": False,
+        "hideDateOfBirth": False,
         "isPremium": False,
         "premiumUntil": None,
         "coinsBalance": 0,
@@ -190,6 +192,7 @@ def register(payload: RegisterRequest):
             "isPremium": False,
             "premiumUntil": None,
             "coinsBalance": 0,
+            "hideDateOfBirth": False,
             "dateOfBirth": None,
             "createdAt": created_at.isoformat(),
         },
@@ -227,6 +230,7 @@ def login(payload: LoginRequest):
             "showLastSeen": user.get("showLastSeen", True),
             "hideOnlineStatus": user.get("hideOnlineStatus", False),
             "hideReadReceipts": user.get("hideReadReceipts", False),
+            "hideDateOfBirth": user.get("hideDateOfBirth", False),
             "dateOfBirth": user.get("dateOfBirth"),
             "createdAt": user.get("createdAt"),
             **serialize_premium(user),
@@ -256,6 +260,7 @@ def me(current=Depends(get_current_user)):
         "showLastSeen": user.get("showLastSeen", True),
         "hideOnlineStatus": user.get("hideOnlineStatus", False),
         "hideReadReceipts": user.get("hideReadReceipts", False),
+        "hideDateOfBirth": user.get("hideDateOfBirth", False),
         "dateOfBirth": user.get("dateOfBirth"),
         "createdAt": user.get("createdAt"),
         **serialize_premium(user),
@@ -265,12 +270,15 @@ def me(current=Depends(get_current_user)):
 @app.patch("/users/me/privacy")
 async def update_privacy(payload: PrivacyRequest, current=Depends(get_current_user)):
     users = users_collection()
+    privacy_updates = {
+        "hideOnlineStatus": payload.hideOnlineStatus,
+        "hideReadReceipts": payload.hideReadReceipts,
+    }
+    if payload.hideDateOfBirth is not None:
+        privacy_updates["hideDateOfBirth"] = payload.hideDateOfBirth
     result = users.update_one(
         {"_id": ObjectId(current["userId"])},
-        {"$set": {
-            "hideOnlineStatus": payload.hideOnlineStatus,
-            "hideReadReceipts": payload.hideReadReceipts,
-        }},
+        {"$set": privacy_updates},
     )
     if result.matched_count != 1:
         raise HTTPException(status_code=404, detail="User not found")
@@ -307,6 +315,7 @@ def search_users(q: str = "", current=Depends(get_current_user)):
             "bio": u.get("bio", ""),
             "statusText": u.get("statusText", ""),
             "isPremium": serialize_premium(u)["isPremium"],
+            **({"lastSeen": u.get("lastSeen")} if u.get("showLastSeen", True) else {}),
         }
         for u in results
     ]
@@ -400,6 +409,7 @@ def get_contacts(current=Depends(get_current_user)):
             "bio": profile.get("bio", ""),
             "statusText": profile.get("statusText", ""),
             "isPremium": serialize_premium(profile)["isPremium"],
+            **({"lastSeen": profile.get("lastSeen")} if profile.get("showLastSeen", True) else {}),
             "chatHidden": bool(hidden_at and (
                 not latest_message or latest_message["createdAt"] <= hidden_at
             )),
@@ -501,6 +511,8 @@ def get_user(user_id: str, current=Depends(get_current_user)):
         "createdAt": user.get("createdAt"),
         "isPremium": serialize_premium(user)["isPremium"],
     }
+    if str(user["_id"]) == current["userId"] or not user.get("hideDateOfBirth", False):
+        profile["dateOfBirth"] = user.get("dateOfBirth")
     if str(user["_id"]) == current["userId"] or user.get("showLastSeen", True):
         profile["lastSeen"] = user.get("lastSeen")
     return profile

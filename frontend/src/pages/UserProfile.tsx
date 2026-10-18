@@ -118,18 +118,26 @@ export default function UserProfile() {
               </div>
             )}
 
-            {profile.createdAt && (
+            {(profile.dateOfBirth || profile.createdAt) && (
               <dl className="mt-7 space-y-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-sm">
-                <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500">В Skyline с</dt>
-                  <dd className="text-right text-slate-300">{new Date(profile.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
-                </div>
+                {profile.dateOfBirth && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-slate-500">Дата рождения</dt>
+                    <dd className="text-right text-slate-300">{new Date(`${profile.dateOfBirth}T00:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
+                  </div>
+                )}
+                {profile.createdAt && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-slate-500">В Skyline с</dt>
+                    <dd className="text-right text-slate-300">{new Date(profile.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</dd>
+                  </div>
+                )}
               </dl>
             )}
 
             {profile.lastSeen && (
               <p className="mt-5 text-xs text-slate-500">
-                Последнее посещение: {new Date(profile.lastSeen).toLocaleString()}
+                Последний раз в сети: {new Date(profile.lastSeen).toLocaleString('ru-RU')}
               </p>
             )}
 

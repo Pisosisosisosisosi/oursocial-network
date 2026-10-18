@@ -43,6 +43,33 @@ function highlightText(text: string, query: string) {
   );
 }
 
+function formatLastSeen(value?: string | null) {
+  if (!value) return 'Не в сети';
+
+  const lastSeen = new Date(value);
+  if (Number.isNaN(lastSeen.getTime())) return 'Не в сети';
+
+  const now = new Date();
+  const elapsed = now.getTime() - lastSeen.getTime();
+  if (elapsed < 60_000) return 'Был(а) в сети только что';
+  if (elapsed < 60 * 60_000) return `Был(а) в сети ${Math.floor(elapsed / 60_000)} мин. назад`;
+
+  const time = lastSeen.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  if (lastSeen.toDateString() === now.toDateString()) return `Был(а) сегодня в ${time}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (lastSeen.toDateString() === yesterday.toDateString()) return `Был(а) вчера в ${time}`;
+
+  return `Был(а) в сети ${lastSeen.toLocaleString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    year: lastSeen.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
 export default function Chats() {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
@@ -199,12 +226,26 @@ export default function Chats() {
     const handleUserOnline = (presence: { userId: string }) => {
       setOnlineUsers((current) => new Set(current).add(String(presence.userId)));
     };
-    const handleUserOffline = (presence: { userId: string }) => {
+    const handleUserOffline = (presence: { userId: string; lastSeen?: string }) => {
       setOnlineUsers((current) => {
         const next = new Set(current);
         next.delete(String(presence.userId));
         return next;
       });
+      if (presence.lastSeen) {
+        setContacts((current) => current.map((contact) =>
+          contact.id === String(presence.userId) ? { ...contact, lastSeen: presence.lastSeen } : contact,
+        ));
+        setSearchResults((current) => current.map((user) =>
+          user.id === String(presence.userId) ? { ...user, lastSeen: presence.lastSeen } : user,
+        ));
+        setActiveChat((current) =>
+          current?.id === String(presence.userId) ? { ...current, lastSeen: presence.lastSeen } : current,
+        );
+        setChatProfile((current) =>
+          current?.id === String(presence.userId) ? { ...current, lastSeen: presence.lastSeen } : current,
+        );
+      }
     };
     const requestPresence = () => socket.emit('get_presence');
     const handleDisconnect = () => setOnlineUsers(new Set());
@@ -909,7 +950,7 @@ export default function Chats() {
                     </h3>
                     <p className={`text-[10px] flex items-center gap-1 ${onlineUsers.has(String(activeChat.id)) ? 'text-emerald-400' : 'text-slate-500'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${onlineUsers.has(String(activeChat.id)) ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
-                      {onlineUsers.has(String(activeChat.id)) ? 'В сети' : 'Не в сети'}
+                      {onlineUsers.has(String(activeChat.id)) ? 'В сети' : formatLastSeen(activeChat.lastSeen)}
                     </p>
                   </div>
                 </div>
@@ -1199,7 +1240,7 @@ export default function Chats() {
                 )}
                 {chatProfile.lastSeen && !onlineUsers.has(String(chatProfile.id)) && (
                   <p className="mt-4 px-1 text-xs text-slate-500">
-                    Последнее посещение: {new Date(chatProfile.lastSeen).toLocaleString()}
+                    Последний раз в сети: {new Date(chatProfile.lastSeen).toLocaleString('ru-RU')}
                   </p>
                 )}
                 {profileLoading && <p role="status" className="mt-5 text-center text-xs text-slate-500">Обновляем профиль…</p>}

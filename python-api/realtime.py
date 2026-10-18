@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any
 
 import socketio
@@ -135,4 +136,17 @@ async def disconnect(sid: str, _reason: str | None = None) -> None:
     if not sessions:
         online_users.pop(user_id, None)
         hidden_online_users.discard(user_id)
-        await sio.emit("user_offline", {"userId": user_id})
+        last_seen = datetime.now(timezone.utc)
+        users = users_collection()
+        user = users.find_one({"_id": ObjectId(user_id)}, {"showLastSeen": 1}) or {}
+        users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"lastSeen": last_seen}},
+        )
+        event = {"userId": user_id}
+        if user.get("showLastSeen", True):
+            event["lastSeen"] = last_seen.isoformat()
+        await sio.emit(
+            "user_offline",
+            event,
+        )
