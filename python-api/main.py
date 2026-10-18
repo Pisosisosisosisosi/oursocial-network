@@ -491,21 +491,21 @@ def get_messages(user_id: str, current=Depends(get_current_user)):
     return [serialize_message(message) for message in chat]
 
 
-@app.delete("/messages/{message_id}")
-async def delete_message(message_id: str, current=Depends(get_current_user)):
-    message = find_message_for_user(message_id, current["userId"])
+@app.delete("/messages/{user_id}")
+async def delete_message(user_id: str, current=Depends(get_current_user)):
+    message = find_message_for_user(user_id, current["userId"])
     if message["senderId"] != current["userId"]:
         raise HTTPException(status_code=403, detail="You can only delete your own messages")
 
     messages_collection().delete_one({"_id": message["_id"], "senderId": current["userId"]})
     await sio.emit(
         "message_changed",
-        {"messageId": message_id, "action": "deleted"},
+        {"messageId": user_id, "action": "deleted"},
         to=f"user:{message['receiverId']}",
     )
     await sio.emit(
         "message_changed",
-        {"messageId": message_id, "action": "deleted"},
+        {"messageId": user_id, "action": "deleted"},
         to=f"user:{message['senderId']}",
     )
     return {"status": "ok"}
