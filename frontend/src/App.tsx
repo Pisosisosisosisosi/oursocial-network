@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+// ЗАМЕНИЛИ BrowserRouter на HashRouter
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 // ВАЖНО: Импортируем AuthProvider, иначе ошибка useAuth
 import { AuthProvider } from './context/AuthContext'; 
 
@@ -21,18 +22,18 @@ export default function App() {
   }, []);
 
   return (
-    // Оборачиваем всё в AuthProvider
     <AuthProvider>
-      <BrowserRouter>
+      {/* Используем HashRouter для корректной работы на GitHub Pages */}
+      <HashRouter>
         <div className="flex h-screen w-screen overflow-hidden bg-[#090d16] relative text-slate-100 font-sans">
           <Routes>
             <Route path="/login" element={!isAuth ? <Login /> : <Navigate to="/" />} />
             <Route path="/register" element={!isAuth ? <Register /> : <Navigate to="/" />} />
             <Route path="/" element={isAuth ? <Chats /> : <Navigate to="/login" />} />
-	    <Route path="/profile" element={isAuth ? <Profile /> : <Navigate to="/login" />} />
+            <Route path="/profile" element={isAuth ? <Profile /> : <Navigate to="/login" />} />
           </Routes>
         </div>
-      </BrowserRouter>
+      </HashRouter>
     </AuthProvider>
   );
 }
