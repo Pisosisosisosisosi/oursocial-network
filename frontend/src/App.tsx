@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+// ВАЖНО: Импортируем AuthProvider, иначе ошибка useAuth
+import { AuthProvider } from './context/AuthContext'; 
 
-// Оставили только те страницы, которые точно есть
 import Login from './pages/Login'; 
 import Register from './pages/Register';
 import Chats from './pages/Chats';
@@ -19,16 +20,17 @@ export default function App() {
   }, []);
 
   return (
-    <BrowserRouter>
-      <div className="flex h-screen w-screen overflow-hidden bg-[#090d16] relative text-slate-100 font-sans">
-        <Routes>
-          <Route path="/login" element={!isAuth ? <Login /> : <Navigate to="/" />} />
-          <Route path="/register" element={!isAuth ? <Register /> : <Navigate to="/" />} />
-          
-          {/* Убрали отдельный роут для Profile, так как он скорее всего внутри Chats */}
-          <Route path="/" element={isAuth ? <Chats /> : <Navigate to="/login" />} />
-        </Routes>
-      </div>
-    </BrowserRouter>
+    // Оборачиваем всё в AuthProvider
+    <AuthProvider>
+      <BrowserRouter>
+        <div className="flex h-screen w-screen overflow-hidden bg-[#090d16] relative text-slate-100 font-sans">
+          <Routes>
+            <Route path="/login" element={!isAuth ? <Login /> : <Navigate to="/" />} />
+            <Route path="/register" element={!isAuth ? <Register /> : <Navigate to="/" />} />
+            <Route path="/" element={isAuth ? <Chats /> : <Navigate to="/login" />} />
+          </Routes>
+        </div>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
