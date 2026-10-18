@@ -7,6 +7,7 @@ import { api, type Contact, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
+import WorkspaceTabs from '../components/WorkspaceTabs';
 
 interface ChatMessage {
   id: string;
@@ -829,6 +830,8 @@ export default function Chats() {
             <p className="mt-2 px-1 text-[10px] text-slate-500">Укажите полный username вместе с @, например @darius_writer.</p>
           )}
         </div>
+
+        <WorkspaceTabs />
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex justify-between">

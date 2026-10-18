@@ -5,6 +5,7 @@ import { api, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
+import WorkspaceTabs from '../components/WorkspaceTabs';
 
 interface GroupMember extends User {
   userId: string;
@@ -297,6 +298,8 @@ export default function Groups() {
             <Plus size={18} />
           </button>
         </header>
+
+        <WorkspaceTabs />
 
         {creating && (
           <form onSubmit={(event) => void createGroup(event)} className="space-y-3 border-b border-white/[0.08] p-4">

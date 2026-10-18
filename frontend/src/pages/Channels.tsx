@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
+import WorkspaceTabs from '../components/WorkspaceTabs';
 
 interface Channel {
   id: string;
@@ -431,6 +432,7 @@ export default function Channels() {
             <button type="button" onClick={() => setListMode('discover')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'discover' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}>Найти каналы</button>
           </div>
         </div>
+        <WorkspaceTabs />
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {loading && <div className="space-y-2 p-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-[70px] animate-pulse rounded-2xl bg-white/[0.04]" />)}</div>}
           {!loading && visibleChannels.length === 0 && <div className="px-5 py-12 text-center">
