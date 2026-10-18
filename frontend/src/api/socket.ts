@@ -1,25 +1,47 @@
 import { io, type Socket } from 'socket.io-client';
 
-// ВРЕМЕННО ОТКЛЮЧАЕМ СТАРЫЙ СЕРВЕР
-// const SOCKET_URL =
-//   (import.meta.env && import.meta.env.VITE_SOCKET_URL) ||
-//   'https://oursocial-network-production.up.railway.app';
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ||
+  import.meta.env.VITE_API_URL ||
+  'https://oursocial-python.onrender.com';
 
 let socket: Socket | null = null;
+let socketToken: string | null = null;
 
-// Добавили подчеркивание перед token: _token
-export function connectSocket(_token?: string): Socket {
-  // ВРЕМЕННАЯ ЗАГЛУШКА: Возвращаем "пустой" сокет, чтобы ничего не ломалось
-  if (!socket) {
-    socket = io('http://localhost:8000', {
-      autoConnect: false, // Не подключаемся реально
-    });
+export function connectSocket(token?: string): Socket {
+  const authToken = token || localStorage.getItem('token') || '';
+
+  if (socket && socketToken !== authToken) {
+    socket.disconnect();
+    socket = null;
   }
-  console.log('⚠️ Socket.IO отключен (используется HTTP API)');
+
+  if (!socket) {
+    socketToken = authToken;
+    socket = io(SOCKET_URL, {
+      auth: { token: authToken },
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket.IO connection failed:', error.message);
+    });
+  } else if (!socket.connected) {
+    socket.connect();
+  }
+
   return socket;
 }
 
 export function getSocket(): Socket | null {
+  if (!socket) {
+    const token = localStorage.getItem('token');
+    if (token) return connectSocket(token);
+  }
   return socket;
 }
 
@@ -27,5 +49,6 @@ export function disconnectSocket() {
   if (socket) {
     socket.disconnect();
     socket = null;
+    socketToken = null;
   }
 }

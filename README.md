@@ -16,7 +16,7 @@
 
 - `frontend/` — React, TypeScript, Vite, Tailwind CSS, Socket.IO client.
 - `backend/` — Node.js, Express, Socket.IO; чаты, сообщения и realtime.
-- `python-api/` — FastAPI; регистрация, профиль и публичные ключи.
+- `python-api/` — FastAPI; регистрация, профиль, публичные ключи и Socket.IO-присутствие/индикатор набора текста.
 - Оба API используют одну MongoDB и должны проверять токены одним и тем же `JWT_SECRET`.
 
 ## Локальный запуск
@@ -38,7 +38,7 @@ cd python-api
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:socket_app --reload --port 8000
 ```
 
 ```powershell
@@ -53,7 +53,9 @@ npm install
 npm run dev
 ```
 
-`frontend/.env.example` задаёт адреса для локального запуска. Для production можно переопределить `VITE_API_URL`, `VITE_MESSENGER_API_URL` и `VITE_SOCKET_URL` при сборке фронтенда.
+Socket.IO использует тот же Python API origin и JWT secret. `frontend/.env.example` задаёт локальные адреса; для production задайте `VITE_API_URL` и `VITE_SOCKET_URL` на origin Python API перед сборкой фронтенда.
+
+Для production Python API также должен запускаться через Socket.IO ASGI-приложение: `uvicorn main:socket_app --host 0.0.0.0 --port $PORT`. Укажите эту команду в настройках Start Command хостинга; запуск `main:app` не обслуживает Socket.IO.
 
 ## Сборка
 

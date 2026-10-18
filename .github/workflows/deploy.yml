@@ -37,7 +37,7 @@ jobs:
         run: npm run build
         env:
           VITE_API_URL: https://oursocial-network-production.up.railway.app
-          VITE_SOCKET_URL: https://oursocial-network-production.up.railway.app
+          VITE_SOCKET_URL: https://oursocial-python.onrender.com
       
       - name: Setup Pages
         uses: actions/configure-pages@v4

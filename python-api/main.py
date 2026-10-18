@@ -12,6 +12,8 @@ from auth import (
     get_current_user,
 )
 from crypto import validate_public_key, make_key_document
+from realtime import sio
+import socketio as socketio_server
 
 app = FastAPI(title="Our Social Network API")
 
@@ -249,6 +251,16 @@ def get_messages(user_id: str, current=Depends(get_current_user)):
     messages = messages_collection()
     my_id = current["userId"]
 
+    # Opening a conversation marks messages received by the current user as read.
+    messages.update_many(
+        {
+            "senderId": user_id,
+            "receiverId": my_id,
+            "read": False,
+        },
+        {"$set": {"read": True}},
+    )
+
     # Ищем переписку между мной и другим пользователем
     chat = list(messages.find({
         "$or": [
@@ -334,3 +346,7 @@ def get_key(user_id: str, current=Depends(get_current_user)):
     if not doc:
         raise HTTPException(status_code=404, detail="Key not found")
     return {"userId": doc["userId"], "publicKey": doc["publicKey"]}
+
+
+# Serve Socket.IO alongside FastAPI so both share the same host and JWT secret.
+socket_app = socketio_server.ASGIApp(sio, other_asgi_app=app)
