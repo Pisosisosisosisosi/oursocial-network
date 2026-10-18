@@ -25,6 +25,7 @@ from auth import (
 from crypto import validate_public_key, make_key_document
 from realtime import sio
 import socketio as socketio_server
+from channels import router as channels_router
 
 app = FastAPI(title="Our Social Network API")
 MESSAGE_RATE_LIMIT = 5
@@ -40,6 +41,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(channels_router)
 
 
 # ---------- Модели ----------

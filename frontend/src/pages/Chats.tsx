@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Download, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, UsersRound, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Download, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Radio, Search, Settings as SettingsIcon, Trash2, UserRoundPlus, UserRoundX, UsersRound, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -808,6 +808,9 @@ export default function Chats() {
              </div>
           </div>
           <div className="flex items-center gap-1">
+            <button onClick={() => navigate('/channels')} className="rounded-xl p-2 text-slate-500 transition-all hover:bg-indigo-500/10 hover:text-indigo-300" title="Каналы" aria-label="Открыть каналы">
+              <Radio size={18} />
+            </button>
             <button onClick={() => navigate('/groups')} className="rounded-xl p-2 text-slate-500 transition-all hover:bg-indigo-500/10 hover:text-indigo-300" title="Общие группы" aria-label="Открыть общие группы">
               <UsersRound size={18} />
             </button>

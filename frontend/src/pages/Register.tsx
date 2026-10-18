@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { isAxiosError } from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, LockKeyhole, MessageCircle, ShieldCheck, User as UserIcon, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
   const { register } = useAuth();
+  const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,6 +19,9 @@ export default function Register() {
     setLoading(true);
     try {
       await register(email.trim(), password, username.trim());
+      const redirectPath = sessionStorage.getItem('pulseAfterLogin');
+      sessionStorage.removeItem('pulseAfterLogin');
+      navigate(redirectPath || '/', { replace: true });
     } catch (regError: unknown) {
       const data = isAxiosError(regError)
         ? regError.response?.data as { detail?: string; error?: string } | undefined

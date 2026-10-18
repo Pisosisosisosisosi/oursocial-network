@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Chats from './pages/Chats';
@@ -13,6 +13,8 @@ import { api } from './api/client';
 import { getSocket } from './api/socket';
 import { ToastProvider } from './context/ToastContext';
 import { useToast } from './context/useToast';
+
+const Channels = lazy(() => import('./pages/Channels'));
 
 function GlobalNotifications() {
   const { user } = useAuth();
@@ -122,6 +124,10 @@ function AppRoutes() {
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
       <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
       <Route path="/groups" element={user ? <Groups /> : <Navigate to="/login" replace />} />
+      <Route path="/channels" element={user
+        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем каналы…</div>}><Channels /></Suspense>
+        : <Navigate to="/login" replace />} />
+      <Route path="/join/:inviteCode" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем канал…</div>}><Channels /></Suspense>} />
       <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>

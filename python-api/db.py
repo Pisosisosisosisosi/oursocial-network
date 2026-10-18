@@ -33,3 +33,9 @@ def messages_collection():
 
 def groups_collection():
     return get_db()["groups"]
+
+def channels_collection():
+    return get_db()["channels"]
+
+def channel_posts_collection():
+    return get_db()["channel_posts"]

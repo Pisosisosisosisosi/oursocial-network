@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { isAxiosError } from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, LockKeyhole, Mail, MessageCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,6 +18,9 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email.trim(), password);
+      const redirectPath = sessionStorage.getItem('pulseAfterLogin');
+      sessionStorage.removeItem('pulseAfterLogin');
+      navigate(redirectPath || '/', { replace: true });
     } catch (loginError: unknown) {
       const data = isAxiosError(loginError)
         ? loginError.response?.data as { detail?: string; error?: string } | undefined
