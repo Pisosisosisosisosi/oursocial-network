@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { authApi, type User } from '../api/client';
 import { connectSocket, disconnectSocket } from '../api/socket';
 import { keysApi } from '../api/client';
-import { generateKeyPair, hasPrivateKey, clearKeys } from '../crypto/keys';
+import { getOrCreateKeyPair } from '../crypto/keys';
 
 interface AuthContextType {
   user: User | null;
@@ -15,6 +15,11 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+async function uploadE2EPublicKey(userId: string) {
+  const { publicKeyJwk } = await getOrCreateKeyPair(userId);
+  await keysApi.upload(publicKeyJwk);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -31,6 +36,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(userData);
           setToken(savedToken);
           connectSocket(savedToken);
+          try {
+            await uploadE2EPublicKey(userData.id);
+          } catch (error) {
+            console.error('❌ Failed to generate/upload E2E keys:', error);
+          }
         } catch {
           localStorage.removeItem('token');
           setToken(null);
@@ -50,16 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
     connectSocket(token);
 
-    if (!hasPrivateKey()) {
-      try {
-        const { publicKeyJwk } = await generateKeyPair();
-        await keysApi.upload(publicKeyJwk);
-        console.log('✅ E2E keys generated and uploaded');
-      } catch (err) {
-        console.error('❌ Failed to generate/upload keys:', err);
-      }
-    } else {
-      console.log('✅ Using existing E2E keys');
+    try {
+      await uploadE2EPublicKey(userData.id);
+      console.log('✅ E2E public key uploaded');
+    } catch (err) {
+      console.error('❌ Failed to generate/upload keys:', err);
     }
   };
 
@@ -73,8 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     connectSocket(token);
 
     try {
-      const { publicKeyJwk } = await generateKeyPair();
-      await keysApi.upload(publicKeyJwk);
+      await uploadE2EPublicKey(userData.id);
       console.log('✅ E2E keys generated and uploaded');
     } catch (err) {
       console.error('❌ Failed to generate/upload keys:', err);
@@ -90,7 +94,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     disconnectSocket();
-    clearKeys();
   };
 
   return (

@@ -3,10 +3,11 @@ import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, C
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { api, type Contact, type User } from '../api/client';
+import { api, keysApi, type Contact, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
+import { decryptMessage, encryptMessage, isEncryptedMessage } from '../crypto/encrypt';
 import WorkspaceTabs from '../components/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/WorkspaceSidebarHeader';
 
@@ -68,6 +69,11 @@ function formatLastSeen(value?: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   })}`;
+}
+
+async function decryptChatMessage(message: ChatMessage, userId?: string): Promise<ChatMessage> {
+  if (message.type !== 'text' || !isEncryptedMessage(message.text)) return message;
+  return { ...message, text: await decryptMessage(message.text, userId) };
 }
 
 export default function Chats() {
@@ -382,17 +388,20 @@ export default function Chats() {
     const response = await api.get<ChatMessage[]>(`/messages/${userId}`, {
       params: { limit: 20, ...(before ? { before } : {}) },
     });
+    const decryptedMessages = await Promise.all(
+      response.data.map((message) => decryptChatMessage(message, currentUser?.id)),
+    );
     if (before) {
       pendingScrollHeightRef.current = messagesListRef.current?.scrollHeight ?? null;
       setMessages((current) => {
         const existingIds = new Set(current.map((message) => message.id));
-        return [...response.data.filter((message) => !existingIds.has(message.id)), ...current];
+        return [...decryptedMessages.filter((message) => !existingIds.has(message.id)), ...current];
       });
     } else {
-      setMessages(response.data);
+      setMessages(decryptedMessages);
     }
-    setHasMoreMessages(response.data.length === 20);
-    return response.data;
+    setHasMoreMessages(decryptedMessages.length === 20);
+    return decryptedMessages;
   };
 
   const loadOlderMessages = async () => {
@@ -449,14 +458,37 @@ export default function Chats() {
       }
       if (event.message) {
         const updatedMessage = event.message;
-        setMessages((previous) => previous.map((message) => message.id === event.messageId ? { ...message, ...updatedMessage } : message));
+        void (async () => {
+          const text = updatedMessage.text && isEncryptedMessage(updatedMessage.text)
+            ? await decryptMessage(updatedMessage.text, currentUser?.id)
+            : updatedMessage.text;
+          setMessages((previous) => previous.map((message) =>
+            message.id === event.messageId
+              ? { ...message, ...updatedMessage, ...(text === undefined ? {} : { text }) }
+              : message,
+          ));
+        })().catch((error: unknown) => {
+          console.error('Не удалось расшифровать обновлённое сообщение:', error);
+          setMessages((previous) => previous.map((message) =>
+            message.id === event.messageId
+              ? {
+                ...message,
+                text: updatedMessage.text && isEncryptedMessage(updatedMessage.text)
+                  ? '[Зашифрованное сообщение]'
+                  : message.text,
+              }
+              : message,
+          ));
+        });
         return;
       }
       void api.get<ChatMessage[]>(`/messages/${activeChat.id}`, { params: { limit: 20 } }).then((response) => {
+        return Promise.all(response.data.map((message) => decryptChatMessage(message, currentUser?.id)));
+      }).then((decryptedMessages) => {
         setMessages((previous) => {
-          const refreshedIds = new Set(response.data.map((message) => message.id));
+          const refreshedIds = new Set(decryptedMessages.map((message) => message.id));
           const olderLoaded = previous.filter((message) => !refreshedIds.has(message.id));
-          return [...olderLoaded, ...response.data];
+          return [...olderLoaded, ...decryptedMessages];
         });
       }).catch((error: unknown) => {
         console.error('Не удалось обновить сообщения:', error);
@@ -599,20 +631,32 @@ export default function Chats() {
     setChatError('');
 
     try {
+      if (!currentUser?.id) throw new Error('Не удалось определить текущего пользователя.');
+      const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
+        keysApi.get(String(activeChat.id)),
+        keysApi.me(),
+      ]);
+      const encryptedText = await encryptMessage(msgText, [
+        { userId: String(activeChat.id), publicKey: recipientKeyResponse.data.publicKey },
+        { userId: currentUser.id, publicKey: ownKeyResponse.data.publicKey },
+      ]);
       const response = await api.post<ChatMessage>('/messages', {
         receiverId: activeChat.id,
-        text: msgText,
+        text: encryptedText,
         type: 'text',
       });
-      setMessages((previous) => [...previous, response.data]);
+      setMessages((previous) => [...previous, { ...response.data, text: msgText }]);
       setText('');
     } catch (err) {
       console.error("Ошибка отправки:", err);
-      setChatError('Не удалось отправить сообщение. Проверьте соединение.');
+      const detail = err instanceof Error && err.message.startsWith('Не удалось')
+        ? err.message
+        : 'Не удалось отправить сообщение. Проверьте соединение и наличие ключа собеседника.';
+      setChatError(detail);
       showToast(
         isAxiosError(err) && err.response?.status === 429
           ? 'Слишком часто отправляете сообщения. Подождите немного.'
-          : 'Сообщение не отправлено. Проверьте подключение.',
+          : detail,
         'error',
       );
     } finally {
@@ -682,10 +726,20 @@ export default function Chats() {
   };
 
   const handleEditMessage = async (message: ChatMessage) => {
-    if (!messageEditDraft.trim()) return;
+    if (!messageEditDraft.trim() || !activeChat || !currentUser?.id) return;
     try {
-      const response = await api.patch<ChatMessage>(`/messages/${message.id}`, { text: messageEditDraft });
-      setMessages((previous) => previous.map((item) => item.id === message.id ? response.data : item));
+      const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
+        keysApi.get(String(activeChat.id)),
+        keysApi.me(),
+      ]);
+      const encryptedText = await encryptMessage(messageEditDraft, [
+        { userId: String(activeChat.id), publicKey: recipientKeyResponse.data.publicKey },
+        { userId: currentUser.id, publicKey: ownKeyResponse.data.publicKey },
+      ]);
+      const response = await api.patch<ChatMessage>(`/messages/${message.id}`, { text: encryptedText });
+      setMessages((previous) => previous.map((item) =>
+        item.id === message.id ? { ...response.data, text: messageEditDraft } : item,
+      ));
       setEditingMessageId(null);
       setMessageEditDraft('');
       showToast('Сообщение изменено.', 'success');
@@ -749,12 +803,11 @@ export default function Chats() {
       await api.post<{ status: string; pinned: boolean }>(`/messages/${message.id}/pin`, {
         pinned: !message.pinned,
       });
-      const response = await api.get<ChatMessage[]>(`/messages/${activeChat.id}`);
-      const savedMessage = response.data.find((item) => item.id === message.id);
+      const refreshedMessages = await refreshMessages(String(activeChat.id));
+      const savedMessage = refreshedMessages.find((item) => item.id === message.id);
       if (!savedMessage || savedMessage.pinned !== !message.pinned) {
         throw new Error('Сервер не подтвердил сохранение закрепления.');
       }
-      setMessages(response.data);
       if (!message.pinned) setActivePinnedIndex(0);
       closeMessageMenu();
       setChatError('');
