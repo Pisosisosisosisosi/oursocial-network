@@ -13,6 +13,7 @@ export default function Profile() {
 
   const [displayName, setDisplayName] = useState(user?.displayName || user?.username || '');
   const [username, setUsername] = useState(user?.username || '');
+  const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [statusText, setStatusText] = useState(user?.statusText || '');
@@ -61,12 +62,13 @@ export default function Profile() {
       await api.patch('/users/me/profile', {
         displayName: displayName.trim(),
         username: username.trim(),
+        dateOfBirth: dateOfBirth || null,
         avatarUrl,
         bio: bio.trim(),
         statusText: statusText.trim(),
         showLastSeen,
       });
-      updateUser({ displayName: displayName.trim(), username: username.trim(), avatarUrl, bio: bio.trim(), statusText: statusText.trim(), showLastSeen });
+      updateUser({ displayName: displayName.trim(), username: username.trim(), dateOfBirth: dateOfBirth || null, avatarUrl, bio: bio.trim(), statusText: statusText.trim(), showLastSeen });
       setMessage('Настройки профиля сохранены.');
     } catch (error: unknown) {
       const data = isAxiosError(error)
@@ -159,6 +161,16 @@ export default function Profile() {
               <span className="mt-1 block text-[10px] text-slate-600">Буквы латиницы, цифры, точка, дефис и подчёркивание.</span>
             </label>
             <label className="block text-xs font-medium text-slate-400">
+              Дата рождения
+              <input
+                type="date"
+                value={dateOfBirth}
+                onChange={(event) => setDateOfBirth(event.target.value)}
+                className={inputClassName}
+              />
+              <span className="mt-1 block text-[10px] text-slate-600">Дата рождения сохранится только в вашем аккаунте.</span>
+            </label>
+            <label className="block text-xs font-medium text-slate-400">
               О себе
               <textarea value={bio} onChange={(event) => setBio(event.target.value)} maxLength={300} rows={3} placeholder="Пара слов о себе" className="mt-2 w-full resize-y rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-slate-100 outline-none focus:border-indigo-400/50" />
               <span className="mt-1 block text-right text-[10px] text-slate-600">{bio.length}/300</span>
@@ -179,6 +191,12 @@ export default function Profile() {
               <input type="checkbox" checked={showLastSeen} onChange={(event) => setShowLastSeen(event.target.checked)} aria-label="Показывать время последнего посещения" className="mt-1 h-4 w-4 accent-indigo-500" />
             </div>
           </section>
+
+          {user?.createdAt && (
+            <p className="text-xs text-slate-500">
+              Аккаунт создан: {new Date(user.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          )}
 
           <button
             type="submit"

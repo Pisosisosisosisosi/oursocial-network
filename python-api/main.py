@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException, Depends, Header, Query
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from bson import ObjectId
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 import base64
 import binascii
@@ -70,10 +70,18 @@ class ExchangeRequest(BaseModel):
 class UpdateProfileRequest(BaseModel):
     displayName: str = Field(min_length=2, max_length=32)
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
+    dateOfBirth: date | None = None
     avatarUrl: str = Field(default="", max_length=1_400_000)
     bio: str = Field(default="", max_length=300)
     statusText: str = Field(default="", max_length=80)
     showLastSeen: bool = True
+
+    @field_validator("dateOfBirth")
+    @classmethod
+    def validate_date_of_birth(cls, value: date | None) -> date | None:
+        if value and value > datetime.now(timezone.utc).date():
+            raise ValueError("Date of birth cannot be in the future")
+        return value
 
 
 class ContactRequest(BaseModel):
@@ -148,6 +156,7 @@ def register(payload: RegisterRequest):
     if users.find_one({"username": payload.username}):
         raise HTTPException(status_code=409, detail="Username already taken")
 
+    created_at = datetime.now(timezone.utc)
     doc = {
         "email": payload.email,
         "username": payload.username,
@@ -163,7 +172,7 @@ def register(payload: RegisterRequest):
         "premiumUntil": None,
         "coinsBalance": 0,
         "contacts": [],
-        "createdAt": datetime.now(timezone.utc),
+        "createdAt": created_at,
         "lastSeen": datetime.now(timezone.utc),
     }
     result = users.insert_one(doc)
@@ -181,6 +190,8 @@ def register(payload: RegisterRequest):
             "isPremium": False,
             "premiumUntil": None,
             "coinsBalance": 0,
+            "dateOfBirth": None,
+            "createdAt": created_at.isoformat(),
         },
     }
 
@@ -216,6 +227,8 @@ def login(payload: LoginRequest):
             "showLastSeen": user.get("showLastSeen", True),
             "hideOnlineStatus": user.get("hideOnlineStatus", False),
             "hideReadReceipts": user.get("hideReadReceipts", False),
+            "dateOfBirth": user.get("dateOfBirth"),
+            "createdAt": user.get("createdAt"),
             **serialize_premium(user),
         },
     }
@@ -243,6 +256,7 @@ def me(current=Depends(get_current_user)):
         "showLastSeen": user.get("showLastSeen", True),
         "hideOnlineStatus": user.get("hideOnlineStatus", False),
         "hideReadReceipts": user.get("hideReadReceipts", False),
+        "dateOfBirth": user.get("dateOfBirth"),
         "createdAt": user.get("createdAt"),
         **serialize_premium(user),
     }
@@ -316,6 +330,7 @@ def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_us
             "bio": payload.bio,
             "statusText": payload.statusText,
             "showLastSeen": payload.showLastSeen,
+            "dateOfBirth": payload.dateOfBirth.isoformat() if payload.dateOfBirth else None,
         }}
     )
     
@@ -483,6 +498,7 @@ def get_user(user_id: str, current=Depends(get_current_user)):
         "avatarUrl": user.get("avatarUrl", ""),
         "bio": user.get("bio", ""),
         "statusText": user.get("statusText", ""),
+        "createdAt": user.get("createdAt"),
         "isPremium": serialize_premium(user)["isPremium"],
     }
     if str(user["_id"]) == current["userId"] or user.get("showLastSeen", True):

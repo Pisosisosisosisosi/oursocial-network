@@ -60,16 +60,23 @@ export default function Register() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <label className="block">
               <span className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400">
-                <UserIcon size={14} className="text-slate-600" /> Имя пользователя
+                <UserIcon size={14} className="text-slate-600" /> Юзернейм
               </span>
-              <input
-                type="text"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                required
-                placeholder="Например, darius_writer"
-                className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
-              />
+              <span className="flex h-12 items-center rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-slate-500 focus-within:border-indigo-400/50">
+                @
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={32}
+                  pattern="[A-Za-z0-9_.-]+"
+                  placeholder="Например, darius_writer"
+                  className="h-full min-w-0 flex-1 bg-transparent pl-1 text-sm text-white outline-none placeholder:text-slate-600"
+                />
+              </span>
+              <span className="mt-1 block text-[10px] text-slate-600">3–32 символа: латиница, цифры, точка, дефис или подчёркивание.</span>
             </label>
             <label className="block">
               <span className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400">

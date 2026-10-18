@@ -81,6 +81,12 @@ export default function Chats() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [messageEditDraft, setMessageEditDraft] = useState('');
+  const [userContextMenu, setUserContextMenu] = useState<{
+    user: User & { nickname?: string };
+    contact: Contact | null;
+    x: number;
+    y: number;
+  } | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesListRef = useRef<HTMLDivElement>(null);
@@ -838,6 +844,16 @@ export default function Chats() {
             <div 
               key={user.id} 
               onClick={() => handleSelectChat(contact ? { ...user, nickname: contact.nickname } : user)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setUserContextMenu({
+                  user: contact ? { ...user, nickname: contact.nickname } : user,
+                  contact: contact ?? null,
+                  x: Math.max(8, Math.min(event.clientX, window.innerWidth - 240)),
+                  y: Math.max(8, Math.min(event.clientY, window.innerHeight - 300)),
+                });
+              }}
+              aria-haspopup="menu"
               className={`chat-list-item p-2.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-200 ${
                 activeChat?.id === user.id 
                   ? 'glass-active shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
@@ -856,60 +872,9 @@ export default function Chats() {
               <div className="flex-1 min-w-0">
                 <div className="flex min-w-0 items-center gap-1 text-xs font-bold text-slate-200">
                   <span className="truncate">{contact?.nickname || user.nickname || user.displayName || user.username}</span>
-                  {user.isPremium && <Crown size={12} className="shrink-0 fill-amber-300/20 text-amber-300" aria-label="Skyline Premium" />}
                 </div>
                 <div className="text-[10px] text-slate-500 truncate font-mono">@{user.username}</div>
               </div>
-              <button
-                type="button"
-                title="Открыть профиль"
-                aria-label={`Открыть профиль @${user.username}`}
-                onClick={(event) => { event.stopPropagation(); navigate(`/users/${user.id}`); }}
-                className="rounded-lg p-2 text-slate-500 transition hover:bg-indigo-400/10 hover:text-indigo-300"
-              >
-                <ExternalLink size={15} />
-              </button>
-              {contact ? (
-                <>
-                  <button
-                    type="button"
-                    title="Изменить имя контакта"
-                    aria-label={`Переименовать ${contact.nickname}`}
-                    onClick={(event) => { event.stopPropagation(); void handleSaveContact(user, contact.nickname); }}
-                    className="rounded-lg p-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-200"
-                  >
-                    <Pencil size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    title="Удалить чат"
-                    aria-label={`Удалить историю чата с ${contact.nickname}`}
-                    onClick={(event) => { event.stopPropagation(); void handleDeleteChat(contact); }}
-                    className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    title="Удалить из контактов"
-                    aria-label={`Удалить ${contact.nickname} из контактов`}
-                    onClick={(event) => { event.stopPropagation(); void handleRemoveContact(contact); }}
-                    className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"
-                  >
-                    <UserRoundX size={15} />
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  title="Добавить в контакты"
-                  aria-label={`Добавить @${user.username} в контакты`}
-                  onClick={(event) => { event.stopPropagation(); void handleSaveContact(user); }}
-                  className="rounded-lg p-2 text-slate-500 transition hover:bg-emerald-400/10 hover:text-emerald-300"
-                >
-                  <UserRoundPlus size={15} />
-                </button>
-              )}
             </div>
           );})}
         </div>
@@ -941,8 +906,6 @@ export default function Chats() {
                       <button type="button" onClick={() => void openChatProfile()} aria-label={`Профиль ${activeChat.displayName || activeChat.username}`} className="truncate text-left transition hover:text-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60">
                         {activeChat.nickname || activeChat.displayName || activeChat.username}
                       </button>
-                      {activeChat.isPremium && <Crown size={14} className="shrink-0 fill-amber-300/20 text-amber-300" aria-label="Skyline Premium" />}
-                      <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Pulse</span>
                     </h3>
                     <p className={`text-[10px] flex items-center gap-1 ${onlineUsers.has(String(activeChat.id)) ? 'text-emerald-400' : 'text-slate-500'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${onlineUsers.has(String(activeChat.id)) ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
@@ -1255,6 +1218,87 @@ export default function Chats() {
           </div>
         )}
       </div>
+      {userContextMenu && createPortal(
+        <div
+          className="fixed inset-0 z-[90]"
+          onClick={() => setUserContextMenu(null)}
+          onContextMenu={(event) => { event.preventDefault(); setUserContextMenu(null); }}
+          onKeyDown={(event) => { if (event.key === 'Escape') setUserContextMenu(null); }}
+          role="presentation"
+        >
+          <div
+            role="menu"
+            aria-label={`Действия с пользователем @${userContextMenu.user.username}`}
+            onClick={(event) => event.stopPropagation()}
+            className="fixed w-56 rounded-2xl border border-white/10 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-xl"
+            style={{ left: userContextMenu.x, top: userContextMenu.y }}
+          >
+            <div className="mb-1 border-b border-white/[0.08] px-3 py-2">
+              <p className="truncate text-xs font-semibold text-slate-200">{userContextMenu.user.displayName || userContextMenu.user.username}</p>
+              <p className="mt-0.5 truncate text-[10px] text-slate-500">@{userContextMenu.user.username}</p>
+            </div>
+            {userContextMenu.user.isPremium && (
+              <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-medium text-amber-200" role="menuitem">
+                <Crown size={15} className="fill-amber-300/20 text-amber-300" /> Skyline Premium
+              </div>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { navigate(`/users/${userContextMenu.user.id}`); setUserContextMenu(null); }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-indigo-400/10 hover:text-indigo-200"
+            >
+              <ExternalLink size={15} /> Открыть профиль
+            </button>
+            {userContextMenu.contact ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { void handleSaveContact(userContextMenu.user, userContextMenu.contact?.nickname); setUserContextMenu(null); }}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-white/10"
+                >
+                  <Pencil size={15} /> Изменить имя контакта
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    const contact = userContextMenu.contact;
+                    if (contact) void handleDeleteChat(contact);
+                    setUserContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-rose-300 transition hover:bg-rose-400/10"
+                >
+                  <Trash2 size={15} /> Удалить историю чата
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    const contact = userContextMenu.contact;
+                    if (contact) void handleRemoveContact(contact);
+                    setUserContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-rose-300 transition hover:bg-rose-400/10"
+                >
+                  <UserRoundX size={15} /> Удалить из контактов
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { void handleSaveContact(userContextMenu.user); setUserContextMenu(null); }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-emerald-300 transition hover:bg-emerald-400/10"
+              >
+                <UserRoundPlus size={15} /> Добавить в контакты
+              </button>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
       {openMessageMenu && (() => {
         const menuMessage = messages.find((message) => message.id === openMessageMenu);
         if (!menuMessage) return null;

@@ -26,6 +26,8 @@ export interface User {
   bio?: string;
   statusText?: string;
   showLastSeen?: boolean;
+  dateOfBirth?: string | null;
+  createdAt?: string | null;
   hideOnlineStatus?: boolean;
   hideReadReceipts?: boolean;
   lastSeen?: string | null;
