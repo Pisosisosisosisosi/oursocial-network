@@ -45,7 +45,6 @@ export default function Chats() {
   const NODE_API = 'https://oursocial-network-production.up.railway.app';
   const PYTHON_API = 'https://oursocial-python.onrender.com';
 
-  // 1. Загрузка списка чатов и пользователей
   useEffect(() => {
     if (!user) return;
 
@@ -70,7 +69,6 @@ export default function Chats() {
     loadData();
   }, [user, token]);
 
-  // 2. Загрузка сообщений при выборе чата
   useEffect(() => {
     if (!activeChatId || !user) return;
 
@@ -190,24 +188,42 @@ export default function Chats() {
       
       {/* ЛЕВАЯ ПАНЕЛЬ (СПИСОК ЧАТОВ) */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+        
+        {/* ШАПКА ЛЕВОЙ ПАНЕЛИ */}
         <header className="p-4 border-b flex justify-between items-center bg-gray-50">
-          <span className="font-bold text-lg">{user?.username}</span>
-          <div className="flex gap-2">
-            <button onClick={() => setIsSettingsOpen(true)} className="text-gray-500 hover:text-black">⚙️</button>
-            <button onClick={logout} className="text-red-500 text-sm">Выйти</button>
+          <div className="flex items-center gap-3">
+            {/* Кнопка создания группы (кружок с карандашом) */}
+            <button 
+              onClick={() => setIsModalOpen(true)} 
+              className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition"
+              title="Создать группу"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+              </svg>
+            </button>
+            <span className="font-bold text-lg">{user?.username}</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {/* Кнопка настроек (SVG шестеренка) */}
+            <button onClick={() => setIsSettingsOpen(true)} className="text-gray-500 hover:text-black p-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+            {/* Аватарка пользователя (просто для красоты) */}
+            <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-sm">
+              {user?.username?.charAt(0).toUpperCase()}
+            </div>
           </div>
         </header>
-
-        <div className="p-2 border-b">
-          <button onClick={() => setIsModalOpen(true)} className="w-full bg-blue-500 text-white py-2 rounded-lg text-sm">+ Создать группу</button>
-        </div>
 
         <div className="flex-1 overflow-y-auto">
           {/* СПИСОК ЧАТОВ */}
           <div className="p-2">
             <h3 className="text-xs font-bold text-gray-400 uppercase mb-2">Мои чаты</h3>
-            
-            {/* ВОТ ЗДЕСЬ МЫ ИСПОЛЬЗУЕМ loading */}
             {loading ? (
               <p className="text-xs text-gray-400">Загрузка...</p>
             ) : chats.length === 0 ? (
@@ -313,6 +329,10 @@ export default function Chats() {
               <button onClick={() => setIsSettingsOpen(false)} className="px-3 py-1 border rounded text-sm">Отмена</button>
               <button onClick={handleSaveSettings} className="bg-green-500 text-white px-3 py-1 rounded text-sm">Сохранить</button>
             </div>
+            {/* Кнопка выхода перенесена сюда */}
+            <button onClick={logout} className="w-full mt-4 bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-100 transition text-sm font-medium">
+              Выйти из аккаунта
+            </button>
           </div>
         </div>
       )}
