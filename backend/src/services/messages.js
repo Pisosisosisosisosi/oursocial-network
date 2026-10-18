@@ -80,25 +80,43 @@ async function saveMessage(messageData) {
 /**
  * Получить список сообщений чата с пагинацией (не удаленные)
  * @param {string} chatId
- * @param {number} limit
- * @param {number} offset
+ * @param {number|object} options - limit/offset or query options
  * @returns {Promise<Array>}
  */
-async function getMessages(chatId, limit = 50, offset = 0) {
+async function getMessages(chatId, options = 50, legacyOffset = 0) {
   const db = getDB();
   if (!db) throw new Error('DB not connected');
 
+  const settings = typeof options === 'object' && options !== null
+    ? options
+    : { limit: options, offset: legacyOffset };
+  const limit = Math.min(Math.max(Number(settings.limit) || 50, 1), 100);
+  const offset = Math.max(Number(settings.offset ?? settings.skip) || 0, 0);
   const chatIdStr = String(chatId);
   const objId = safeObjectId(chatId);
+  const query = {
+    $or: [{ chatId: chatIdStr }, { chatId: objId }],
+    deleted: { $ne: true },
+  };
+
+  if (settings.before || settings.after) {
+    const createdAt = {};
+    if (settings.before) {
+      const before = new Date(settings.before);
+      if (!Number.isNaN(before.getTime())) createdAt.$lt = before;
+    }
+    if (settings.after) {
+      const after = new Date(settings.after);
+      if (!Number.isNaN(after.getTime())) createdAt.$gt = after;
+    }
+    if (Object.keys(createdAt).length > 0) query.createdAt = createdAt;
+  }
 
   return db.collection('messages')
-    .find({
-      $or: [{ chatId: chatIdStr }, { chatId: objId }],
-      deleted: { $ne: true },
-    })
-    .sort({ createdAt: -1 })
-    .skip(Number(offset) || 0)
-    .limit(Number(limit) || 50)
+    .find(query)
+    .sort({ createdAt: settings.order === 'asc' ? 1 : -1 })
+    .skip(offset)
+    .limit(limit)
     .toArray();
 }
 

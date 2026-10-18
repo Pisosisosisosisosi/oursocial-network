@@ -10,6 +10,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, username: string) => Promise<void>;
+  updateUser: (updates: Partial<User>) => void;
   logout: () => void;
 }
 
@@ -80,16 +81,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-const logout = () => {
-  localStorage.removeItem('token');
-  setToken(null);
-  setUser(null);
-  disconnectSocket();
-  clearKeys();
-};
+  const updateUser = (updates: Partial<User>) => {
+    setUser((currentUser) => currentUser ? { ...currentUser, ...updates } : currentUser);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    disconnectSocket();
+    clearKeys();
+  };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

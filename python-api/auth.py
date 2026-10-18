@@ -38,7 +38,9 @@ from fastapi import HTTPException, Header
 from jwt import ExpiredSignatureError, InvalidTokenError, decode as jwt_decode, encode as jwt_encode
 
 
-JWT_SECRET: str = getenv("JWT_SECRET", "change_me")
+JWT_SECRET: str = getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET must be configured")
 JWT_ALGO: str = "HS256"
 JWT_EXPIRES_MINUTES: int = int(getenv("JWT_EXPIRES_MINUTES", "10080"))
 

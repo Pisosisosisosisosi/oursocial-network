@@ -74,7 +74,11 @@ export default function MessageInput({ chatId, recipientId }: Props) {
           if (keyRes.data.publicKey) {
             encrypted = await encryptMessage(trimmed, keyRes.data.publicKey);
           }
-        } catch (err) {}
+        } catch {
+          setError('Не удалось получить ключ шифрования. Сообщение не отправлено.');
+          setSending(false);
+          return;
+        }
       }
 
       const moderationEnabled = localStorage.getItem('moderationEnabled') !== 'false';

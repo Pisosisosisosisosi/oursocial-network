@@ -21,8 +21,12 @@ const authMiddleware = (req, res, next) => {
     return res.status(401).json({ error: 'Unauthorized: Token missing' });
   }
 
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    return res.status(500).json({ error: 'Authentication service is not configured' });
+  }
+
   try {
-    const secret = process.env.JWT_SECRET || 'secret';
     const decoded = jwt.verify(token, secret);
     req.user = decoded;
     return next();

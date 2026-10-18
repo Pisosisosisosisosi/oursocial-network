@@ -1,127 +1,115 @@
-import { useState, useEffect } from 'react';
+import { useState, type FormEvent } from 'react';
+import { ArrowLeft, Save, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { isAxiosError } from 'axios';
 import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 export default function Profile() {
   const navigate = useNavigate();
-  const userString = localStorage.getItem('user');
-  const currentUser = userString ? JSON.parse(userString) : null;
+  const { user, updateUser } = useAuth();
 
-  const [displayName, setDisplayName] = useState(currentUser?.displayName || currentUser?.username || '');
-  const [username, setUsername] = useState(currentUser?.username || '');
+  const [displayName, setDisplayName] = useState(user?.displayName || user?.username || '');
+  const [username, setUsername] = useState(user?.username || '');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    // Если вдруг данных нет, стучимся на сервер за актуальными
-    async function fetchMe() {
-      try {
-        const res = await api.get('/auth/me');
-        setDisplayName(res.data.displayName || res.data.username);
-        setUsername(res.data.username);
-        localStorage.setItem('user', JSON.stringify(res.data));
-      } catch (e) {
-        console.error("Ошибка загрузки профиля:", e);
-      }
-    }
-    if (!currentUser) fetchMe();
-  }, [currentUser]);
-
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
 
     try {
       await api.patch('/users/me/profile', { displayName, username, avatarUrl: "" });
-      
-      // Обновляем данные в localStorage
-      const updatedUser = { ...currentUser, displayName, username };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      updateUser({ displayName, username });
       
       setMessage('Профиль успешно обновлен!');
       
       // Возвращаемся в чаты через 1.5 секунды
       setTimeout(() => navigate('/'), 1500);
-    } catch (error: any) {
-      setMessage(error.response?.data?.detail || 'Ошибка при обновлении профиля');
+    } catch (error: unknown) {
+      const data = isAxiosError(error)
+        ? error.response?.data as { detail?: string; error?: string } | undefined
+        : undefined;
+      setMessage(data?.detail || data?.error || 'Ошибка при обновлении профиля');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex h-full w-full bg-[#090d16] text-slate-100 font-sans absolute top-0 left-0 items-center justify-center p-4">
-      
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        * { font-family: 'Inter', sans-serif; }
-        .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.05); }
-      `}</style>
+    <main className="relative grid h-full w-full place-items-center overflow-y-auto bg-[#090d16] p-4 text-slate-100">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(99,102,241,0.15),transparent_55%)]" />
+      <section className="relative w-full max-w-lg rounded-[28px] border border-white/[0.08] bg-[#101725]/90 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-9">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="mb-6 inline-flex items-center gap-2 text-xs font-medium text-slate-500 transition hover:text-slate-200"
+        >
+          <ArrowLeft size={15} /> Назад к чатам
+        </button>
+        <div className="mb-7">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-300">Аккаунт</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Мой профиль</h1>
+          <p className="mt-2 text-sm text-slate-500">Настройте, как вас видят собеседники.</p>
+        </div>
 
-      {/* Декоративный фон */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#090d16] to-black pointer-events-none"></div>
-
-      <div className="glass-panel w-full max-w-md rounded-3xl p-8 relative z-10 shadow-2xl">
-        
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-emerald-400 bg-clip-text text-transparent">Мой профиль</h2>
-          <button onClick={() => navigate('/')} className="text-xs text-slate-400 hover:text-white transition-colors bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700">
-            ← Назад в чаты
-          </button>
+        <div className="mb-7 flex items-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 text-xl font-bold text-white">
+            {username?.[0]?.toLocaleUpperCase('ru-RU') || 'U'}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{displayName || username}</p>
+            <p className="mt-1 truncate text-xs text-slate-500">@{username}</p>
+          </div>
         </div>
 
         {message && (
-          <div className={`p-3 rounded-xl mb-4 text-xs text-center border ${message.includes('Ошибка') ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
+          <div role="status" className={`mb-4 rounded-xl border px-3.5 py-3 text-sm ${message.includes('Ошибка') || message.includes('taken') ? 'border-rose-400/20 bg-rose-400/[0.08] text-rose-200' : 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200'}`}>
             {message}
           </div>
         )}
 
-        <form onSubmit={handleSave} className="space-y-5">
-          
-          {/* Аватар-заглушка */}
-          <div className="flex flex-col items-center justify-center mb-6">
-            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center text-3xl font-bold text-slate-950 shadow-[0_0_30px_rgba(99,102,241,0.3)]">
-              {username?.[0]?.toUpperCase() || 'U'}
-            </div>
-            <p className="text-[10px] text-slate-500 mt-3">Аватар задается автоматически</p>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Отображаемое имя</label>
+        <form onSubmit={handleSave} className="space-y-4">
+          <label className="block">
+            <span className="mb-2 block text-xs font-medium text-slate-400">Отображаемое имя</span>
             <input
               type="text"
               value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-all"
+              onChange={(event) => setDisplayName(event.target.value)}
+              minLength={2}
+              maxLength={32}
+              className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-slate-100 outline-none focus:border-indigo-400/50"
               required
             />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Юзернейм (@username)</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">@</span>
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-medium text-slate-400">Имя пользователя</span>
+            <span className="flex h-12 items-center rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-slate-500 focus-within:border-indigo-400/50">
+              @
               <input
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-all"
+                onChange={(event) => setUsername(event.target.value)}
+                minLength={3}
+                maxLength={32}
+                className="h-full min-w-0 flex-1 bg-transparent pl-1 text-slate-100 outline-none"
                 required
               />
-            </div>
-          </div>
-
+            </span>
+          </label>
           <button
             type="submit"
-            disabled={loading}
-            className="w-full mt-4 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-sm shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all disabled:opacity-50"
+            disabled={loading || !displayName.trim() || !username.trim()}
+            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400 disabled:opacity-50"
           >
-            {loading ? 'Сохранение...' : 'Сохранить изменения'}
+            {loading ? 'Сохраняем…' : <> <Save size={16} /> Сохранить изменения</>}
           </button>
-
         </form>
-      </div>
-    </div>
+        <p className="mt-5 flex items-center justify-center gap-2 text-[10px] text-slate-600">
+          <ShieldCheck size={13} className="text-emerald-400/70" /> Профиль виден только участникам ваших чатов
+        </p>
+      </section>
+    </main>
   );
 }

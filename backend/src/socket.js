@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { containsProfanity } = require('./services/moderation'); // <-- ИМПОРТ ФИЛЬТРА
 const {
   saveMessage,
+  getMessageById,
   markAsRead,
   markAsDelivered,
   deleteMessage,
@@ -29,33 +30,17 @@ function initSocket(server) {
     }
 
     try {
-      const secrets = [
-        process.env.JWT_SECRET,
-        'change_me_in_production_use_long_random_string',
-        'change_me_in_production',
-        'secret',
-      ].filter(Boolean);
+      const secret = process.env.JWT_SECRET;
+      if (!secret) return next(new Error('JWT_SECRET is not configured'));
+      const decoded = jwt.verify(token, secret);
+      const userId = decoded.userId || decoded.id || decoded._id;
+      if (!userId) return next(new Error('Invalid token'));
 
-      let decoded = null;
-      for (const s of secrets) {
-        try {
-          decoded = jwt.verify(token, s);
-          break;
-        } catch (_) {}
-      }
-
-      if (!decoded) {
-        decoded = jwt.decode(token);
-      }
-
-      if (!decoded) {
-        return next(new Error('Invalid token'));
-      }
-
-      socket.userId = String(decoded.userId || decoded.id || decoded._id || 'anon');
+      socket.userId = String(userId);
       socket.username = decoded.username || decoded.name || 'Anonymous';
       next();
     } catch (err) {
+      console.error('❌ Socket authentication failed:', err.message);
       next(new Error('Invalid token'));
     }
   });
@@ -77,10 +62,24 @@ function initSocket(server) {
     socket.join(`user:${socket.userId}`);
 
     // Присоединиться к комнате чата
-    socket.on('join_chat', ({ chatId }) => {
-      if (!chatId) return;
-      socket.join(`chat:${chatId}`);
-      console.log(`User ${socket.userId} joined chat ${chatId}`);
+    socket.on('join_chat', async ({ chatId } = {}, callback) => {
+      if (!chatId) {
+        if (callback) callback({ status: 'error', error: 'chatId is required' });
+        return;
+      }
+      try {
+        const chat = await getChatById(chatId);
+        const isMember = chat && (chat.participants || []).map(String).includes(socket.userId);
+        if (!isMember) {
+          if (callback) callback({ status: 'error', error: 'Access denied: not a member of this chat' });
+          return;
+        }
+        socket.join(`chat:${chatId}`);
+        if (callback) callback({ status: 'ok', chatId: String(chatId) });
+      } catch (err) {
+        console.error('❌ join_chat error:', err);
+        if (callback) callback({ status: 'error', error: 'Unable to join chat' });
+      }
     });
 
     // Выйти из комнаты чата
@@ -111,28 +110,37 @@ function initSocket(server) {
         }
 
         // --- ПРОВЕРКА НА МАТ ---
-        if (content && containsProfanity(String(content))) {
+        const contentText = String(content);
+        if (contentText.length > 1_000_000) {
+          if (callback) callback({ status: 'error', error: 'Message is too large' });
+          return;
+        }
+
+        const messageType = ['text', 'image', 'gift'].includes(type) ? type : null;
+        if (!messageType) {
+          if (callback) callback({ status: 'error', error: 'Unsupported message type' });
+          return;
+        }
+
+        if (content && !contentText.startsWith('oursocial-e2e:v2:') && containsProfanity(contentText)) {
           console.log(`❌ Сообщение отклонено (мат) от ${socket.userId}`);
           if (callback) callback({ status: 'error', error: 'Сообщение содержит нецензурную лексику' });
           return;
         }
         // -----------------------
 
-        // Проверяем существование чата и членство (если сервис доступен)
-        let chat = null;
+        let chat;
         try {
-          if (typeof getChatById === 'function') {
-            chat = await getChatById(chatId);
-            if (chat && chat.participants) {
-              const isMember = chat.participants.map(String).includes(socket.userId);
-              if (!isMember) {
-                if (callback) callback({ status: 'error', error: 'Access denied: not a member of this chat' });
-                return;
-              }
-            }
+          chat = await getChatById(chatId);
+          const isMember = chat && (chat.participants || []).map(String).includes(socket.userId);
+          if (!isMember) {
+            if (callback) callback({ status: 'error', error: 'Access denied: not a member of this chat' });
+            return;
           }
         } catch (e) {
-          // Игнорируем проверку чата, если сервис недоступен
+          console.error('❌ send_message membership check failed:', e);
+          if (callback) callback({ status: 'error', error: 'Unable to verify chat membership' });
+          return;
         }
 
         const message = {
@@ -140,7 +148,7 @@ function initSocket(server) {
           senderId: socket.userId,
           senderName: socket.username,
           encryptedText: String(content),
-          type,
+          type: messageType,
           giftId: giftId ? String(giftId) : null,
           replyTo: replyTo ? String(replyTo) : null,
           createdAt: new Date(),
@@ -181,9 +189,13 @@ function initSocket(server) {
     socket.on('mark_read', async ({ messageId }) => {
       try {
         if (!messageId) return;
+        const message = await getMessageById(messageId);
+        if (!message) return;
+        const chat = await getChatById(message.chatId);
+        if (!chat || !(chat.participants || []).map(String).includes(socket.userId)) return;
         const ok = await markAsRead(messageId, socket.userId);
         if (ok) {
-          io.emit('message_read', { messageId, userId: socket.userId });
+          io.to(`chat:${message.chatId}`).emit('message_read', { messageId, userId: socket.userId });
         }
       } catch (err) {
         console.error('❌ mark_read error:', err);
@@ -194,6 +206,11 @@ function initSocket(server) {
     socket.on('mark_as_read', async ({ chatId }, callback) => {
       try {
         if (!chatId) return;
+        const chat = await getChatById(chatId);
+        if (!chat || !(chat.participants || []).map(String).includes(socket.userId)) {
+          if (callback) callback({ status: 'error', error: 'Access denied: not a member of this chat' });
+          return;
+        }
         if (typeof markChatAsRead === 'function') {
           await markChatAsRead(chatId, socket.userId);
         }
@@ -218,9 +235,13 @@ function initSocket(server) {
     socket.on('mark_delivered', async ({ messageId }) => {
       try {
         if (!messageId) return;
+        const message = await getMessageById(messageId);
+        if (!message) return;
+        const chat = await getChatById(message.chatId);
+        if (!chat || !(chat.participants || []).map(String).includes(socket.userId)) return;
         const ok = await markAsDelivered(messageId, socket.userId);
         if (ok) {
-          io.emit('message_delivered', { messageId, userId: socket.userId });
+          io.to(`chat:${message.chatId}`).emit('message_delivered', { messageId, userId: socket.userId });
         }
       } catch (err) {
         console.error('❌ mark_delivered error:', err);
@@ -242,7 +263,7 @@ function initSocket(server) {
 
     // Индикатор набора текста
     socket.on('typing', ({ chatId }) => {
-      if (!chatId) return;
+      if (!chatId || !socket.rooms.has(`chat:${chatId}`)) return;
       socket.to(`chat:${chatId}`).emit('user_typing', {
         userId: socket.userId,
         username: socket.username,

@@ -193,6 +193,13 @@ const updateChatHandler = async (req, res, next) => {
     const io = getSocketIO();
     if (io) {
       io.to(`chat:${req.params.id}`).emit('chat_updated', updatedChat);
+      (updatedChat.participants || []).forEach((participantId) => {
+        io.to(`user:${participantId}`).emit('chat_updated', updatedChat);
+      });
+      const addedIds = Array.isArray(toAdd) ? toAdd : [toAdd];
+      addedIds.forEach((participantId) => {
+        io.to(`user:${participantId}`).emit('chat_created', updatedChat);
+      });
     }
 
     res.status(200).json({

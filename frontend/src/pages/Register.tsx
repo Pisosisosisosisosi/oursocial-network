@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react';
+import { isAxiosError } from 'axios';
 import { Link } from 'react-router-dom';
+import { ArrowRight, MessageCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
@@ -10,88 +12,106 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await register(email, password, username);
-    } catch (err: any) {
-      if (!err.response) {
-        setError('Не удалось подключиться к серверу авторизации. Проверьте соединение.');
-      } else {
-        setError(err.response?.data?.detail || err.response?.data?.error || 'Ошибка при регистрации');
-      }
+      await register(email.trim(), password, username.trim());
+    } catch (registrationError: unknown) {
+      const data = isAxiosError(registrationError)
+        ? registrationError.response?.data as { detail?: string; error?: string } | undefined
+        : undefined;
+      setError(data?.detail || data?.error || 'Не удалось создать аккаунт. Проверьте соединение и данные.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Регистрация</h1>
+    <main className="relative grid h-full w-full place-items-center overflow-y-auto bg-[#090d16] px-4 py-8 text-slate-100">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(99,102,241,0.18),transparent_55%)]" />
+      <div className="relative w-full max-w-[430px]">
+        <div className="mb-8 flex items-center justify-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-lg shadow-indigo-500/25">
+            <MessageCircle size={21} />
+          </span>
+          <span className="text-xl font-bold tracking-tight">OurSocial</span>
+        </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded mb-4 text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-green-500 outline-none"
-              required
-            />
+        <section className="rounded-[28px] border border-white/[0.08] bg-[#101725]/90 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-9">
+          <div className="mb-7">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-300">Присоединяйтесь</p>
+            <h1 className="text-2xl font-semibold tracking-tight">Создайте аккаунт</h1>
+            <p className="mt-2 text-sm text-slate-500">Начните общаться с близкими и друзьями.</p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Имя пользователя</label>
-            <input
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-green-500 outline-none"
-              required
-            />
-          </div>
+          {error && (
+            <div role="alert" className="mb-5 rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3.5 py-3 text-sm text-rose-200">
+              {error}
+            </div>
+          )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Пароль (мин. 6 символов)</label>
-            <input
-              type="password"
-              placeholder="Пароль"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-green-500 outline-none"
-              minLength={6}
-              required
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-xs font-medium text-slate-400">Имя пользователя</span>
+              <input
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                autoComplete="username"
+                minLength={3}
+                maxLength={32}
+                required
+                placeholder="Например, alex"
+                className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-xs font-medium text-slate-400">Электронная почта</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                required
+                placeholder="name@example.com"
+                className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-xs font-medium text-slate-400">Пароль</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="new-password"
+                minLength={6}
+                maxLength={128}
+                required
+                placeholder="Не менее 6 символов"
+                className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-indigo-400/50 focus:bg-white/[0.05]"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={loading || !email.trim() || !username.trim() || password.length < 6}
+              className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? 'Создаём аккаунт…' : <>Зарегистрироваться <ArrowRight size={16} /></>}
+            </button>
+          </form>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600 disabled:opacity-50 transition"
-          >
-            {loading ? 'Регистрация...' : 'Зарегистрироваться'}
-          </button>
-        </form>
+          <p className="mt-6 text-center text-sm text-slate-500">
+            Уже есть аккаунт?{' '}
+            <Link to="/login" className="font-semibold text-indigo-300 hover:text-indigo-200">Войти</Link>
+          </p>
+        </section>
 
-        <p className="text-center mt-6 text-sm text-gray-600">
-          Уже есть аккаунт?{' '}
-          <Link to="/login" className="text-blue-500 hover:underline font-medium">
-            Войти
-          </Link>
+        <p className="mt-5 flex items-center justify-center gap-2 text-[11px] text-slate-600">
+          <ShieldCheck size={14} className="text-emerald-400/70" /> Регистрация занимает всего минуту
         </p>
       </div>
-    </div>
+    </main>
   );
 }

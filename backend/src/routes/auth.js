@@ -6,6 +6,13 @@ const { getDB } = require('../services/db');
 const { ObjectId } = require('mongodb');
 const authMiddleware = require('../middleware/auth');
 
+function getJwtSecret() {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured');
+  }
+  return process.env.JWT_SECRET;
+}
+
 function toObjectId(id) {
   if (!id) return null;
   if (id instanceof ObjectId) return id;
@@ -68,7 +75,7 @@ router.post('/register', async (req, res, next) => {
     const result = await db.collection('users').insertOne(newUser);
     const userId = String(result.insertedId);
 
-    const secret = process.env.JWT_SECRET || 'secret';
+    const secret = getJwtSecret();
     const token = jwt.sign(
       {
         userId,
@@ -126,7 +133,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     const userId = String(user._id);
-    const secret = process.env.JWT_SECRET || 'secret';
+    const secret = getJwtSecret();
     const token = jwt.sign(
       {
         userId,

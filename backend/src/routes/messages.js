@@ -118,7 +118,7 @@ async function postMessageHandler(req, res, next) {
     }
 
     // --- ПРОВЕРКА НА МАТ ---
-    if (encryptedText && containsProfanity(encryptedText)) {
+    if (encryptedText && !String(encryptedText).startsWith('oursocial-e2e:v2:') && containsProfanity(encryptedText)) {
       return res.status(400).json({ error: 'Сообщение содержит нецензурную лексику' });
     }
     // -----------------------
@@ -179,7 +179,7 @@ router.patch('/:messageId', async (req, res, next) => {
     }
 
     // --- ПРОВЕРКА НА МАТ ПРИ РЕДАКТИРОВАНИИ ---
-    if (newText && containsProfanity(newText)) {
+    if (newText && !String(newText).startsWith('oursocial-e2e:v2:') && containsProfanity(newText)) {
       return res.status(400).json({ error: 'Сообщение содержит нецензурную лексику' });
     }
     // ------------------------------------------
