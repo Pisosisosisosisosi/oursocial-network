@@ -37,24 +37,45 @@ export default function Chats() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSelectChat = (user: any) => {
+  // ЗАГРУЗКА ИСТОРИИ СООБЩЕНИЙ С СЕРВЕРА
+  const handleSelectChat = async (user: any) => {
     setActiveChat(user);
-    setMessages([]); 
+    setMessages([]);
+    try {
+      const res = await api.get(`/messages/${user.id}`);
+      setMessages(res.data);
+    } catch (e) {
+      console.error("Ошибка загрузки истории:", e);
+    }
   };
 
-  const handleSend = (e: React.FormEvent) => {
+  // ОТПРАВКА СООБЩЕНИЯ НА СЕРВЕР
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim() || !activeChat) return;
 
-    const newMsg = {
-      id: Date.now(),
-      text: text,
-      senderId: currentUser?.id,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
+    const msgText = text;
+    setText(''); // Очищаем поле ввода
 
-    setMessages(prev => [...prev, newMsg]);
-    setText('');
+    try {
+      // Отправляем в базу
+      await api.post('/messages', {
+        receiverId: activeChat.id,
+        text: msgText
+      });
+
+      // Добавляем в UI, чтобы не ждать перезагрузки
+      const newMsg = {
+        id: Date.now().toString(),
+        text: msgText,
+        senderId: currentUser?.id,
+        createdAt: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, newMsg]);
+    } catch (err) {
+      console.error("Ошибка отправки:", err);
+      alert("Не удалось отправить сообщение. Проверьте интернет.");
+    }
   };
 
   // Фильтрация списка по поиску
@@ -196,7 +217,8 @@ export default function Chats() {
                     }`}>
                       {m.text}
                       <div className={`text-[9px] mt-1.5 opacity-60 font-mono text-right ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
-                        {m.time}
+                        {/* ВЫВОДИМ ВРЕМЯ ИЗ БАЗЫ */}
+                        {m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                       </div>
                     </div>
                   </div>
