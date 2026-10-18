@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext';
 import Login from './pages/Login'; 
 import Register from './pages/Register';
 import Chats from './pages/Chats';
+import Profile from './pages/Profile';
 
 export default function App() {
   const isAuth = !!localStorage.getItem('token');
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/login" element={!isAuth ? <Login /> : <Navigate to="/" />} />
             <Route path="/register" element={!isAuth ? <Register /> : <Navigate to="/" />} />
             <Route path="/" element={isAuth ? <Chats /> : <Navigate to="/login" />} />
+	    <Route path="/profile" element={isAuth ? <Profile /> : <Navigate to="/login" />} />
           </Routes>
         </div>
       </BrowserRouter>
