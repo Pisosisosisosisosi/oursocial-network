@@ -58,6 +58,11 @@ export default function Chats() {
   const [pinningMessageId, setPinningMessageId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<ChatMessage | null>(null);
   const [lightboxClosing, setLightboxClosing] = useState(false);
+  const [profilePanelOpen, setProfilePanelOpen] = useState(false);
+  const [profilePanelClosing, setProfilePanelClosing] = useState(false);
+  const [chatProfile, setChatProfile] = useState<User | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -72,6 +77,8 @@ export default function Chats() {
   const incomingTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageMenuCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lightboxCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileRequestRef = useRef(0);
   const typingRecipientRef = useRef<string | null>(null);
 
   const stopTyping = (recipientId = typingRecipientRef.current) => {
@@ -208,6 +215,7 @@ export default function Chats() {
     }
     if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
     if (lightboxCloseTimeoutRef.current) clearTimeout(lightboxCloseTimeoutRef.current);
+    if (profileCloseTimeoutRef.current) clearTimeout(profileCloseTimeoutRef.current);
   }, []);
 
   const closeMessageMenu = useCallback(() => {
@@ -230,8 +238,18 @@ export default function Chats() {
     }, 180);
   }, [lightboxImage, lightboxClosing]);
 
+  const closeProfilePanel = useCallback(() => {
+    if (!profilePanelOpen || profilePanelClosing) return;
+    setProfilePanelClosing(true);
+    profileCloseTimeoutRef.current = setTimeout(() => {
+      setProfilePanelOpen(false);
+      setProfilePanelClosing(false);
+      profileCloseTimeoutRef.current = null;
+    }, 180);
+  }, [profilePanelOpen, profilePanelClosing]);
+
   useEffect(() => {
-    if (!openMessageMenu && !lightboxImage) return;
+    if (!openMessageMenu && !lightboxImage && !profilePanelOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return;
@@ -242,6 +260,7 @@ export default function Chats() {
       if (event.key === 'Escape') {
         closeMessageMenu();
         closeLightbox();
+        closeProfilePanel();
       }
     };
 
@@ -251,7 +270,7 @@ export default function Chats() {
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [openMessageMenu, lightboxImage, messageMenuClosing, lightboxClosing, closeMessageMenu, closeLightbox]);
+  }, [openMessageMenu, lightboxImage, profilePanelOpen, messageMenuClosing, lightboxClosing, closeMessageMenu, closeLightbox, closeProfilePanel]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -260,6 +279,28 @@ export default function Chats() {
   const refreshMessages = async (userId: string) => {
     const res = await api.get<ChatMessage[]>(`/messages/${userId}`);
     setMessages(res.data);
+  };
+
+  const openChatProfile = async () => {
+    if (!activeChat) return;
+    const requestId = ++profileRequestRef.current;
+    setChatProfile(activeChat);
+    setProfileError('');
+    setProfilePanelClosing(false);
+    if (profileCloseTimeoutRef.current) clearTimeout(profileCloseTimeoutRef.current);
+    setProfilePanelOpen(true);
+    setProfileLoading(true);
+    try {
+      const response = await api.get<User>(`/users/${activeChat.id}`);
+      if (requestId === profileRequestRef.current) setChatProfile(response.data);
+    } catch (error) {
+      console.error('Не удалось загрузить профиль собеседника:', error);
+      if (requestId === profileRequestRef.current) {
+        setProfileError('Не удалось загрузить актуальный профиль. Показаны доступные данные.');
+      }
+    } finally {
+      if (requestId === profileRequestRef.current) setProfileLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -300,6 +341,9 @@ export default function Chats() {
   const handleSelectChat = async (user: User & { nickname?: string }) => {
     stopTyping();
     setTypingUser(null);
+    profileRequestRef.current += 1;
+    setProfilePanelOpen(false);
+    setChatProfile(null);
     setActiveChat(user);
     setMessages([]);
     setChatError('');
@@ -690,13 +734,31 @@ export default function Chats() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="flex min-w-0 items-center gap-2 font-bold text-sm text-slate-100">
-                    <span className="truncate">{activeChat.nickname || activeChat.displayName || activeChat.username}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Pulse</span>
+                    <button type="button" onClick={() => void openChatProfile()} aria-label={`Профиль ${activeChat.displayName || activeChat.username}`} className="truncate text-left transition hover:text-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60">
+                      {activeChat.nickname || activeChat.displayName || activeChat.username}
+                    </button>
+                    <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Pulse</span>
                   </h3>
                   <p className={`text-[10px] flex items-center gap-1 ${onlineUsers.has(String(activeChat.id)) ? 'text-emerald-400' : 'text-slate-500'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${onlineUsers.has(String(activeChat.id)) ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
                     {onlineUsers.has(String(activeChat.id)) ? 'В сети' : 'Не в сети'}
                   </p>
+                  {pinnedMessages.length > 0 && (
+                    <div className="mt-1 flex max-w-full flex-col gap-0.5">
+                      {pinnedMessages.map((message) => (
+                        <button
+                          key={message.id}
+                          type="button"
+                          title={message.text || message.fileName || 'Перейти к закреплённому сообщению'}
+                          onClick={() => messageRefs.current.get(message.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                          className="pinned-header-link flex max-w-full items-center gap-1.5 rounded-md pr-1 text-left text-[10px] text-amber-200/90 transition hover:text-amber-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-300/60"
+                        >
+                          <Pin size={11} className="shrink-0 text-amber-300" />
+                          <span className="max-w-full truncate">{message.text || message.fileName || 'Вложение'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex min-w-0 items-center gap-2">
@@ -718,7 +780,7 @@ export default function Chats() {
                     <button type="button" aria-label="Закрыть поиск" onClick={() => handleChatSearch('')} className="rounded p-1 hover:bg-white/10"><X size={14} /></button>
                   </div>
                 )}
-                <button type="button" onClick={() => navigate(`/users/${activeChat.id}`)} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
+                <button type="button" onClick={() => void openChatProfile()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
                   <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
                 </button>
               </div>
@@ -726,22 +788,6 @@ export default function Chats() {
 
             <div className="flex-1 min-h-0 p-3 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10">
               {chatError && <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3 py-2 text-xs text-rose-200">{chatError}</div>}
-            {pinnedMessages.length > 0 && (
-              <div className="pinned-strip flex items-center gap-2 overflow-x-auto rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] p-2.5 shadow-lg">
-                <Pin size={15} className="shrink-0 text-amber-300" />
-                {pinnedMessages.map((message) => (
-                  <button
-                    key={message.id}
-                    type="button"
-                    onClick={() => messageRefs.current.get(message.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-                    className="max-w-[75vw] shrink-0 truncate rounded-xl px-2.5 py-1.5 text-left text-xs text-amber-100/90 transition hover:bg-amber-200/10"
-                  >
-                    <span className="mr-1.5 text-amber-300">Закреплено</span>
-                    {message.text || message.fileName || 'Вложение'}
-                  </button>
-                ))}
-              </div>
-            )}
             <div className="text-center text-slate-600 text-[10px] font-mono my-4 flex items-center justify-center gap-2">
                 <span className="h-px w-8 bg-slate-800"></span> Начало защищенной сессии <span className="h-px w-8 bg-slate-800"></span>
               </div>
@@ -871,6 +917,75 @@ export default function Chats() {
              </div>
              <p className="text-sm font-medium text-slate-400">Выберите пользователя</p>
              <p className="text-xs text-slate-600 mt-1">чтобы начать общение</p>
+          </div>
+        )}
+        {profilePanelOpen && chatProfile && (
+          <div className={`profile-panel-layer absolute inset-0 z-40 flex justify-end ${profilePanelClosing ? 'profile-layer-out' : 'profile-layer-in'}`}>
+            <button
+              type="button"
+              aria-label="Закрыть профиль"
+              onClick={closeProfilePanel}
+              className="profile-panel-backdrop absolute inset-0 bg-black/45 backdrop-blur-[2px]"
+            />
+            <aside
+              aria-label={`Профиль @${chatProfile.username}`}
+              className={`profile-side-panel relative z-10 flex h-full w-[min(360px,90vw)] flex-col border-l border-white/10 bg-[#101725]/95 text-slate-100 shadow-2xl backdrop-blur-2xl ${profilePanelClosing ? 'profile-panel-out' : 'profile-panel-in'}`}
+            >
+              <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300">Профиль</p>
+                  <p className="mt-1 text-xs text-slate-500">Информация о собеседнике</p>
+                </div>
+                <button type="button" onClick={closeProfilePanel} aria-label="Закрыть профиль" className="rounded-xl p-2 text-slate-400 transition hover:bg-white/10 hover:text-white">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-6">
+                <div className="flex flex-col items-center text-center">
+                  <div className="relative mb-4 h-24 w-24 overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-xl shadow-indigo-950/40">
+                    {chatProfile.avatarUrl
+                      ? <img src={chatProfile.avatarUrl} alt={`Аватар ${chatProfile.username}`} className="h-full w-full object-cover" />
+                      : <span className="grid h-full place-items-center text-3xl font-bold text-white">{chatProfile.username[0]?.toLocaleUpperCase('ru-RU')}</span>}
+                    <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-[3px] border-[#101725] ${onlineUsers.has(String(chatProfile.id)) ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                  </div>
+                  <h2 className="max-w-full truncate text-xl font-semibold">{chatProfile.displayName || chatProfile.username}</h2>
+                  <p className="mt-1 text-sm text-slate-400">@{chatProfile.username}</p>
+                  <p className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${onlineUsers.has(String(chatProfile.id)) ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-white/[0.08] bg-white/[0.04] text-slate-400'}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${onlineUsers.has(String(chatProfile.id)) ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                    {onlineUsers.has(String(chatProfile.id)) ? 'В сети' : 'Не в сети'}
+                  </p>
+                </div>
+
+                {chatProfile.statusText && (
+                  <div className="profile-info-card mt-7 rounded-2xl border border-indigo-300/10 bg-indigo-300/[0.06] p-4">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-300">Статус</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{chatProfile.statusText}</p>
+                  </div>
+                )}
+                {chatProfile.bio && (
+                  <div className="profile-info-card mt-3 rounded-2xl border border-white/[0.07] bg-white/[0.035] p-4">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">О себе</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{chatProfile.bio}</p>
+                  </div>
+                )}
+                {chatProfile.lastSeen && !onlineUsers.has(String(chatProfile.id)) && (
+                  <p className="mt-4 px-1 text-xs text-slate-500">
+                    Последнее посещение: {new Date(chatProfile.lastSeen).toLocaleString()}
+                  </p>
+                )}
+                {profileLoading && <p role="status" className="mt-5 text-center text-xs text-slate-500">Обновляем профиль…</p>}
+                {profileError && <p role="status" className="mt-4 rounded-xl bg-amber-300/[0.07] p-3 text-xs text-amber-200/80">{profileError}</p>}
+              </div>
+              <div className="border-t border-white/[0.08] p-4">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/users/${chatProfile.id}`)}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500/15 text-sm font-medium text-indigo-200 transition hover:bg-indigo-500/25 hover:text-white"
+                >
+                  <ExternalLink size={15} /> Открыть полный профиль
+                </button>
+              </div>
+            </aside>
           </div>
         )}
       </div>
