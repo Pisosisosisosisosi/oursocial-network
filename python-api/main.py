@@ -15,15 +15,11 @@ from crypto import validate_public_key, make_key_document
 
 app = FastAPI(title="Our Social Network API")
 
-# Явно указываем домены для CORS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://pipipipipi.3utilities.com",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],  # Разрешаем всем (потом можно сузить до твоего сайта)
+    allow_credentials=False, # Важно: если origins=["*"], credentials должно быть False
     allow_methods=["*"],
     allow_headers=["*"],
 )
