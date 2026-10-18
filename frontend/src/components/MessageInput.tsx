@@ -1,4 +1,4 @@
-import { useState, FormEvent, useRef } from 'react';
+import { useState, type FormEvent, useRef } from 'react';
 import { getSocket } from '../api/socket';
 import { keysApi } from '../api/client';
 import { encryptMessage } from '../crypto/encrypt';
