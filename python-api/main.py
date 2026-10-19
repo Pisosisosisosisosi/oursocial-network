@@ -26,6 +26,11 @@ from threading import Lock
 from db import (
     users_collection, keys_collection, connect_db, groups_collection,
     email_verifications_collection, verified_email_tokens_collection,
+    messages_collection, stories_collection, channels_collection,
+    channel_posts_collection, polls_collection, votes_collection,
+    events_collection, friend_requests_collection, blocked_users_collection,
+    saved_messages_collection, drafts_collection, scheduled_messages_collection,
+    quick_replies_collection, user_settings_collection,
 )
 # Импортируем новую функцию для сообщений (ее нужно будет добавить в db.py)
 from db import messages_collection 
