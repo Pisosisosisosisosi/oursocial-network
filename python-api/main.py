@@ -31,6 +31,8 @@ from db import (
     events_collection, friend_requests_collection, blocked_users_collection,
     saved_messages_collection, drafts_collection, scheduled_messages_collection,
     quick_replies_collection, user_settings_collection,
+    user_sessions_collection, login_history_collection,
+    reports_collection, bots_collection, gifts_collection,
 )
 # Импортируем новую функцию для сообщений (ее нужно будет добавить в db.py)
 from db import messages_collection 
