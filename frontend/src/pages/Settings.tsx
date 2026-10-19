@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { applyAppPreferences, APP_THEMES, type AppTheme } from '../preferences';
 import { api } from '../api/client';
 import { useToast } from '../context/useToast';
-import GlassPanel from '../components/ui/GlassPanel';
+//import GlassPanel from '../components/ui/GlassPanel';
 import Toggle from '../components/ui/Toggle';
 
 interface InstallPromptEvent extends Event {
