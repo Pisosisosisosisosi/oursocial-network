@@ -5,6 +5,7 @@ import Chats from './pages/Chats';
 import Login from './pages/Login';
 import Profile from './pages/Profile';
 import Register from './pages/Register';
+import VerifyEmail from './pages/VerifyEmail';
 import UserProfile from './pages/UserProfile';
 import Settings from './pages/Settings';
 import Groups from './pages/Groups';
@@ -125,6 +126,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
       <Route path="/premium" element={user

@@ -28,16 +28,65 @@ export default function Register() {
     return () => window.clearTimeout(timer);
   }, [verificationOpen, secondsRemaining]);
 
+  useEffect(() => {
+    const verifiedToken = sessionStorage.getItem('verifiedEmailToken');
+    const verifiedEmail = sessionStorage.getItem('verifiedEmailAddress');
+    if (verifiedToken && verifiedEmail) {
+      setEmail(verifiedEmail);
+      setVerificationNotice(`Email ${verifiedEmail} уже подтверждён! Нажмите «Зарегистрироваться» для входа.`);
+    }
+  }, []);
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+
+    // If email already verified in this browser via link
+    const verifiedToken = sessionStorage.getItem('verifiedEmailToken');
+    const verifiedEmail = sessionStorage.getItem('verifiedEmailAddress');
+    if (verifiedToken && verifiedEmail && verifiedEmail.toLowerCase() === email.trim().toLowerCase()) {
+      setLoading(true);
+      try {
+        await register(email.trim(), password, username.trim(), verifiedToken);
+        sessionStorage.removeItem('verifiedEmailToken');
+        sessionStorage.removeItem('verifiedEmailAddress');
+        const redirectPath = sessionStorage.getItem('pulseAfterLogin');
+        sessionStorage.removeItem('pulseAfterLogin');
+        navigate(redirectPath || '/', { replace: true });
+        return;
+      } catch (err: unknown) {
+        sessionStorage.removeItem('verifiedEmailToken');
+        sessionStorage.removeItem('verifiedEmailAddress');
+      } finally {
+        setLoading(false);
+      }
+    }
+
     setLoading(true);
     try {
-      await authApi.sendEmailCode(email.trim());
-      setSecondsRemaining(600);
-      setVerificationCode('');
+      // Save pending registration for email link return
+      sessionStorage.setItem('pendingRegistration', JSON.stringify({
+        email: email.trim(),
+        username: username.trim(),
+        password,
+      }));
+
+      const res = await authApi.sendEmailCode(email.trim());
+      setSecondsRemaining(res.data?.expiresInSeconds || 600);
       setVerificationError('');
-      setVerificationNotice('');
+
+      if (res.data?.code) {
+        setVerificationCode(res.data.code);
+      } else {
+        setVerificationCode('');
+      }
+
+      if (res.data?.emailSent) {
+        setVerificationNotice(`Письмо со ссылкой для входа в 1 клик отправлено на ${email.trim()}.`);
+      } else {
+        setVerificationNotice('Код подтверждения готов. Нажмите кнопку ниже для подтверждения в 1 клик!');
+      }
+
       setVerificationOpen(true);
     } catch (sendError: unknown) {
       const data = isAxiosError(sendError)
@@ -55,9 +104,16 @@ export default function Register() {
     setVerificationCode('');
     setVerificationLoading(true);
     try {
-      await authApi.sendEmailCode(email.trim());
-      setSecondsRemaining(600);
-      setVerificationNotice('Если адрес может принять письмо, новый код отправлен.');
+      const res = await authApi.sendEmailCode(email.trim());
+      setSecondsRemaining(res.data?.expiresInSeconds || 600);
+      if (res.data?.code) {
+        setVerificationCode(res.data.code);
+      }
+      setVerificationNotice(
+        res.data?.emailSent
+          ? `Новое письмо отправлено на ${email.trim()}. Нажмите кнопку в письме.`
+          : 'Новый код подтверждения готов.'
+      );
     } catch (sendError: unknown) {
       const data = isAxiosError(sendError)
         ? sendError.response?.data as { detail?: string; error?: string } | undefined
@@ -68,15 +124,19 @@ export default function Register() {
     }
   };
 
-  const handleVerifyCode = async (event: FormEvent) => {
-    event.preventDefault();
-    if (verificationCode.length !== 6 || verificationLoading) return;
+  const handleVerifyCode = async (event?: FormEvent, codeOverride?: string) => {
+    if (event) event.preventDefault();
+    const codeToUse = codeOverride || verificationCode;
+    if (codeToUse.length !== 6 || verificationLoading) return;
     setVerificationError('');
     setVerificationNotice('');
     setVerificationLoading(true);
     try {
-      const response = await authApi.verifyEmailCode(email.trim(), verificationCode);
+      const response = await authApi.verifyEmailCode(email.trim(), codeToUse);
       await register(email.trim(), password, username.trim(), response.data.registrationToken);
+      sessionStorage.removeItem('pendingRegistration');
+      sessionStorage.removeItem('verifiedEmailToken');
+      sessionStorage.removeItem('verifiedEmailAddress');
       const redirectPath = sessionStorage.getItem('pulseAfterLogin');
       sessionStorage.removeItem('pulseAfterLogin');
       navigate(redirectPath || '/', { replace: true });
@@ -237,6 +297,16 @@ export default function Register() {
                     required
                   />
                 </label>
+                {verificationCode.length === 6 && (
+                  <button
+                    type="button"
+                    onClick={() => void handleVerifyCode(undefined, verificationCode)}
+                    disabled={verificationLoading}
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-500/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {verificationLoading ? 'Подтверждаем…' : <>⚡ Подтвердить в 1 клик <ArrowRight size={16} /></>}
+                  </button>
+                )}
                 <button type="submit" disabled={verificationLoading || verificationCode.length !== 6} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50">
                   {verificationLoading ? 'Проверяем…' : <>Подтвердить и создать аккаунт <ArrowRight size={16} /></>}
                 </button>

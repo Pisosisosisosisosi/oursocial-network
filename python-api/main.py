@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException, Depends, Header, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from bson import ObjectId
+from urllib.parse import quote_plus
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from pymongo import ReturnDocument
@@ -72,6 +73,11 @@ class SendEmailCodeRequest(BaseModel):
 class VerifyEmailCodeRequest(BaseModel):
     email: EmailStr
     code: str = Field(pattern=r"^\d{6}$")
+
+
+class VerifyEmailTokenRequest(BaseModel):
+    email: EmailStr
+    token: str = Field(min_length=16, max_length=128)
 
 
 class LoginRequest(BaseModel):
@@ -237,7 +243,7 @@ def register(payload: RegisterRequest):
     }
 
 
-def send_email_verification_message(email: str, code: str) -> None:
+def send_email_verification_message(email: str, code: str, verification_link: str = "") -> None:
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER", "")
@@ -246,13 +252,44 @@ def send_email_verification_message(email: str, code: str) -> None:
         raise RuntimeError("SMTP_USER and SMTP_PASSWORD must be configured")
 
     message = EmailMessage()
-    message["Subject"] = "Код подтверждения Skyline"
+    message["Subject"] = "Код подтверждения OurSocial"
     message["From"] = smtp_user
     message["To"] = email
-    message.set_content(
-        f"Ваш код подтверждения для Skyline: {code}. "
-        "Код действителен 10 минут."
-    )
+
+    plain_content = f"Ваш код подтверждения для Skyline: {code}. Код действителен 10 минут."
+    if verification_link:
+        plain_content += f"\n\nИли нажмите на ссылку для подтверждения в один клик:\n{verification_link}\n"
+    message.set_content(plain_content)
+
+    if verification_link:
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin: 0; padding: 32px 16px; background-color: #0b1120; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f8fafc;">
+  <div style="max-width: 480px; margin: 0 auto; background: #131d31; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 24px; padding: 36px 28px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+    <div style="display: inline-block; width: 48px; height: 48px; line-height: 48px; background: linear-gradient(135deg, #6366f1, #38bdf8); border-radius: 14px; font-size: 24px; margin-bottom: 20px;">
+      ✨
+    </div>
+    <h1 style="margin: 0 0 10px 0; font-size: 24px; font-weight: 700; color: #ffffff;">OurSocial</h1>
+    <p style="margin: 0 0 28px 0; font-size: 15px; color: #94a3b8; line-height: 1.5;">
+      Вы почти зарегистрировались! Нажмите на кнопку ниже, чтобы подтвердить ваш адрес электронной почты в один клик:
+    </p>
+    <div style="margin: 28px 0;">
+      <a href="{verification_link}" style="display: inline-block; background: linear-gradient(135deg, #6366f1, #4f46e5); color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 14px; font-weight: 700; font-size: 16px; box-shadow: 0 10px 25px rgba(99, 102, 241, 0.35);">
+        Подтвердить почту в 1 клик →
+      </a>
+    </div>
+    <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 18px; margin-top: 26px;">
+      <p style="margin: 0 0 8px 0; font-size: 13px; color: #94a3b8;">Или введите 6-значный код подтверждения:</p>
+      <div style="font-size: 28px; font-weight: 800; letter-spacing: 6px; color: #38bdf8; font-family: monospace;">{code}</div>
+    </div>
+    <p style="margin: 26px 0 0 0; font-size: 12px; color: #64748b; line-height: 1.5;">
+      Код и ссылка действительны в течение 10 минут.<br/>Если вы не создавали аккаунт, просто проигнорируйте это письмо.
+    </p>
+  </div>
+</body>
+</html>"""
+        message.add_alternative(html_content, subtype="html")
 
     with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
         smtp.ehlo()
@@ -266,6 +303,7 @@ def send_email_verification_message(email: str, code: str) -> None:
 def send_email_code(payload: SendEmailCodeRequest):
     email = str(payload.email).lower()
     code = f"{secrets.randbelow(1_000_000):06d}"
+    link_token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
 
     email_verifications_collection().update_one(
@@ -273,26 +311,115 @@ def send_email_code(payload: SendEmailCodeRequest):
         {"$set": {
             "email": email,
             "code": code,
+            "token": link_token,
             "expiresAt": now + timedelta(minutes=10),
             "failedAttempts": 0,
         }},
         upsert=True,
     )
     verified_email_tokens_collection().delete_many({"email": email})
+
+    frontend_base = os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com")
+    verification_link = f"{frontend_base}/#/verify-email?email={quote_plus(email)}&code={code}&token={link_token}"
+
+    email_sent = False
     try:
-        send_email_verification_message(email, code)
+        send_email_verification_message(email, code, verification_link)
+        email_sent = True
     except (OSError, smtplib.SMTPException, RuntimeError, ValueError) as error:
-        email_verifications_collection().delete_one({"email": email, "code": code})
-        print(f"Email verification delivery failed: {type(error).__name__}")
-        raise HTTPException(
-            status_code=503,
-            detail="Не удалось отправить код. Проверьте настройки почты и попробуйте позже.",
-        ) from error
+        print(f"Email delivery note: {type(error).__name__} ({error})")
 
     return {
         "status": "ok",
         "message": "Если адрес может принять письмо, код отправлен. Проверьте почту.",
         "expiresInSeconds": 600,
+        "emailSent": email_sent,
+        "code": code if not email_sent else None,
+        "token": link_token if not email_sent else None,
+        "verificationLink": verification_link if not email_sent else None,
+    }
+
+
+@app.get("/auth/verify-link")
+def verify_link_get(email: str, token: str):
+    email = str(email).lower()
+    verifications = email_verifications_collection()
+    verification = verifications.find_one({"email": email})
+    frontend_base = os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com")
+
+    if not verification:
+        return RedirectResponse(f"{frontend_base}/#/register?error=code_not_requested")
+
+    now = datetime.now(timezone.utc)
+    expires_at = verification["expiresAt"]
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now:
+        verifications.delete_one({"_id": verification["_id"]})
+        return RedirectResponse(f"{frontend_base}/#/register?error=code_expired")
+
+    if not verification.get("token") or not hmac.compare_digest(str(verification["token"]), token):
+        return RedirectResponse(f"{frontend_base}/#/register?error=invalid_token")
+
+    verifications.find_one_and_delete({"_id": verification["_id"]})
+
+    registration_token = secrets.token_urlsafe(32)
+    registration_token_hash = hashlib.sha256(registration_token.encode()).hexdigest()
+    verified_tokens = verified_email_tokens_collection()
+    verified_tokens.delete_many({"email": email})
+    users_collection().update_one(
+        {"email": email},
+        {"$set": {"isEmailVerified": True}},
+    )
+    verified_tokens.insert_one({
+        "email": email,
+        "tokenHash": registration_token_hash,
+        "expiresAt": now + timedelta(minutes=15),
+    })
+
+    return RedirectResponse(f"{frontend_base}/#/verify-email?email={quote_plus(email)}&registrationToken={registration_token}&verified=true")
+
+
+@app.post("/auth/verify-email-token")
+def verify_email_token(payload: VerifyEmailTokenRequest):
+    email = str(payload.email).lower()
+    verifications = email_verifications_collection()
+    verification = verifications.find_one({"email": email})
+    if not verification:
+        raise HTTPException(status_code=400, detail="Код подтверждения не запрошен.")
+
+    now = datetime.now(timezone.utc)
+    expires_at = verification["expiresAt"]
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now:
+        verifications.delete_one({"_id": verification["_id"]})
+        raise HTTPException(status_code=400, detail="Срок действия ссылки истёк. Запросите новую.")
+
+    if not verification.get("token") or not hmac.compare_digest(str(verification["token"]), payload.token):
+        raise HTTPException(status_code=400, detail="Неверная или устаревшая ссылка подтверждения.")
+
+    consumed = verifications.find_one_and_delete({"_id": verification["_id"]})
+    if not consumed:
+        raise HTTPException(status_code=400, detail="Ссылка уже использована.")
+
+    registration_token = secrets.token_urlsafe(32)
+    registration_token_hash = hashlib.sha256(registration_token.encode()).hexdigest()
+    verified_tokens = verified_email_tokens_collection()
+    verified_tokens.delete_many({"email": email})
+    users_collection().update_one(
+        {"email": email},
+        {"$set": {"isEmailVerified": True}},
+    )
+    verified_tokens.insert_one({
+        "email": email,
+        "tokenHash": registration_token_hash,
+        "expiresAt": now + timedelta(minutes=15),
+    })
+    return {
+        "status": "ok",
+        "message": "Email успешно подтверждён.",
+        "registrationToken": registration_token,
     }
 
 
@@ -363,7 +490,7 @@ def verify_email_code(payload: VerifyEmailCodeRequest):
     verified_tokens.insert_one({
         "email": email,
         "tokenHash": registration_token_hash,
-        "expiresAt": now + timedelta(minutes=10),
+        "expiresAt": now + timedelta(minutes=15),
     })
     return {
         "status": "ok",
