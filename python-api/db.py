@@ -45,3 +45,67 @@ def email_verifications_collection():
 
 def verified_email_tokens_collection():
     return get_db()["verified_email_tokens"]
+
+
+def friend_requests_collection():
+    return get_db()["friend_requests"]
+
+
+def blocked_users_collection():
+    return get_db()["blocked_users"]
+
+
+def saved_messages_collection():
+    return get_db()["saved_messages"]
+
+
+def drafts_collection():
+    return get_db()["drafts"]
+
+
+def scheduled_messages_collection():
+    return get_db()["scheduled_messages"]
+
+
+def quick_replies_collection():
+    return get_db()["quick_replies"]
+
+
+def stories_collection():
+    return get_db()["stories"]
+
+
+def polls_collection():
+    return get_db()["polls"]
+
+
+def votes_collection():
+    return get_db()["votes"]
+
+
+def events_collection():
+    return get_db()["events"]
+
+
+def user_sessions_collection():
+    return get_db()["user_sessions"]
+
+
+def login_history_collection():
+    return get_db()["login_history"]
+
+
+def reports_collection():
+    return get_db()["reports"]
+
+
+def bots_collection():
+    return get_db()["bots"]
+
+
+def gifts_collection():
+    return get_db()["gifts"]
+
+
+def user_settings_collection():
+    return get_db()["user_settings"]

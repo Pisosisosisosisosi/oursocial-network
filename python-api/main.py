@@ -7,7 +7,7 @@ from urllib.parse import quote_plus
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from pymongo import ReturnDocument
-from typing import Literal
+from typing import Literal, Optional
 import base64
 import binascii
 import hashlib
@@ -160,6 +160,19 @@ def startup():
     email_verifications_collection().create_index("email", unique=True)
     email_verifications_collection().create_index("expiresAt", expireAfterSeconds=0)
     verified_email_tokens_collection().create_index("expiresAt", expireAfterSeconds=0)
+    stories_collection().create_index("expiresAt", expireAfterSeconds=0)
+    friend_requests_collection().create_index([("fromUserId", 1), ("toUserId", 1)])
+    blocked_users_collection().create_index("userId")
+    saved_messages_collection().create_index("userId")
+    scheduled_messages_collection().create_index("sendAt")
+    polls_collection().create_index("creatorId")
+    votes_collection().create_index([("pollId", 1), ("userId", 1)])
+    user_settings_collection().create_index("userId")
+    user_sessions_collection().create_index("userId")
+    login_history_collection().create_index("userId")
+    reports_collection().create_index("targetId")
+    bots_collection().create_index("ownerId")
+    gifts_collection().create_index("name")
     print("DEBUG startup: MongoDB connected (python-api)")
 
 
@@ -1652,6 +1665,1057 @@ def get_key(user_id: str, current=Depends(get_current_user)):
     if not doc:
         raise HTTPException(status_code=404, detail="Key not found")
     return {"userId": doc["userId"], "publicKey": doc["publicKey"]}
+
+
+# ============================================================================
+# НОВЫЕ МОДЕЛИ ДЛЯ ФУНКЦИЙ SKYLINE (1-10: Сообщения)
+# ============================================================================
+
+class MessageDeleteForAllRequest(BaseModel):
+    messageId: str = Field(min_length=1, max_length=64)
+
+class MessageForwardRequest(BaseModel):
+    messageId: str = Field(min_length=1, max_length=64)
+    targetChatId: Optional[str] = Field(default=None, max_length=64)
+    targetUserId: Optional[str] = Field(default=None, max_length=64)
+
+class MessageReplyRequest(BaseModel):
+    text: str = Field(default="", max_length=4000)
+    type: Literal["text", "image", "file"] = "text"
+    fileName: str = Field(default="", max_length=200)
+    contentType: str = Field(default="", max_length=100)
+    fileData: str = Field(default="", max_length=2_800_000)
+
+class DisappearingMessagesRequest(BaseModel):
+    chatId: str = Field(min_length=1, max_length=64)
+    expireAfterMinutes: int = Field(ge=1, le=43200)
+
+class SavedMessageRequest(BaseModel):
+    messageId: str = Field(min_length=1, max_length=64)
+
+class DraftMessageRequest(BaseModel):
+    chatId: str = Field(min_length=1, max_length=64)
+    text: str = Field(default="", max_length=4000)
+
+class ScheduledMessageRequest(BaseModel):
+    receiverId: Optional[str] = Field(default=None, max_length=64)
+    groupId: Optional[str] = Field(default=None, max_length=64)
+    text: str = Field(default="", max_length=4000)
+    type: Literal["text", "image", "file"] = "text"
+    fileName: str = Field(default="", max_length=200)
+    contentType: str = Field(default="", max_length=100)
+    fileData: str = Field(default="", max_length=2_800_000)
+    sendAt: str
+
+class QuickReplyRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    text: str = Field(min_length=1, max_length=2000)
+    emoji: Optional[str] = Field(default=None, max_length=10)
+
+# ============================================================================
+# НОВЫЕ МОДЕЛИ (11-20: Пользователи)
+# ============================================================================
+
+class FriendRequestRequest(BaseModel):
+    targetUserId: str = Field(min_length=1, max_length=64)
+
+class FriendRequestActionRequest(BaseModel):
+    requestId: str = Field(min_length=1, max_length=64)
+    accept: bool
+
+class BlockUserRequest(BaseModel):
+    targetUserId: str = Field(min_length=1, max_length=64)
+
+class ProfileBannerRequest(BaseModel):
+    bannerUrl: str = Field(default="", max_length=1_400_000)
+
+class VerificationRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+# ============================================================================
+# НОВЫЕ МОДЕЛИ (21-30: Медиа и контент)
+# ============================================================================
+
+class PollCreateRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=300)
+    options: list[str] = Field(min_length=2, max_length=10)
+    chatId: Optional[str] = Field(default=None, max_length=64)
+    groupId: Optional[str] = Field(default=None, max_length=64)
+    channelId: Optional[str] = Field(default=None, max_length=64)
+
+class PollVoteRequest(BaseModel):
+    pollId: str = Field(min_length=1, max_length=64)
+    optionIndex: int = Field(ge=0)
+
+# ============================================================================
+# НОВЫЕ МОДЕЛИ (31-40: Социальные функции)
+# ============================================================================
+
+class StoryCreateRequest(BaseModel):
+    mediaType: Literal["image", "video"] = "image"
+    mediaData: str = Field(default="", max_length=5_600_000)
+    caption: str = Field(default="", max_length=500)
+
+class EventCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    eventDate: str
+    location: str = Field(default="", max_length=200)
+    participants: list[str] = Field(default_factory=list, max_length=100)
+
+class ReportRequest(BaseModel):
+    targetType: Literal["user", "message", "channel", "group"]
+    targetId: str = Field(min_length=1, max_length=64)
+    reason: str = Field(min_length=1, max_length=500)
+
+# ============================================================================
+# НОВЫЕ МОДЕЛИ (41-50: Кастомизация)
+# ============================================================================
+
+class UserSettingsRequest(BaseModel):
+    theme: Optional[Literal["light", "dark"]] = None
+    accentColor: Optional[str] = Field(default=None, max_length=20)
+    chatBackground: Optional[str] = Field(default=None, max_length=1_400_000)
+    fontSize: Optional[Literal["small", "medium", "large"]] = None
+    messageDensity: Optional[Literal["compact", "comfortable"]] = None
+    animationsEnabled: Optional[bool] = None
+    pinnedChatIds: Optional[list[str]] = Field(default=None, max_length=20)
+    quickActionButtons: Optional[list[str]] = Field(default=None, max_length=10)
+
+# ============================================================================
+# НОВЫЕ МОДЕЛИ (51-60: Безопасность)
+# ============================================================================
+
+class TwoFactorRequest(BaseModel):
+    enable: bool
+    code: Optional[str] = Field(default=None, max_length=10)
+
+class PinCodeRequest(BaseModel):
+    pin: Optional[str] = Field(default=None, min_length=4, max_length=10)
+    enable: Optional[bool] = None
+
+class AutoDeleteAccountRequest(BaseModel):
+    months: int = Field(ge=1, le=60)
+
+# ============================================================================
+# НОВЫЕ МОДЕЛИ (61-70: Продвинутые)
+# ============================================================================
+
+class BotCommandRequest(BaseModel):
+    command: str = Field(min_length=1, max_length=100)
+    response: str = Field(min_length=1, max_length=2000)
+
+class GiftSendRequest(BaseModel):
+    giftId: str = Field(min_length=1, max_length=64)
+    targetUserId: str = Field(min_length=1, max_length=64)
+
+
+@app.post("/messages/disappearing")
+def set_disappearing_messages(
+    payload: DisappearingMessagesRequest,
+    current=Depends(get_current_user),
+):
+    """Установить таймер исчезновения сообщений в чате"""
+    chats = groups_collection()
+    chat = chats.find_one({
+        "_id": ObjectId(payload.chatId),
+        "$or": [
+            {"members.userId": current["userId"]},
+            {"createdBy": current["userId"]},
+        ]
+    })
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    chats.update_one(
+        {"_id": ObjectId(payload.chatId)},
+        {"$set": {"disappearingMessages": {"expireAfterMinutes": payload.expireAfterMinutes, "enabled": True}}}
+    )
+    return {"status": "ok", "expireAfterMinutes": payload.expireAfterMinutes}
+
+
+@app.post("/messages/{message_id}/delete-for-all")
+def delete_message_for_all(
+    message_id: str,
+    current=Depends(get_current_user),
+):
+    """Удалить сообщение у всех участников чата"""
+    if not ObjectId.is_valid(message_id):
+        raise HTTPException(status_code=400, detail="Invalid message id")
+    message = messages_collection().find_one({"_id": ObjectId(message_id)})
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message["senderId"] != current["userId"]:
+        raise HTTPException(status_code=403, detail="Only sender can delete for everyone")
+    messages_collection().update_one(
+        {"_id": ObjectId(message_id)},
+        {"$set": {"deletedForAll": True, "deletedAt": datetime.now(timezone.utc), "deletedBy": current["userId"]}}
+    )
+    other_id = message["receiverId"] if message["senderId"] == current["userId"] else message["senderId"]
+    for uid in {current["userId"], other_id}:
+        try:
+            sio.emit("message_deleted_for_all", {
+                "messageId": message_id,
+                "chatId": message.get("chatId") or message.get("groupId"),
+                "senderId": current["userId"],
+            }, to=f"user:{uid}")
+        except Exception:
+            pass
+    return {"status": "ok"}
+
+
+@app.post("/messages/{message_id}/forward")
+async def forward_message(
+    message_id: str,
+    payload: MessageForwardRequest,
+    current=Depends(get_current_user),
+):
+    """Переслать сообщение в другой чат или пользователю"""
+    if not ObjectId.is_valid(message_id):
+        raise HTTPException(status_code=400, detail="Invalid message id")
+    message = messages_collection().find_one({"_id": ObjectId(message_id)})
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if current["userId"] not in (message.get("senderId"), message.get("receiverId")):
+        group_id = message.get("groupId")
+        if group_id:
+            group = groups_collection().find_one({"_id": ObjectId(group_id), "members.userId": current["userId"]})
+            if not group:
+                raise HTTPException(status_code=403, detail="Access denied")
+        else:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    now = datetime.now(timezone.utc)
+    forward_doc = {
+        "originalMessageId": message_id,
+        "senderId": current["userId"],
+        "senderName": current.get("username", "Пользователь"),
+        "text": message.get("text", ""),
+        "type": message.get("type", "text"),
+        "fileName": message.get("fileName", ""),
+        "contentType": message.get("contentType", ""),
+        "fileData": message.get("fileData", ""),
+        "createdAt": now,
+        "readBy": [current["userId"]],
+        "deliveredTo": [current["userId"]],
+        "deleted": False,
+        "isEdited": False,
+        "isForwarded": True,
+    }
+    if payload.targetChatId:
+        forward_doc["chatId"] = payload.targetChatId
+    if payload.targetUserId:
+        forward_doc["receiverId"] = payload.targetUserId
+    if message.get("groupId"):
+        forward_doc["groupId"] = message["groupId"]
+
+    result = messages_collection().insert_one(forward_doc)
+    try:
+        sio.emit("message_forwarded", {
+            "messageId": str(result.inserted_id),
+            "originalMessageId": message_id,
+            "senderId": current["userId"],
+        }, to=f"user:{current['userId']}")
+    except Exception:
+        pass
+    return {"status": "ok", "messageId": str(result.inserted_id)}
+
+
+@app.post("/messages/{message_id}/reply")
+async def reply_to_message(
+    message_id: str,
+    payload: MessageReplyRequest,
+    current=Depends(get_current_user),
+):
+    """Ответить на конкретное сообщение (цитирование)"""
+    if not ObjectId.is_valid(message_id):
+        raise HTTPException(status_code=400, detail="Invalid message id")
+    original = messages_collection().find_one({"_id": ObjectId(message_id)})
+    if not original:
+        raise HTTPException(status_code=404, detail="Original message not found")
+    chat_id = original.get("chatId") or original.get("groupId")
+    receiver_id = original.get("receiverId") or current["userId"]
+
+    now = datetime.now(timezone.utc)
+    reply_doc = {
+        "chatId": chat_id,
+        "senderId": current["userId"],
+        "senderName": current.get("username", "Пользователь"),
+        "receiverId": receiver_id,
+        "groupId": original.get("groupId"),
+        "text": payload.text.strip(),
+        "type": payload.type,
+        "fileName": payload.fileName,
+        "contentType": payload.contentType,
+        "fileData": payload.fileData,
+        "replyTo": message_id,
+        "createdAt": now,
+        "readBy": [current["userId"]],
+        "deliveredTo": [current["userId"]],
+        "deleted": False,
+        "isEdited": False,
+    }
+    result = messages_collection().insert_one(reply_doc)
+    reply_doc["_id"] = result.inserted_id
+    recipients = [receiver_id, current["userId"]]
+    if original.get("groupId"):
+        group = groups_collection().find_one({"_id": ObjectId(original["groupId"])})
+        if group:
+            recipients = [m["userId"] for m in group.get("members", [])]
+    for rid in set(recipients):
+        try:
+            sio.emit("message_replied", {
+                "messageId": str(result.inserted_id),
+                "replyTo": message_id,
+                "senderId": current["userId"],
+                "chatId": chat_id,
+            }, to=f"user:{rid}")
+        except Exception:
+            pass
+    return serialize_message(reply_doc)
+
+
+@app.get("/messages/disappearing/{chat_id}")
+def get_disappearing_settings(
+    chat_id: str,
+    current=Depends(get_current_user),
+):
+    """Получить настройки исчезающих сообщений для чата"""
+    chat = groups_collection().find_one({"_id": ObjectId(chat_id)})
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    dm = chat.get("disappearingMessages", {})
+    return {
+        "enabled": dm.get("enabled", False),
+        "expireAfterMinutes": dm.get("expireAfterMinutes", 0),
+    }
+
+
+@app.post("/drafts")
+def save_draft(
+    payload: DraftMessageRequest,
+    current=Depends(get_current_user),
+):
+    """Сохранить черновик сообщения в чате"""
+    drafts_collection().update_one(
+        {"chatId": payload.chatId, "userId": current["userId"]},
+        {"$set": {"text": payload.text, "updatedAt": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"status": "ok"}
+
+
+@app.get("/drafts/{chat_id}")
+def get_draft(
+    chat_id: str,
+    current=Depends(get_current_user),
+):
+    """Получить черновик для чата"""
+    draft = drafts_collection().find_one({"chatId": chat_id, "userId": current["userId"]})
+    if not draft:
+        return {"text": ""}
+    return {"text": draft.get("text", "")}
+
+
+@app.post("/saved-messages")
+def save_message_to_bookmarks(
+    payload: SavedMessageRequest,
+    current=Depends(get_current_user),
+):
+    """Сохранить сообщение в закладки (личное хранилище)"""
+    msg = messages_collection().find_one({"_id": ObjectId(payload.messageId)})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    saved_messages_collection().update_one(
+        {"messageId": payload.messageId, "userId": current["userId"]},
+        {"$set": {"savedAt": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"status": "ok"}
+
+
+@app.get("/saved-messages")
+def list_saved_messages(
+    current=Depends(get_current_user),
+    limit: int = 50,
+    skip: int = 0,
+):
+    """Список сохранённых сообщений"""
+    saved = list(saved_messages_collection().find(
+        {"userId": current["userId"]}
+    ).sort("savedAt", -1).skip(skip).limit(min(limit, 100)))
+    message_ids = [ObjectId(s["messageId"]) for s in saved if ObjectId.is_valid(s.get("messageId", ""))]
+    messages = {}
+    if message_ids:
+        for m in messages_collection().find({"_id": {"$in": message_ids}}):
+            messages[str(m["_id"])] = serialize_message(m)
+    return {
+        "items": [
+            {
+                "savedId": str(s["_id"]),
+                "savedAt": s["savedAt"].isoformat(),
+                "message": messages.get(s["messageId"], {}),
+            }
+            for s in saved
+        ],
+        "count": len(saved),
+    }
+
+
+@app.post("/scheduled-messages")
+def create_scheduled_message(
+    payload: ScheduledMessageRequest,
+    current=Depends(get_current_user),
+):
+    """Запланировать отправку сообщения на определённое время"""
+    send_at = datetime.fromisoformat(payload.sendAt)
+    if send_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Send time must be in the future")
+    doc = {
+        "senderId": current["userId"],
+        "senderName": current.get("username", "Пользователь"),
+        "receiverId": payload.receiverId,
+        "groupId": payload.groupId,
+        "text": payload.text,
+        "type": payload.type,
+        "fileName": payload.fileName,
+        "contentType": payload.contentType,
+        "fileData": payload.fileData,
+        "sendAt": send_at,
+        "status": "pending",
+        "createdAt": datetime.now(timezone.utc),
+    }
+    result = scheduled_messages_collection().insert_one(doc)
+    return {"status": "ok", "scheduledId": str(result.inserted_id)}
+
+
+@app.get("/scheduled-messages")
+def list_scheduled_messages(current=Depends(get_current_user)):
+    """Список запланированных сообщений"""
+    items = list(scheduled_messages_collection().find(
+        {"senderId": current["userId"], "status": "pending"}
+    ).sort("sendAt", 1))
+    return {
+        "items": [
+            {
+                "id": str(i["_id"]),
+                "receiverId": i.get("receiverId"),
+                "groupId": i.get("groupId"),
+                "text": i.get("text", ""),
+                "sendAt": i["sendAt"].isoformat(),
+                "status": i.get("status", "pending"),
+            }
+            for i in items
+        ]
+    }
+
+
+@app.post("/quick-replies")
+def create_quick_reply(
+    payload: QuickReplyRequest,
+    current=Depends(get_current_user),
+):
+    """Создать шаблон быстрого ответа"""
+    doc = {
+        "userId": current["userId"],
+        "title": payload.title,
+        "text": payload.text,
+        "emoji": payload.emoji,
+        "createdAt": datetime.now(timezone.utc),
+    }
+    result = quick_replies_collection().insert_one(doc)
+    return {"status": "ok", "id": str(result.inserted_id)}
+
+
+@app.get("/quick-replies")
+def list_quick_replies(current=Depends(get_current_user)):
+    """Список быстрых ответов пользователя"""
+    items = list(quick_replies_collection().find(
+        {"userId": current["userId"]}
+    ).sort("createdAt", -1))
+    return {
+        "items": [
+            {
+                "id": str(i["_id"]),
+                "title": i["title"],
+                "text": i["text"],
+                "emoji": i.get("emoji"),
+            }
+            for i in items
+        ]
+    }
+
+
+@app.post("/friend-requests")
+def send_friend_request(
+    payload: FriendRequestRequest,
+    current=Depends(get_current_user),
+):
+    """Отправить заявку в друзья"""
+    target_id = payload.targetUserId
+    if target_id == current["userId"]:
+        raise HTTPException(status_code=400, detail="Cannot send request to yourself")
+    if not ObjectId.is_valid(target_id):
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    target = users_collection().find_one({"_id": ObjectId(target_id)})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    existing = friend_requests_collection().find_one({
+        "fromUserId": current["userId"],
+        "toUserId": target_id,
+        "status": "pending",
+    })
+    if existing:
+        raise HTTPException(status_code=409, detail="Friend request already sent")
+    reverse = friend_requests_collection().find_one({
+        "fromUserId": target_id,
+        "toUserId": current["userId"],
+        "status": "pending",
+    })
+    if reverse:
+        raise HTTPException(status_code=409, detail="User already sent you a request")
+    doc = {
+        "fromUserId": current["userId"],
+        "toUserId": target_id,
+        "status": "pending",
+        "createdAt": datetime.now(timezone.utc),
+    }
+    result = friend_requests_collection().insert_one(doc)
+    try:
+        sio.emit("friend_request_received", {
+            "requestId": str(result.inserted_id),
+            "fromUserId": current["userId"],
+            "fromUsername": current.get("username", "Пользователь"),
+        }, to=f"user:{target_id}")
+    except Exception:
+        pass
+    return {"status": "ok", "requestId": str(result.inserted_id)}
+
+
+@app.get("/friend-requests")
+def list_friend_requests(current=Depends(get_current_user)):
+    """Входящие и исходящие заявки в друзья"""
+    incoming = list(friend_requests_collection().find(
+        {"toUserId": current["userId"], "status": "pending"}
+    ).sort("createdAt", -1))
+    outgoing = list(friend_requests_collection().find(
+        {"fromUserId": current["userId"], "status": "pending"}
+    ).sort("createdAt", -1))
+    return {
+        "incoming": [
+            {
+                "id": str(r["_id"]),
+                "fromUserId": r["fromUserId"],
+                "fromUsername": users_collection().find_one({"_id": ObjectId(r["fromUserId"])}, {"username": 1}).get("username", "Пользователь") if ObjectId.is_valid(r["fromUserId"]) else "Пользователь",
+                "createdAt": r["createdAt"].isoformat(),
+            }
+            for r in incoming
+        ],
+        "outgoing": [
+            {
+                "id": str(r["_id"]),
+                "toUserId": r["toUserId"],
+                "toUsername": users_collection().find_one({"_id": ObjectId(r["toUserId"])}, {"username": 1}).get("username", "Пользователь") if ObjectId.is_valid(r["toUserId"]) else "Пользователь",
+                "createdAt": r["createdAt"].isoformat(),
+            }
+            for r in outgoing
+        ],
+    }
+
+
+@app.post("/friend-requests/{request_id}/respond")
+def respond_to_friend_request(
+    request_id: str,
+    payload: FriendRequestActionRequest,
+    current=Depends(get_current_user),
+):
+    """Принять или отклонить заявку в друзья"""
+    if not ObjectId.is_valid(request_id):
+        raise HTTPException(status_code=400, detail="Invalid request id")
+    req = friend_requests_collection().find_one({"_id": ObjectId(request_id), "toUserId": current["userId"]})
+    if not req:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    if payload.accept:
+        friend_requests_collection().update_one(
+            {"_id": ObjectId(request_id)},
+            {"$set": {"status": "accepted", "respondedAt": datetime.now(timezone.utc)}}
+        )
+        users_collection().update_one(
+            {"_id": ObjectId(current["userId"])},
+            {"$addToSet": {"contacts": req["fromUserId"]}}
+        )
+        users_collection().update_one(
+            {"_id": ObjectId(req["fromUserId"])},
+            {"$addToSet": {"contacts": current["userId"]}}
+        )
+        try:
+            sio.emit("friend_request_accepted", {
+                "requestId": request_id,
+                "acceptedBy": current["userId"],
+            }, to=f"user:{req['fromUserId']}")
+        except Exception:
+            pass
+    else:
+        friend_requests_collection().update_one(
+            {"_id": ObjectId(request_id)},
+            {"$set": {"status": "rejected", "respondedAt": datetime.now(timezone.utc)}}
+        )
+    return {"status": "ok", "accepted": payload.accept}
+
+
+@app.post("/block-user")
+def block_user(
+    payload: BlockUserRequest,
+    current=Depends(get_current_user),
+):
+    """Заблокировать пользователя"""
+    target_id = payload.targetUserId
+    if target_id == current["userId"]:
+        raise HTTPException(status_code=400, detail="Cannot block yourself")
+    if not ObjectId.is_valid(target_id):
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    blocked_users_collection().update_one(
+        {"userId": current["userId"], "blockedUserId": target_id},
+        {"$set": {"blockedAt": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    users_collection().update_one(
+        {"_id": ObjectId(current["userId"])},
+        {"$pull": {"contacts": target_id}}
+    )
+    return {"status": "ok"}
+
+
+@app.get("/blocked-users")
+def list_blocked_users(current=Depends(get_current_user)):
+    """Список заблокированных пользователей (чёрный список)"""
+    blocked = list(blocked_users_collection().find({"userId": current["userId"]}))
+    result = []
+    for b in blocked:
+        target = users_collection().find_one(
+            {"_id": ObjectId(b["blockedUserId"])},
+            {"username": 1, "displayName": 1, "avatarUrl": 1}
+        ) if ObjectId.is_valid(b.get("blockedUserId", "")) else None
+        result.append({
+            "id": str(b["_id"]),
+            "blockedUserId": b["blockedUserId"],
+            "username": target.get("username", "Пользователь") if target else "Пользователь",
+            "displayName": target.get("displayName", "") if target else "",
+            "avatarUrl": target.get("avatarUrl", "") if target else "",
+            "blockedAt": b["blockedAt"].isoformat(),
+        })
+    return {"blocked": result}
+
+
+@app.post("/profile/banner")
+def set_profile_banner(
+    payload: ProfileBannerRequest,
+    current=Depends(get_current_user),
+):
+    """Установить баннер профиля"""
+    users_collection().update_one(
+        {"_id": ObjectId(current["userId"])},
+        {"$set": {"bannerUrl": payload.bannerUrl}}
+    )
+    return {"status": "ok", "bannerUrl": payload.bannerUrl}
+
+
+@app.post("/profile/verification")
+def request_verification(
+    payload: VerificationRequest,
+    current=Depends(get_current_user),
+):
+    """Запросить верификацию (галочку) для аккаунта"""
+    users_collection().update_one(
+        {"_id": ObjectId(current["userId"])},
+        {"$set": {
+            "verificationRequested": True,
+            "verificationReason": payload.reason,
+            "verificationRequestedAt": datetime.now(timezone.utc),
+        }}
+    )
+    return {"status": "ok", "message": "Заявка на верификацию отправлена на модерацию"}
+
+
+@app.post("/polls")
+def create_poll(
+    payload: PollCreateRequest,
+    current=Depends(get_current_user),
+):
+    """Создать опрос (в чате, группе или канале)"""
+    doc = {
+        "creatorId": current["userId"],
+        "question": payload.question,
+        "options": [{"text": o, "votes": 0} for o in payload.options],
+        "chatId": payload.chatId,
+        "groupId": payload.groupId,
+        "channelId": payload.channelId,
+        "createdAt": datetime.now(timezone.utc),
+        "isActive": True,
+    }
+    result = polls_collection().insert_one(doc)
+    return {"status": "ok", "pollId": str(result.inserted_id)}
+
+
+@app.post("/polls/{poll_id}/vote")
+def vote_poll(
+    poll_id: str,
+    payload: PollVoteRequest,
+    current=Depends(get_current_user),
+):
+    """Проголосовать в опросе"""
+    if not ObjectId.is_valid(poll_id):
+        raise HTTPException(status_code=400, detail="Invalid poll id")
+    poll = polls_collection().find_one({"_id": ObjectId(poll_id)})
+    if not poll:
+        raise HTTPException(status_code=404, detail="Poll not found")
+    if not poll.get("isActive", True):
+        raise HTTPException(status_code=400, detail="Poll is closed")
+    if payload.optionIndex < 0 or payload.optionIndex >= len(poll["options"]):
+        raise HTTPException(status_code=400, detail="Invalid option index")
+    votes_collection().delete_one({"pollId": poll_id, "userId": current["userId"]})
+    votes_collection().insert_one({
+        "pollId": poll_id,
+        "userId": current["userId"],
+        "optionIndex": payload.optionIndex,
+        "votedAt": datetime.now(timezone.utc),
+    })
+    polls_collection().update_one(
+        {"_id": ObjectId(poll_id)},
+        {"$inc": {f"options.{payload.optionIndex}.votes": 1}}
+    )
+    return {"status": "ok"}
+
+
+@app.get("/polls/{poll_id}")
+def get_poll(poll_id: str, current=Depends(get_current_user)):
+    """Получить опрос с результатами"""
+    if not ObjectId.is_valid(poll_id):
+        raise HTTPException(status_code=400, detail="Invalid poll id")
+    poll = polls_collection().find_one({"_id": ObjectId(poll_id)})
+    if not poll:
+        raise HTTPException(status_code=404, detail="Poll not found")
+    user_vote = votes_collection().find_one({"pollId": poll_id, "userId": current["userId"]})
+    return {
+        "id": str(poll["_id"]),
+        "question": poll["question"],
+        "options": poll["options"],
+        "userVote": user_vote["optionIndex"] if user_vote else None,
+        "isActive": poll.get("isActive", True),
+        "createdAt": poll["createdAt"].isoformat(),
+    }
+
+
+@app.post("/stories")
+def create_story(
+    payload: StoryCreateRequest,
+    current=Depends(get_current_user),
+):
+    """Создать историю (доступна 24 часа)"""
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    doc = {
+        "userId": current["userId"],
+        "mediaType": payload.mediaType,
+        "mediaData": payload.mediaData,
+        "caption": payload.caption,
+        "createdAt": datetime.now(timezone.utc),
+        "expiresAt": expires_at,
+        "views": [],
+    }
+    result = stories_collection().insert_one(doc)
+    stories_collection().create_index("expiresAt", expireAfterSeconds=0)
+    return {"status": "ok", "storyId": str(result.inserted_id)}
+
+
+@app.get("/stories")
+def list_stories(current=Depends(get_current_user)):
+    """Список активных историй"""
+    now = datetime.now(timezone.utc)
+    stories = list(stories_collection().find(
+        {"expiresAt": {"$gt": now}}
+    ).sort("createdAt", -1))
+    result = []
+    for s in stories:
+        viewer = current["userId"] in s.get("views", [])
+        user = users_collection().find_one(
+            {"_id": ObjectId(s["userId"])},
+            {"username": 1, "displayName": 1, "avatarUrl": 1}
+        ) if ObjectId.is_valid(s["userId"]) else None
+        result.append({
+            "id": str(s["_id"]),
+            "userId": s["userId"],
+            "username": user.get("username", "Пользователь") if user else "Пользователь",
+            "displayName": user.get("displayName", "") if user else "",
+            "avatarUrl": user.get("avatarUrl", "") if user else "",
+            "mediaType": s["mediaType"],
+            "mediaData": s["mediaData"],
+            "caption": s.get("caption", ""),
+            "createdAt": s["createdAt"].isoformat(),
+            "expiresAt": s["expiresAt"].isoformat(),
+            "viewed": viewer,
+        })
+    return {"stories": result}
+
+
+@app.post("/stories/{story_id}/view")
+def view_story(story_id: str, current=Depends(get_current_user)):
+    """Отметить просмотр истории"""
+    if not ObjectId.is_valid(story_id):
+        raise HTTPException(status_code=400, detail="Invalid story id")
+    stories_collection().update_one(
+        {"_id": ObjectId(story_id)},
+        {"$addToSet": {"views": current["userId"]}}
+    )
+    return {"status": "ok"}
+
+
+@app.post("/events")
+def create_event(
+    payload: EventCreateRequest,
+    current=Depends(get_current_user),
+):
+    """Создать событие (встречу с датой и местом)"""
+    event_date = datetime.fromisoformat(payload.eventDate)
+    doc = {
+        "creatorId": current["userId"],
+        "title": payload.title,
+        "description": payload.description,
+        "eventDate": event_date,
+        "location": payload.location,
+        "participants": [current["userId"], *payload.participants],
+        "createdAt": datetime.now(timezone.utc),
+    }
+    result = events_collection().insert_one(doc)
+    return {"status": "ok", "eventId": str(result.inserted_id)}
+
+
+@app.get("/events")
+def list_events(current=Depends(get_current_user)):
+    """Список событий пользователя"""
+    events = list(events_collection().find(
+        {"participants": current["userId"]}
+    ).sort("eventDate", 1))
+    return {
+        "items": [
+            {
+                "id": str(e["_id"]),
+                "title": e["title"],
+                "description": e.get("description", ""),
+                "eventDate": e["eventDate"].isoformat(),
+                "location": e.get("location", ""),
+                "participants": e.get("participants", []),
+                "creatorId": e["creatorId"],
+                "createdAt": e["createdAt"].isoformat(),
+            }
+            for e in events
+        ]
+    }
+
+
+@app.post("/reports")
+def create_report(
+    payload: ReportRequest,
+    current=Depends(get_current_user),
+):
+    """Пожаловаться на пользователя, сообщение, канал или группу"""
+    doc = {
+        "reporterId": current["userId"],
+        "targetType": payload.targetType,
+        "targetId": payload.targetId,
+        "reason": payload.reason,
+        "status": "pending",
+        "createdAt": datetime.now(timezone.utc),
+    }
+    result = reports_collection().insert_one(doc)
+    return {"status": "ok", "reportId": str(result.inserted_id)}
+
+
+@app.get("/settings")
+def get_user_settings(current=Depends(get_current_user)):
+    """Получить настройки оформления и поведения пользователя"""
+    settings = user_settings_collection().find_one({"userId": current["userId"]})
+    if not settings:
+        return {
+            "theme": "dark",
+            "accentColor": "#3b82f6",
+            "chatBackground": "",
+            "fontSize": "medium",
+            "messageDensity": "comfortable",
+            "animationsEnabled": True,
+            "pinnedChatIds": [],
+            "quickActionButtons": [],
+        }
+    return {
+        "theme": settings.get("theme", "dark"),
+        "accentColor": settings.get("accentColor", "#3b82f6"),
+        "chatBackground": settings.get("chatBackground", ""),
+        "fontSize": settings.get("fontSize", "medium"),
+        "messageDensity": settings.get("messageDensity", "comfortable"),
+        "animationsEnabled": settings.get("animationsEnabled", True),
+        "pinnedChatIds": settings.get("pinnedChatIds", []),
+        "quickActionButtons": settings.get("quickActionButtons", []),
+    }
+
+
+@app.post("/settings")
+def save_user_settings(
+    payload: UserSettingsRequest,
+    current=Depends(get_current_user),
+):
+    """Сохранить настройки оформления"""
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    user_settings_collection().update_one(
+        {"userId": current["userId"]},
+        {"$set": update, "$setOnInsert": {"createdAt": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/auth/2fa")
+def toggle_two_factor(
+    payload: TwoFactorRequest,
+    current=Depends(get_current_user),
+):
+    """Включить/выключить двухфакторную аутентификацию"""
+    update = {"twoFactorEnabled": payload.enable}
+    if payload.enable and payload.code:
+        update["twoFactorCode"] = payload.code
+        update["twoFactorEnabledAt"] = datetime.now(timezone.utc)
+    users_collection().update_one(
+        {"_id": ObjectId(current["userId"])},
+        {"$set": update}
+    )
+    return {"status": "ok", "twoFactorEnabled": payload.enable}
+
+
+@app.get("/auth/sessions")
+def list_user_sessions(current=Depends(get_current_user)):
+    """Список активных сессий (входы по устройствам)"""
+    sessions = list(user_sessions_collection().find({"userId": current["userId"]}))
+    return {
+        "sessions": [
+            {
+                "id": str(s["_id"]),
+                "deviceName": s.get("deviceName", "Неизвестное устройство"),
+                "ipAddress": s.get("ipAddress", ""),
+                "userAgent": s.get("userAgent", ""),
+                "lastActive": s.get("lastActive", s.get("createdAt", datetime.now(timezone.utc))).isoformat(),
+                "isCurrent": s.get("isCurrent", False),
+            }
+            for s in sessions
+        ]
+    }
+
+
+@app.get("/auth/login-history")
+def get_login_history(current=Depends(get_current_user)):
+    """История входов в аккаунт"""
+    history = list(login_history_collection().find(
+        {"userId": current["userId"]}
+    ).sort("loginAt", -1).limit(50))
+    return {
+        "items": [
+            {
+                "id": str(h["_id"]),
+                "ipAddress": h.get("ipAddress", ""),
+                "userAgent": h.get("userAgent", ""),
+                "loginAt": h["loginAt"].isoformat(),
+                "location": h.get("location", ""),
+            }
+            for h in history
+        ]
+    }
+
+
+@app.post("/auth/pin-code")
+def set_app_pin_code(
+    payload: PinCodeRequest,
+    current=Depends(get_current_user),
+):
+    """Установить/убрать PIN-код на приложение"""
+    update = {}
+    if payload.enable is not None:
+        update["pinCodeEnabled"] = payload.enable
+    if payload.pin is not None:
+        update["pinCodeHash"] = hashlib.sha256(payload.pin.encode()).hexdigest()
+    users_collection().update_one(
+        {"_id": ObjectId(current["userId"])},
+        {"$set": update}
+    )
+    return {"status": "ok", "pinCodeEnabled": payload.enable or False}
+
+
+@app.post("/auth/auto-delete-account")
+def request_auto_delete_account(
+    payload: AutoDeleteAccountRequest,
+    current=Depends(get_current_user),
+):
+    """Настроить автоудаление аккаунта при бездействии N месяцев"""
+    users_collection().update_one(
+        {"_id": ObjectId(current["userId"])},
+        {"$set": {
+            "autoDeleteAfterMonths": payload.months,
+            "autoDeleteEnabled": True,
+        }}
+    )
+    return {"status": "ok", "autoDeleteAfterMonths": payload.months}
+
+
+@app.post("/bots/{bot_id}/commands")
+def add_bot_command(bot_id: str, payload: BotCommandRequest, current=Depends(get_current_user)):
+    """Добавить команду для бота"""
+    bots_collection().update_one(
+        {"_id": ObjectId(bot_id), "ownerId": current["userId"]},
+        {"$push": {"commands": {"command": payload.command, "response": payload.response, "addedAt": datetime.now(timezone.utc)}}}
+    )
+    return {"status": "ok"}
+
+
+@app.post("/gifts/send")
+def send_gift(
+    payload: GiftSendRequest,
+    current=Depends(get_current_user),
+):
+    """Отправить анимированный подарок (Lottie) пользователю"""
+    gift = gifts_collection().find_one({"_id": ObjectId(payload.giftId)})
+    if not gift:
+        raise HTTPException(status_code=404, detail="Gift not found")
+    doc = {
+        "senderId": current["userId"],
+        "receiverId": payload.targetUserId,
+        "giftId": payload.giftId,
+        "giftName": gift.get("name", "Подарок"),
+        "sentAt": datetime.now(timezone.utc),
+    }
+    from db import get_db
+    get_db()["sent_gifts"].insert_one(doc)
+    try:
+        sio.emit("gift_received", {
+            "giftId": payload.giftId,
+            "giftName": gift.get("name", "Подарок"),
+            "senderId": current["userId"],
+        }, to=f"user:{payload.targetUserId}")
+    except Exception:
+        pass
+    return {"status": "ok"}
+
+
+@app.get("/gifts")
+def list_available_gifts():
+    """Список доступных подарков"""
+    gifts = list(gifts_collection().find({}, {"name": 1, "emoji": 1, "priceCoins": 1, "imageUrl": 1}))
+    return {
+        "gifts": [
+            {
+                "id": str(g["_id"]),
+                "name": g.get("name", "Подарок"),
+                "emoji": g.get("emoji", "🎁"),
+                "priceCoins": g.get("priceCoins", 0),
+                "imageUrl": g.get("imageUrl", ""),
+            }
+            for g in gifts
+        ]
+    }
 
 
 # Keep the FastAPI app separately available, but make the conventional `main:app`

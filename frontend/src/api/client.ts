@@ -91,3 +91,254 @@ export const keysApi = {
   },
   exchange: (targetUserId: string) => api.post<{ myKey: string; targetKey: string }>('/keys/exchange', { targetUserId }),
 };
+
+// ============================================================================
+// 1-10: Сообщения
+// ============================================================================
+
+export interface DisappearingMessagesRequest {
+  chatId: string;
+  expireAfterMinutes: number;
+}
+
+export interface MessageForwardRequest {
+  messageId: string;
+  targetChatId?: string;
+  targetUserId?: string;
+}
+
+export interface MessageReplyRequest {
+  text?: string;
+  type?: "text" | "image" | "file";
+  fileName?: string;
+  contentType?: string;
+  fileData?: string;
+}
+
+export interface SavedMessageItem {
+  savedId: string;
+  savedAt: string;
+  message: any;
+}
+
+export interface DraftMessage {
+  chatId: string;
+  text: string;
+}
+
+export interface ScheduledMessage {
+  id: string;
+  receiverId?: string;
+  groupId?: string;
+  text: string;
+  sendAt: string;
+  status: string;
+}
+
+export interface QuickReply {
+  id: string;
+  title: string;
+  text: string;
+  emoji?: string;
+}
+
+export const messagesApi = {
+  setDisappearing: (chatId: string, expireAfterMinutes: number) =>
+    api.post('/messages/disappearing', { chatId, expireAfterMinutes }),
+  getDisappearing: (chatId: string) =>
+    api.get(`/messages/disappearing/${chatId}`),
+  deleteForAll: (messageId: string) =>
+    api.post(`/messages/${messageId}/delete-for-all`),
+  forward: (messageId: string, targetChatId?: string, targetUserId?: string) =>
+    api.post(`/messages/${messageId}/forward`, { messageId, targetChatId, targetUserId }),
+  reply: (messageId: string, payload: MessageReplyRequest) =>
+    api.post(`/messages/${messageId}/reply`, payload),
+  saveDraft: (chatId: string, text: string) =>
+    api.post('/drafts', { chatId, text }),
+  getDraft: (chatId: string) => api.get<{ text: string }>(`/drafts/${chatId}`),
+  saveToBookmarks: (messageId: string) =>
+    api.post('/saved-messages', { messageId }),
+  getSavedMessages: (limit?: number, skip?: number) =>
+    api.get<{ items: SavedMessageItem[]; count: number }>('/saved-messages', { params: { limit, skip } }),
+  scheduleMessage: (payload: any) => api.post('/scheduled-messages', payload),
+  getScheduledMessages: () => api.get<{ items: ScheduledMessage[] }>('/scheduled-messages'),
+  createQuickReply: (title: string, text: string, emoji?: string) =>
+    api.post('/quick-replies', { title, text, emoji }),
+  getQuickReplies: () => api.get<{ items: QuickReply[] }>('/quick-replies'),
+};
+
+// ============================================================================
+// 11-20: Пользователи
+// ============================================================================
+
+export interface FriendRequest {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  fromUsername: string;
+  createdAt: string;
+}
+
+export interface BlockedUser {
+  id: string;
+  blockedUserId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  blockedAt: string;
+}
+
+export const usersApi = {
+  sendFriendRequest: (targetUserId: string) =>
+    api.post('/friend-requests', { targetUserId }),
+  getFriendRequests: () =>
+    api.get<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>('/friend-requests'),
+  respondFriendRequest: (requestId: string, accept: boolean) =>
+    api.post(`/friend-requests/${requestId}/respond`, { accept }),
+  blockUser: (targetUserId: string) =>
+    api.post('/block-user', { targetUserId }),
+  getBlockedUsers: () => api.get<{ blocked: BlockedUser[] }>('/blocked-users'),
+  setProfileBanner: (bannerUrl: string) =>
+    api.post('/profile/banner', { bannerUrl }),
+  requestVerification: (reason: string) =>
+    api.post('/profile/verification', { reason }),
+};
+
+// ============================================================================
+// 21-30: Медиа и контент
+// ============================================================================
+
+export interface PollOption {
+  text: string;
+  votes: number;
+}
+
+export interface Poll {
+  id: string;
+  question: string;
+  options: PollOption[];
+  userVote?: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface Story {
+  id: string;
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  mediaType: "image" | "video";
+  mediaData: string;
+  caption: string;
+  createdAt: string;
+  expiresAt: string;
+  viewed: boolean;
+}
+
+export interface Event {
+  id: string;
+  title: string;
+  description: string;
+  eventDate: string;
+  location: string;
+  participants: string[];
+  creatorId: string;
+  createdAt: string;
+}
+
+export interface Gift {
+  id: string;
+  name: string;
+  emoji: string;
+  priceCoins: number;
+  imageUrl: string;
+}
+
+export const mediaApi = {
+  createPoll: (question: string, options: string[], chatId?: string, groupId?: string, channelId?: string) =>
+    api.post('/polls', { question, options, chatId, groupId, channelId }),
+  votePoll: (pollId: string, optionIndex: number) =>
+    api.post(`/polls/${pollId}/vote`, { optionIndex }),
+  getPoll: (pollId: string) => api.get<Poll>(`/polls/${poll_id}`),
+  createStory: (mediaType: "image" | "video", mediaData: string, caption?: string) =>
+    api.post('/stories', { mediaType, mediaData, caption: caption || "" }),
+  getStories: () => api.get<{ stories: Story[] }>('/stories'),
+  viewStory: (storyId: string) => api.post(`/stories/${storyId}/view`),
+  createEvent: (title: string, description: string, eventDate: string, location: string, participants: string[]) =>
+    api.post('/events', { title, description, eventDate, location, participants }),
+  getEvents: () => api.get<{ items: Event[] }>('/events'),
+  sendGift: (giftId: string, targetUserId: string) =>
+    api.post('/gifts/send', { giftId, targetUserId }),
+  getGifts: () => api.get<{ gifts: Gift[] }>('/gifts'),
+};
+
+// ============================================================================
+// 31-40: Социальные функции
+// ============================================================================
+
+export const socialApi = {
+  report: (targetType: "user" | "message" | "channel" | "group", targetId: string, reason: string) =>
+    api.post('/reports', { targetType, targetId, reason }),
+};
+
+// ============================================================================
+// 41-50: Кастомизация
+// ============================================================================
+
+export interface UserSettings {
+  theme: "light" | "dark";
+  accentColor: string;
+  chatBackground: string;
+  fontSize: "small" | "medium" | "large";
+  messageDensity: "compact" | "comfortable";
+  animationsEnabled: boolean;
+  pinnedChatIds: string[];
+  quickActionButtons: string[];
+}
+
+export const settingsApi = {
+  getSettings: () => api.get<UserSettings>('/settings'),
+  saveSettings: (settings: Partial<UserSettings>) => api.post('/settings', settings),
+};
+
+// ============================================================================
+// 51-60: Безопасность
+// ============================================================================
+
+export interface UserSession {
+  id: string;
+  deviceName: string;
+  ipAddress: string;
+  userAgent: string;
+  lastActive: string;
+  isCurrent: boolean;
+}
+
+export interface LoginHistoryItem {
+  id: string;
+  ipAddress: string;
+  userAgent: string;
+  loginAt: string;
+  location: string;
+}
+
+export const securityApi = {
+  toggle2FA: (enable: boolean, code?: string) =>
+    api.post('/auth/2fa', { enable, code }),
+  getSessions: () => api.get<{ sessions: UserSession[] }>('/auth/sessions'),
+  getLoginHistory: () => api.get<{ items: LoginHistoryItem[] }>('/auth/login-history'),
+  setPinCode: (pin?: string, enable?: boolean) =>
+    api.post('/auth/pin-code', { pin, enable }),
+  setAutoDelete: (months: number) =>
+    api.post('/auth/auto-delete-account', { months }),
+};
+
+// ============================================================================
+// 61-70: Продвинутые (боты, подарки уже в mediaApi)
+// ============================================================================
+
+export const advancedApi = {
+  addBotCommand: (botId: string, command: string, response: string) =>
+    api.post(`/bots/${botId}/commands`, { command, response }),
+};
