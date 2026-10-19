@@ -733,6 +733,36 @@ def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_us
     return {"status": "ok", "message": "Profile updated"}
 
 
+@app.get("/unread/summary")
+def unread_summary(current=Depends(get_current_user)):
+    me = current["userId"]
+    chats_unread = messages_collection().count_documents({
+        "receiverId": me,
+        "senderId": {"$ne": me},
+        "read": False,
+        "groupId": {"$exists": False},
+    })
+    group_ids = [str(g["_id"]) for g in groups_collection().find({"members.userId": me}, {"_id": 1})]
+    groups_unread = 0
+    if group_ids:
+        groups_unread = messages_collection().count_documents({
+            "groupId": {"$in": group_ids},
+            "senderId": {"$ne": me},
+            "readBy": {"$ne": me},
+        })
+    owner = users_collection().find_one({"_id": ObjectId(me)}, {"channelReads": 1})
+    channel_reads = (owner or {}).get("channelReads") or {}
+    epoch = datetime.min.replace(tzinfo=timezone.utc)
+    channels_unread = 0
+    for ch_doc in channels_collection().find({"members.userId": me}, {"_id": 1}):
+        cid = str(ch_doc["_id"])
+        channels_unread += channel_posts_collection().count_documents({
+            "channelId": cid,
+            "createdAt": {"$gt": channel_reads.get(cid) or epoch},
+        })
+    return {"chats": chats_unread, "groups": groups_unread, "channels": channels_unread}
+
+
 @app.get("/contacts")
 def get_contacts(current=Depends(get_current_user)):
     users = users_collection()
@@ -751,9 +781,6 @@ def get_contacts(current=Depends(get_current_user)):
         except (KeyError, TypeError, ValueError):
             continue
 
-    if not contact_ids:
-        return []
-
     profile_by_id = {
         str(user["_id"]): user
         for user in users.find(
@@ -768,6 +795,26 @@ def get_contacts(current=Depends(get_current_user)):
         if isinstance(entry, dict) and isinstance(entry.get("userId"), str)
     }
     current_id = current["userId"]
+
+    # Переписки: партнёр → непрочитанные + время последнего сообщения (Telegram-стиль)
+    chat_pipeline = [
+        {"$match": {"$or": [{"senderId": current_id}, {"receiverId": current_id}], "groupId": {"$exists": False}}},
+        {"$addFields": {
+            "partner": {"$cond": [{"$eq": ["$senderId", current_id]}, "$receiverId", "$senderId"]},
+            "fromPartner": {"$ne": ["$senderId", current_id]},
+        }},
+        {"$group": {
+            "_id": "$partner",
+            "unread": {"$sum": {"$cond": [{"$and": ["$fromPartner", {"$eq": ["$read", False]}]}, 1, 0]}},
+            "lastAt": {"$max": "$createdAt"},
+        }},
+    ]
+    chat_stats = {
+        str(row["_id"]): row
+        for row in messages_collection().aggregate(chat_pipeline)
+        if str(row["_id"]) != current_id
+    }
+
     result = []
     for contact in contacts:
         contact_id = contact.get("userId")
@@ -800,8 +847,41 @@ def get_contacts(current=Depends(get_current_user)):
             "chatHidden": bool(hidden_at and (
                 not latest_message or latest_message["createdAt"] <= hidden_at
             )),
+            "unreadCount": chat_stats.get(contact_id, {}).get("unread", 0),
+            "isContact": True,
         })
 
+    # Партнёры по переписке, которых нет в контактах (чат появляется сам, как в Telegram)
+    known_ids = {str(c) for c in contact_ids}
+    for partner_id, stats in chat_stats.items():
+        if partner_id in known_ids:
+            continue
+        profile = users.find_one(
+            {"_id": ObjectId(partner_id)},
+            {"email": 0, "passwordHash": 0, "contacts": 0},
+        )
+        if not profile:
+            continue
+        hidden_at = hidden_chats.get(partner_id)
+        if hidden_at and stats.get("lastAt", datetime.min.replace(tzinfo=timezone.utc)) <= hidden_at:
+            continue
+        result.append({
+            "id": partner_id,
+            "nickname": profile["username"],
+            "username": profile["username"],
+            "displayName": profile.get("displayName", profile["username"]),
+            "avatarUrl": profile.get("avatarUrl", ""),
+            "bio": profile.get("bio", ""),
+            "statusText": profile.get("statusText", ""),
+            "isPremium": serialize_premium(profile)["isPremium"],
+            **({"lastSeen": profile.get("lastSeen")} if profile.get("showLastSeen", True) else {}),
+            "chatHidden": False,
+            "unreadCount": stats.get("unread", 0),
+            "isContact": False,
+        })
+
+    epoch = datetime.min.replace(tzinfo=timezone.utc)
+    result.sort(key=lambda item: chat_stats.get(item["id"], {}).get("lastAt") or epoch, reverse=True)
     return result
 
 
@@ -1469,6 +1549,10 @@ def get_group_messages(
 ):
     group = get_group_for_member(group_id, current["userId"])
     member = next(member for member in group["members"] if member["userId"] == current["userId"])
+    messages_collection().update_many(
+        {"groupId": group_id, "readBy": {"$ne": current["userId"]}},
+        {"$push": {"readBy": current["userId"]}},
+    )
     query: dict = {"groupId": group_id, "createdAt": {"$gte": member["joinedAt"]}}
     if before:
         if not ObjectId.is_valid(before):
@@ -1564,6 +1648,7 @@ async def send_group_message(
         "text": text,
         "type": "text",
         "reactions": [],
+        "readBy": [current["userId"]],
         "pinned": False,
         "createdAt": now,
         "read": False,

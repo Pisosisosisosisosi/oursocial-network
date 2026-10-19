@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Crown, Download, ExternalLink, FileText, MoreHorizontal, Paperclip, Pencil, Pin, Search, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Paperclip, Pencil, Pin, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { useToast } from '../context/useToast';
 import { decryptMessage, encryptMessage, isEncryptedMessage } from '../crypto/encrypt';
 import WorkspaceTabs from '../components/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/WorkspaceSidebarHeader';
+import EmojiPicker from '../components/EmojiPicker';
 
 interface ChatMessage {
   id: string;
@@ -28,7 +29,7 @@ interface ChatMessage {
   read: boolean;
 }
 
-const REACTIONS = ['❤️', '👍', '😂'] as const;
+const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'] as const;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'application/pdf', 'text/plain', 'text/csv', 'application/zip',
@@ -120,6 +121,9 @@ export default function Chats() {
     x: number;
     y: number;
   } | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [replyingMessage, setReplyingMessage] = useState<ChatMessage | null>(null);
+  const [localQuotes, setLocalQuotes] = useState<Record<string, { senderName: string; text: string }>>({});
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesListRef = useRef<HTMLDivElement>(null);
@@ -135,6 +139,8 @@ export default function Chats() {
   const pinnedHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileRequestRef = useRef(0);
   const typingRecipientRef = useRef<string | null>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const activeChatId = activeChat ? String(activeChat.id) : null;
 
@@ -318,6 +324,7 @@ export default function Chats() {
     if (lightboxCloseTimeoutRef.current) clearTimeout(lightboxCloseTimeoutRef.current);
     if (profileCloseTimeoutRef.current) clearTimeout(profileCloseTimeoutRef.current);
     if (pinnedHighlightTimeoutRef.current) clearTimeout(pinnedHighlightTimeoutRef.current);
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
   }, []);
 
   const closeMessageMenu = useCallback(() => {
@@ -355,7 +362,7 @@ export default function Chats() {
 
     const handlePointerDown = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return;
-      if (event.target.closest('[data-message-menu]') || event.target.closest('[data-message-menu-trigger]')) return;
+      if (event.target.closest('[data-message-menu]') || event.target.closest('[data-message-menu-trigger]') || event.target.closest('[data-emoji-picker]')) return;
       closeMessageMenu();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -483,6 +490,7 @@ export default function Chats() {
         return;
       }
       void api.get<ChatMessage[]>(`/messages/${activeChat.id}`, { params: { limit: 20 } }).then((response) => {
+        void api.get<Contact[]>('/contacts').then((res) => setContacts(res.data)).catch(() => undefined);
         return Promise.all(response.data.map((message) => decryptChatMessage(message, currentUser?.id)));
       }).then((decryptedMessages) => {
         setMessages((previous) => {
@@ -663,6 +671,15 @@ export default function Chats() {
         type: 'text',
       });
       setMessages((previous) => [...previous, { ...response.data, text: msgText }]);
+      void api.get<Contact[]>('/contacts').then((res) => setContacts(res.data)).catch(() => undefined);
+      if (replyingMessage) {
+        const quoteSender = replyingMessage.senderId === currentUser.id
+          ? 'Вы'
+          : (activeChat.displayName || activeChat.username || 'Собеседник');
+        const quoteText = replyingMessage.text || (replyingMessage.type !== 'text' ? '📎 Вложение' : '');
+        setLocalQuotes((prev) => ({ ...prev, [response.data.id]: { senderName: quoteSender, text: quoteText } }));
+        setReplyingMessage(null);
+      }
       setText('');
     } catch (err) {
       console.error("Ошибка отправки:", err);
@@ -893,6 +910,18 @@ export default function Chats() {
     typingTimeoutRef.current = setTimeout(() => stopTyping(recipientId), 1500);
   };
 
+  const insertEmoji = (emoji: string) => {
+    const input = textInputRef.current;
+    const start = input?.selectionStart ?? text.length;
+    const end = input?.selectionEnd ?? text.length;
+    handleTextChange(text.slice(0, start) + emoji + text.slice(end));
+    requestAnimationFrame(() => {
+      input?.focus();
+      const caret = start + emoji.length;
+      input?.setSelectionRange(caret, caret);
+    });
+  };
+
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     setSearchResults([]);
@@ -999,6 +1028,11 @@ export default function Chats() {
                   <span className="truncate">{contact?.nickname || user.nickname || user.displayName || user.username}</span>
                 </div>
                 <div className="text-[10px] text-slate-500 truncate font-mono">@{user.username}</div>
+                {((user as Contact).unreadCount ?? 0) > 0 && activeChat?.id !== user.id && (
+                  <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                    {(user as Contact).unreadCount! > 99 ? '99+' : (user as Contact).unreadCount}
+                  </span>
+                )}
               </div>
             </div>
           );})}
@@ -1143,7 +1177,15 @@ export default function Chats() {
                           event.preventDefault();
                           showMessageMenu(m.id, event.clientX, event.clientY);
                         }}
-                        className={`chat-message max-w-full p-3.5 rounded-2xl text-xs leading-relaxed relative group ${
+                        onTouchStart={(event) => {
+                          const touch = event.touches[0];
+                          longPressTimerRef.current = setTimeout(() => {
+                            showMessageMenu(m.id, touch.clientX, touch.clientY);
+                          }, 500);
+                        }}
+                        onTouchEnd={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } }}
+                        onTouchMove={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } }}
+                        className={`chat-message max-w-full p-3.5 rounded-2xl text-xs leading-relaxed relative ${
                           isMe
                             ? 'bg-gradient-to-br from-accent-to to-accent/40 text-white rounded-br-none shadow-[0_4px_20px_rgba(var(--accent-rgb),0.3)] border border-accent/30'
                             : 'bg-slate-800/80 text-slate-200 rounded-bl-none border border-slate-700/50 shadow-lg'
@@ -1176,27 +1218,16 @@ export default function Chats() {
                           </div>
                         ) : (
                           <>
+                            {localQuotes[m.id] && (
+                              <div className="mb-2 rounded-lg border-l-2 border-accent/60 bg-black/15 px-2.5 py-1.5">
+                                <p className="text-[9px] font-semibold uppercase tracking-wider text-accent">{localQuotes[m.id].senderName}</p>
+                                <p className="truncate text-[10px] text-slate-300">{localQuotes[m.id].text}</p>
+                              </div>
+                            )}
                             {m.text && <div className="chat-message-content whitespace-pre-wrap break-words">{highlightText(m.text, chatSearch)}</div>}
                             {m.edited && <span className="mt-1 block text-right text-[9px] text-t-secondary">изменено</span>}
                           </>
                         )}
-                        <button
-                          type="button"
-                          data-message-menu-trigger
-                          aria-label="Действия с сообщением"
-                          aria-expanded={openMessageMenu === m.id}
-                          onClick={(event) => {
-                            if (openMessageMenu === m.id) {
-                              closeMessageMenu();
-                              return;
-                            }
-                            const rect = event.currentTarget.getBoundingClientRect();
-                            showMessageMenu(m.id, rect.right, rect.bottom);
-                          }}
-                          className="absolute -top-2 -right-2 rounded-full border border-white/10 bg-slate-950 p-1.5 text-slate-300 opacity-100 shadow transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
-                        >
-                            <MoreHorizontal size={14} />
-                          </button>
                         <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono ${isMe ? 'text-accent/70' : 'text-t-secondary/70'}`}>
                           <time>{m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time>
                           {isMe && localStorage.getItem('skylineShowReadReceipts') !== 'false' && (
@@ -1239,11 +1270,36 @@ export default function Chats() {
                 </div>
               )}
               <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void handleAttachment(event)} className="hidden" />
+              {replyingMessage && (
+                <div className="mb-2 flex items-center gap-3 rounded-2xl border-l-2 border-accent bg-white/[0.04] px-3.5 py-2.5 animate-slide-up">
+                  <Reply size={15} className="shrink-0 text-accent" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-accent">
+                      Ответить {replyingMessage.senderId === currentUser?.id ? 'себе' : `@${activeChat?.username ?? ''}`}
+                    </p>
+                    <p className="truncate text-xs text-t-secondary">{replyingMessage.text || '📎 Вложение'}</p>
+                  </div>
+                  <button type="button" onClick={() => setReplyingMessage(null)} aria-label="Отменить ответ" className="grid min-h-[44px] min-w-[44px] place-items-center rounded-xl text-t-secondary transition hover:bg-white/5 hover:text-t-primary">
+                    <X size={15} />
+                  </button>
+                </div>
+              )}
               <form ref={messageFormRef} onSubmit={handleSend} className="glass-panel p-1.5 sm:p-2 rounded-2xl flex items-center gap-1 sm:gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-accent/30 transition-all">
+                 <div className="relative">
+                   <button type="button" onClick={() => setShowEmojiPicker((v) => !v)} className={`p-2.5 rounded-xl transition-all ${showEmojiPicker ? 'text-accent bg-accent/10' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title="Эмодзи" aria-label="Эмодзи" aria-expanded={showEmojiPicker}>
+                     <Smile size={19} />
+                   </button>
+                   {showEmojiPicker && (
+                     <div className="absolute bottom-full left-0 z-30 mb-2">
+                       <EmojiPicker onPick={(emoji) => insertEmoji(emoji)} onClose={() => setShowEmojiPicker(false)} />
+                     </div>
+                   )}
+                 </div>
                  <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={sending} className="p-2.5 rounded-xl text-t-secondary hover:text-slate-200 hover:bg-slate-800/80 transition-all disabled:opacity-50" title="Прикрепить изображение или файл" aria-label="Прикрепить файл">
                    <Paperclip size={19} />
                  </button>
-                 <input 
+                 <input
+                    ref={textInputRef}
                     value={text}
                     onChange={e => handleTextChange(e.target.value)}
                     onKeyDown={(event) => {
@@ -1465,6 +1521,31 @@ export default function Chats() {
                 })}
               </div>
             </div>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setReplyingMessage(menuMessage);
+                closeMessageMenu();
+                window.setTimeout(() => textInputRef.current?.focus(), 50);
+              }}
+              className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-accent/10 hover:text-accent"
+            >
+              <Reply size={15} /> Ответить
+            </button>
+            {menuMessage.text && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(menuMessage.text);
+                  closeMessageMenu();
+                }}
+                className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-accent/10 hover:text-accent"
+              >
+                <Copy size={15} /> Копировать текст
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"

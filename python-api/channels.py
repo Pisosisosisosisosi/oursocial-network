@@ -300,6 +300,10 @@ def get_channel_posts(
 ):
     channel = channel_by_id(channel_id)
     require_read_access(channel, current["userId"])
+    users_collection().update_one(
+        {"_id": ObjectId(current["userId"])},
+        {"$set": {f"channelReads.{channel_id}": datetime.now(timezone.utc)}},
+    )
     posts = channel_posts_collection().find({"channelId": channel_id}).sort(
         [("pinned", -1), ("createdAt", -1), ("_id", -1)]
     ).limit(limit)

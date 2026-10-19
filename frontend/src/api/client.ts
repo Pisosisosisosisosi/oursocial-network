@@ -40,6 +40,8 @@ export interface User {
 
 export interface Contact extends User {
   nickname: string;
+  unreadCount?: number;
+  isContact?: boolean;
   chatHidden?: boolean;
 }
 
