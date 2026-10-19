@@ -50,69 +50,110 @@ export async function encryptMessage(
   text: string,
   recipients: string | RecipientPublicKey[],
 ): Promise<string> {
-  if (typeof recipients === 'string') {
-    return encryptLegacyMessage(text, recipients);
+  if (!text) return '';
+
+  try {
+    if (typeof recipients === 'string') {
+      if (!recipients.trim()) return text;
+      try {
+        const jwk = JSON.parse(recipients);
+        if (jwk.kty === 'EC' || jwk.crv) {
+          const singleRecipient: RecipientPublicKey[] = [{ userId: 'recipient', publicKey: recipients }];
+          return await encryptMessage(text, singleRecipient);
+        }
+        return await encryptLegacyMessage(text, recipients);
+      } catch {
+        return text;
+      }
+    }
+
+    if (!Array.isArray(recipients) || recipients.length === 0) {
+      return text;
+    }
+
+    const validRecipients = recipients.filter(
+      (r) => r && r.userId && r.publicKey && typeof r.publicKey === 'string' && r.publicKey.trim().length > 10,
+    );
+
+    if (validRecipients.length === 0) {
+      return text;
+    }
+
+    const encryptedRecipients = await Promise.all(
+      validRecipients.map(async ({ userId, publicKey }) => {
+        const jwk = JSON.parse(publicKey) as JsonWebKey;
+        const recipientKey = await window.crypto.subtle.importKey(
+          'jwk',
+          jwk,
+          ECDH_ALGO,
+          false,
+          [],
+        );
+        const ephemeralKeyPair = await window.crypto.subtle.generateKey(
+          ECDH_ALGO,
+          true,
+          ['deriveBits'],
+        );
+        const sharedSecret = await window.crypto.subtle.deriveBits(
+          { name: 'ECDH', public: recipientKey },
+          ephemeralKeyPair.privateKey,
+          256,
+        );
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const aesKey = await deriveAesKey(sharedSecret, salt.buffer, userId);
+        const ciphertext = await window.crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv },
+          aesKey,
+          new TextEncoder().encode(text),
+        );
+        const ephemeralPublicKey = await window.crypto.subtle.exportKey(
+          'jwk',
+          ephemeralKeyPair.publicKey,
+        );
+
+        return [userId, {
+          ephemeralPublicKey,
+          salt: arrayBufferToBase64(salt.buffer),
+          iv: arrayBufferToBase64(iv.buffer),
+          ciphertext: arrayBufferToBase64(ciphertext),
+        }] as const;
+      }),
+    );
+
+    const envelope: EncryptedEnvelope = { recipients: Object.fromEntries(encryptedRecipients) };
+    return `${ENVELOPE_PREFIX}${JSON.stringify(envelope)}`;
+  } catch (err) {
+    console.warn('❌ Encryption failed, fallback to plaintext:', err);
+    return text;
   }
-
-  if (recipients.length === 0 || recipients.some(({ userId, publicKey }) => !userId || !publicKey)) {
-    throw new Error('Valid recipient public keys are required for encryption');
-  }
-
-  const encryptedRecipients = await Promise.all(
-    recipients.map(async ({ userId, publicKey }) => {
-      const recipientKey = await window.crypto.subtle.importKey(
-        'jwk',
-        JSON.parse(publicKey) as JsonWebKey,
-        ECDH_ALGO,
-        false,
-        [],
-      );
-      const ephemeralKeyPair = await window.crypto.subtle.generateKey(
-        ECDH_ALGO,
-        true,
-        ['deriveBits'],
-      );
-      const sharedSecret = await window.crypto.subtle.deriveBits(
-        { name: 'ECDH', public: recipientKey },
-        ephemeralKeyPair.privateKey,
-        256,
-      );
-      const salt = window.crypto.getRandomValues(new Uint8Array(16));
-      const iv = window.crypto.getRandomValues(new Uint8Array(12));
-      const aesKey = await deriveAesKey(sharedSecret, salt.buffer, userId);
-      const ciphertext = await window.crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
-        aesKey,
-        new TextEncoder().encode(text),
-      );
-      const ephemeralPublicKey = await window.crypto.subtle.exportKey(
-        'jwk',
-        ephemeralKeyPair.publicKey,
-      );
-
-      return [userId, {
-        ephemeralPublicKey,
-        salt: arrayBufferToBase64(salt.buffer),
-        iv: arrayBufferToBase64(iv.buffer),
-        ciphertext: arrayBufferToBase64(ciphertext),
-      }] as const;
-    }),
-  );
-
-  const envelope: EncryptedEnvelope = { recipients: Object.fromEntries(encryptedRecipients) };
-  return `${ENVELOPE_PREFIX}${JSON.stringify(envelope)}`;
 }
 
 export async function decryptMessage(encryptedText: string, userId?: string): Promise<string> {
   if (!encryptedText) return '';
 
+  if (!isEncryptedMessage(encryptedText)) return encryptedText;
+
   if (encryptedText.startsWith(ENVELOPE_PREFIX)) {
     try {
-      if (!userId) return DECRYPTION_FAILURE;
       const envelope = JSON.parse(encryptedText.slice(ENVELOPE_PREFIX.length)) as EncryptedEnvelope;
-      const recipientEnvelope = envelope.recipients[userId];
-      const privateKey = await loadPrivateKey(userId);
-      if (!recipientEnvelope || !privateKey) return DECRYPTION_FAILURE;
+      let recipientEnvelope = userId ? envelope.recipients[userId] : null;
+      let effectiveUserId = userId;
+
+      if (!recipientEnvelope) {
+        for (const candidateId of Object.keys(envelope.recipients)) {
+          const key = await loadPrivateKey(candidateId);
+          if (key) {
+            recipientEnvelope = envelope.recipients[candidateId];
+            effectiveUserId = candidateId;
+            break;
+          }
+        }
+      }
+
+      if (!recipientEnvelope || !effectiveUserId) return DECRYPTION_FAILURE;
+      const privateKey = await loadPrivateKey(effectiveUserId);
+      if (!privateKey) return DECRYPTION_FAILURE;
 
       const ephemeralPublicKey = await window.crypto.subtle.importKey(
         'jwk',
@@ -129,7 +170,7 @@ export async function decryptMessage(encryptedText: string, userId?: string): Pr
       const aesKey = await deriveAesKey(
         sharedSecret,
         base64ToArrayBuffer(recipientEnvelope.salt),
-        userId,
+        effectiveUserId,
       );
       const plaintext = await window.crypto.subtle.decrypt(
         { name: 'AES-GCM', iv: base64ToArrayBuffer(recipientEnvelope.iv) },

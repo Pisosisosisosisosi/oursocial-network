@@ -65,7 +65,19 @@ export const authApi = {
 
 export const keysApi = {
   upload: (publicKey: string) => api.post('/keys/upload', { publicKey }),
-  me: () => api.get<{ userId: string; publicKey: string }>('/keys/me'),
-  get: (userId: string) => api.get<{ userId: string; publicKey: string }>(`/keys/${userId}`),
+  me: async () => {
+    try {
+      return await api.get<{ userId: string; publicKey: string }>('/keys/me');
+    } catch {
+      return { data: { userId: '', publicKey: '' } };
+    }
+  },
+  get: async (userId: string) => {
+    try {
+      return await api.get<{ userId: string; publicKey: string }>(`/keys/${userId}`);
+    } catch {
+      return { data: { userId, publicKey: '' } };
+    }
+  },
   exchange: (targetUserId: string) => api.post<{ myKey: string; targetKey: string }>('/keys/exchange', { targetUserId }),
 };

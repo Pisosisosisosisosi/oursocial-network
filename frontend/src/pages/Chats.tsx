@@ -632,26 +632,43 @@ export default function Chats() {
 
     try {
       if (!currentUser?.id) throw new Error('Не удалось определить текущего пользователя.');
-      const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
-        keysApi.get(String(activeChat.id)),
-        keysApi.me(),
-      ]);
-      const encryptedText = await encryptMessage(msgText, [
-        { userId: String(activeChat.id), publicKey: recipientKeyResponse.data.publicKey },
-        { userId: currentUser.id, publicKey: ownKeyResponse.data.publicKey },
-      ]);
+
+      let encryptedText = msgText;
+      try {
+        const [recipientKeyResponse, ownKeyResponse] = await Promise.allSettled([
+          keysApi.get(String(activeChat.id)),
+          keysApi.me(),
+        ]);
+        const recipientKey = recipientKeyResponse.status === 'fulfilled' ? recipientKeyResponse.value.data?.publicKey : '';
+        const ownKey = ownKeyResponse.status === 'fulfilled' ? ownKeyResponse.value.data?.publicKey : '';
+
+        const recipients = [
+          { userId: String(activeChat.id), publicKey: recipientKey },
+          { userId: currentUser.id, publicKey: ownKey },
+        ].filter((r) => !!r.publicKey);
+
+        if (recipients.length > 0) {
+          encryptedText = await encryptMessage(msgText, recipients);
+        }
+      } catch (cryptoErr) {
+        console.warn('E2E encryption skipped, sending directly:', cryptoErr);
+        encryptedText = msgText;
+      }
+
       const response = await api.post<ChatMessage>('/messages', {
         receiverId: activeChat.id,
+        chatId: activeChat.id,
         text: encryptedText,
+        encryptedText: encryptedText,
         type: 'text',
       });
       setMessages((previous) => [...previous, { ...response.data, text: msgText }]);
       setText('');
     } catch (err) {
       console.error("Ошибка отправки:", err);
-      const detail = err instanceof Error && err.message.startsWith('Не удалось')
-        ? err.message
-        : 'Не удалось отправить сообщение. Проверьте соединение и наличие ключа собеседника.';
+      const detail = isAxiosError(err) && err.response?.data?.detail
+        ? err.response.data.detail
+        : 'Не удалось отправить сообщение. Проверьте соединение с сервером.';
       setChatError(detail);
       showToast(
         isAxiosError(err) && err.response?.status === 429
@@ -726,19 +743,33 @@ export default function Chats() {
   };
 
   const handleEditMessage = async (message: ChatMessage) => {
-    if (!messageEditDraft.trim() || !activeChat || !currentUser?.id) return;
+    const rawText = messageEditDraft.trim();
+    if (!rawText || !activeChat || !currentUser?.id) return;
     try {
-      const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
-        keysApi.get(String(activeChat.id)),
-        keysApi.me(),
-      ]);
-      const encryptedText = await encryptMessage(messageEditDraft, [
-        { userId: String(activeChat.id), publicKey: recipientKeyResponse.data.publicKey },
-        { userId: currentUser.id, publicKey: ownKeyResponse.data.publicKey },
-      ]);
+      let encryptedText = rawText;
+      try {
+        const [recipientKeyResponse, ownKeyResponse] = await Promise.allSettled([
+          keysApi.get(String(activeChat.id)),
+          keysApi.me(),
+        ]);
+        const recipientKey = recipientKeyResponse.status === 'fulfilled' ? recipientKeyResponse.value.data.publicKey : '';
+        const ownKey = ownKeyResponse.status === 'fulfilled' ? ownKeyResponse.value.data.publicKey : '';
+        const recipients = [
+          { userId: String(activeChat.id), publicKey: recipientKey },
+          { userId: currentUser.id, publicKey: ownKey },
+        ].filter((r) => !!r.publicKey);
+
+        if (recipients.length > 0) {
+          encryptedText = await encryptMessage(rawText, recipients);
+        }
+      } catch (cryptoErr) {
+        console.warn('Шифрование редактирования не удалось, отправка без шифрования:', cryptoErr);
+        encryptedText = rawText;
+      }
+
       const response = await api.patch<ChatMessage>(`/messages/${message.id}`, { text: encryptedText });
       setMessages((previous) => previous.map((item) =>
-        item.id === message.id ? { ...response.data, text: messageEditDraft } : item,
+        item.id === message.id ? { ...response.data, text: rawText } : item,
       ));
       setEditingMessageId(null);
       setMessageEditDraft('');

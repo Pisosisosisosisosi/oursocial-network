@@ -2,6 +2,7 @@ import { useState, type FormEvent, useRef } from 'react';
 import { getSocket } from '../api/socket';
 import { keysApi } from '../api/client';
 import { encryptMessage } from '../crypto/encrypt';
+import { useAuth } from '../context/AuthContext';
 
 interface Props {
   chatId: string;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function MessageInput({ chatId, recipientId }: Props) {
+  const { user } = useAuth();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -70,14 +72,25 @@ export default function MessageInput({ chatId, recipientId }: Props) {
       let encrypted = trimmed;
       if (recipientId) {
         try {
-          const keyRes = await keysApi.get(recipientId);
-          if (keyRes.data.publicKey) {
-            encrypted = await encryptMessage(trimmed, keyRes.data.publicKey);
+          const [recipientKeyRes, ownKeyRes] = await Promise.allSettled([
+            keysApi.get(recipientId),
+            keysApi.me(),
+          ]);
+
+          const recipientKey = recipientKeyRes.status === 'fulfilled' ? recipientKeyRes.value.data.publicKey : '';
+          const ownKey = ownKeyRes.status === 'fulfilled' ? ownKeyRes.value.data.publicKey : '';
+
+          const recipients = [
+            { userId: recipientId, publicKey: recipientKey },
+            ...(user?.id ? [{ userId: user.id, publicKey: ownKey }] : []),
+          ].filter((r) => !!r.publicKey);
+
+          if (recipients.length > 0) {
+            encrypted = await encryptMessage(trimmed, recipients);
           }
-        } catch {
-          setError('Не удалось получить ключ шифрования. Сообщение не отправлено.');
-          setSending(false);
-          return;
+        } catch (keyErr) {
+          console.warn('Crypto encryption failed, falling back to plaintext:', keyErr);
+          encrypted = trimmed;
         }
       }
 
@@ -102,7 +115,7 @@ export default function MessageInput({ chatId, recipientId }: Props) {
       );
     } catch (err: any) {
       setSending(false);
-      setError(err.message || 'Ошибка шифрования');
+      setError(err?.message || 'Ошибка отправки');
     }
   };
 

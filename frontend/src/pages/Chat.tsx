@@ -39,11 +39,13 @@ export default function Chat() {
         
         const decryptedHistory = await Promise.all(
           history.map(async (msg: any) => {
-            let decrypted = '[Зашифровано]';
+            const raw = msg.encryptedText || msg.text || '';
+            let decrypted = raw;
             try {
-              decrypted = await decryptMessage(msg.encryptedText);
+              decrypted = await decryptMessage(raw, user?.id);
             } catch (err) {
               console.error('Ошибка расшифровки истории:', err);
+              decrypted = raw;
             }
             return { ...msg, encryptedText: decrypted };
           })
@@ -81,11 +83,13 @@ export default function Chat() {
     const handleReceive = async (msg: Message) => {
       if (msg.chatId !== chatId) return;
 
-      let decrypted = '[Зашифровано]';
+      const raw = msg.encryptedText || (msg as any).text || '';
+      let decrypted = raw;
       try {
-        decrypted = await decryptMessage(msg.encryptedText);
+        decrypted = await decryptMessage(raw, user?.id);
       } catch (err) {
         console.error('Ошибка расшифровки:', err);
+        decrypted = raw;
       }
 
       const decryptedMsg: Message = { ...msg, encryptedText: decrypted };
