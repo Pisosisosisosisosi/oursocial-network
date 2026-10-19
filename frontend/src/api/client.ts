@@ -260,7 +260,7 @@ export const mediaApi = {
     api.post('/polls', { question, options, chatId, groupId, channelId }),
   votePoll: (pollId: string, optionIndex: number) =>
     api.post(`/polls/${pollId}/vote`, { optionIndex }),
-  getPoll: (pollId: string) => api.get<Poll>(`/polls/${poll_id}`),
+  getPoll: (pollId: string) => api.get<Poll>(`/polls/${pollId}`),
   createStory: (mediaType: "image" | "video", mediaData: string, caption?: string) =>
     api.post('/stories', { mediaType, mediaData, caption: caption || "" }),
   getStories: () => api.get<{ stories: Story[] }>('/stories'),

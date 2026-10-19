@@ -2356,45 +2356,45 @@ def create_poll(
     return {"status": "ok", "pollId": str(result.inserted_id)}
 
 
-@app.post("/polls/{poll_id}/vote")
+@app.post("/polls/{pollId}/vote")
 def vote_poll(
-    poll_id: str,
+    pollId: str,
     payload: PollVoteRequest,
     current=Depends(get_current_user),
 ):
     """Проголосовать в опросе"""
-    if not ObjectId.is_valid(poll_id):
+    if not ObjectId.is_valid(pollId):
         raise HTTPException(status_code=400, detail="Invalid poll id")
-    poll = polls_collection().find_one({"_id": ObjectId(poll_id)})
+    poll = polls_collection().find_one({"_id": ObjectId(pollId)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
     if not poll.get("isActive", True):
         raise HTTPException(status_code=400, detail="Poll is closed")
     if payload.optionIndex < 0 or payload.optionIndex >= len(poll["options"]):
         raise HTTPException(status_code=400, detail="Invalid option index")
-    votes_collection().delete_one({"pollId": poll_id, "userId": current["userId"]})
+    votes_collection().delete_one({"pollId": pollId, "userId": current["userId"]})
     votes_collection().insert_one({
-        "pollId": poll_id,
+        "pollId": pollId,
         "userId": current["userId"],
         "optionIndex": payload.optionIndex,
         "votedAt": datetime.now(timezone.utc),
     })
     polls_collection().update_one(
-        {"_id": ObjectId(poll_id)},
+        {"_id": ObjectId(pollId)},
         {"$inc": {f"options.{payload.optionIndex}.votes": 1}}
     )
     return {"status": "ok"}
 
 
-@app.get("/polls/{poll_id}")
-def get_poll(poll_id: str, current=Depends(get_current_user)):
+@app.get("/polls/{pollId}")
+def get_poll(pollId: str, current=Depends(get_current_user)):
     """Получить опрос с результатами"""
-    if not ObjectId.is_valid(poll_id):
+    if not ObjectId.is_valid(pollId):
         raise HTTPException(status_code=400, detail="Invalid poll id")
-    poll = polls_collection().find_one({"_id": ObjectId(poll_id)})
+    poll = polls_collection().find_one({"_id": ObjectId(pollId)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
-    user_vote = votes_collection().find_one({"pollId": poll_id, "userId": current["userId"]})
+    user_vote = votes_collection().find_one({"pollId": pollId, "userId": current["userId"]})
     return {
         "id": str(poll["_id"]),
         "question": poll["question"],
@@ -2456,13 +2456,13 @@ def list_stories(current=Depends(get_current_user)):
     return {"stories": result}
 
 
-@app.post("/stories/{story_id}/view")
-def view_story(story_id: str, current=Depends(get_current_user)):
+@app.post("/stories/{storyId}/view")
+def view_story(storyId: str, current=Depends(get_current_user)):
     """Отметить просмотр истории"""
-    if not ObjectId.is_valid(story_id):
+    if not ObjectId.is_valid(storyId):
         raise HTTPException(status_code=400, detail="Invalid story id")
     stories_collection().update_one(
-        {"_id": ObjectId(story_id)},
+        {"_id": ObjectId(storyId)},
         {"$addToSet": {"views": current["userId"]}}
     )
     return {"status": "ok"}
