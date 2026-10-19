@@ -93,22 +93,22 @@ export default function VerifyEmail() {
   }, [location, navigate, register]);
 
   return (
-    <main className="relative grid h-full w-full place-items-center overflow-y-auto bg-[#090d16] px-4 py-8 text-slate-100">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(99,102,241,0.18),transparent_55%)]" />
+    <main className="relative grid h-full w-full place-items-center overflow-y-auto bg-bg-base px-4 py-8 text-t-primary">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(var(--accent-rgb),0.18),transparent_55%)]" />
       <div className="relative w-full max-w-[430px]">
         <div className="mb-8 flex items-center justify-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-lg shadow-indigo-500/25">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-accent-from to-accent-to shadow-lg shadow-accent/25">
             <MessageCircle size={21} />
           </span>
           <span className="text-xl font-bold tracking-tight">OurSocial</span>
         </div>
 
-        <section className="rounded-[28px] border border-white/[0.08] bg-[#101725]/90 p-8 text-center shadow-2xl backdrop-blur-xl">
+        <section className="rounded-3xl border border-white/[0.08] bg-panel/90 p-8 text-center shadow-2xl backdrop-blur-xl">
           {status === 'loading' && (
             <div className="flex flex-col items-center py-6">
-              <Loader2 className="h-12 w-12 animate-spin text-indigo-400 mb-4" />
+              <Loader2 className="h-12 w-12 animate-spin text-accent mb-4" />
               <h1 className="text-xl font-semibold mb-2">Подтверждение в 1 клик</h1>
-              <p className="text-sm text-slate-400">{message}</p>
+              <p className="text-sm text-t-secondary">{message}</p>
             </div>
           )}
 
@@ -121,7 +121,7 @@ export default function VerifyEmail() {
               <p className="text-sm text-slate-300 leading-relaxed mb-6">{message}</p>
               <button
                 onClick={() => navigate('/')}
-                className="flex items-center justify-center gap-2 w-full h-12 bg-indigo-500 hover:bg-indigo-400 text-white font-semibold rounded-xl transition"
+                className="flex items-center justify-center gap-2 w-full h-12 bg-accent hover:bg-accent text-white font-semibold rounded-xl transition"
               >
                 Перейти в мессенджер <ArrowRight size={16} />
               </button>

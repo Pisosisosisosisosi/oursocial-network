@@ -1441,7 +1441,7 @@ def export_group(
         for message in messages
     )
     document = (
-        "<!doctype html><html lang=\"ru\"><meta charset=\"utf-8\"><title>Экспорт группы Pulse</title>"
+        "<!doctype html><html lang=\"ru\"><meta charset=\"utf-8\"><title>Экспорт группы Skyline</title>"
         "<style>body{font:15px system-ui;max-width:760px;margin:32px auto;padding:0 16px;background:#0b1020;color:#e2e8f0}"
         "article{padding:14px;margin:10px 0;border:1px solid #334155;border-radius:14px}time{color:#94a3b8;font-size:12px;margin-right:12px}"
         "p{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>" + html.escape(group["title"]) + "</h1>" + rows + "</html>"
@@ -1526,10 +1526,10 @@ def export_messages(
         for message in messages
     )
     document = (
-        "<!doctype html><html lang=\"ru\"><meta charset=\"utf-8\"><title>Экспорт Pulse</title>"
+        "<!doctype html><html lang=\"ru\"><meta charset=\"utf-8\"><title>Экспорт Skyline</title>"
         "<style>body{font:15px system-ui;max-width:760px;margin:32px auto;padding:0 16px;background:#0b1020;color:#e2e8f0}"
         "article{padding:14px;margin:10px 0;border:1px solid #334155;border-radius:14px}time{color:#94a3b8;font-size:12px;margin-right:12px}"
-        "p{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>История чата Pulse</h1>" + rows + "</html>"
+        "p{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>История чата Skyline</h1>" + rows + "</html>"
     )
     return Response(
         content=document,

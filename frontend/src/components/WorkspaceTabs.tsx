@@ -17,14 +17,14 @@ export default function WorkspaceTabs() {
       : 'chats';
 
   return (
-    <nav aria-label="Разделы Pulse" className="flex shrink-0 items-center gap-1 border-b border-white/[0.08] bg-[#0d1420] px-2 py-2 sm:gap-2 sm:px-3">
+    <nav aria-label="Разделы Skyline" className="flex shrink-0 items-center gap-1 border-b border-white/[0.08] bg-panel px-2 py-2 sm:gap-2 sm:px-3">
       {tabs.map(({ id, label, path, icon: Icon }) => (
         <button
           key={id}
           type="button"
           onClick={() => navigate(path)}
           aria-current={activeTab === id ? 'page' : undefined}
-          className={`flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-semibold transition sm:gap-2 sm:px-3 sm:text-xs ${activeTab === id ? 'bg-indigo-500/15 text-indigo-200 shadow-inner shadow-indigo-400/5' : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'}`}
+          className={`flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-semibold transition sm:gap-2 sm:px-3 sm:text-xs ${activeTab === id ? 'bg-accent/15 text-accent shadow-inner shadow-accent/5' : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'}`}
         >
           <Icon size={15} className="shrink-0" />
           <span className="truncate">{label}</span>

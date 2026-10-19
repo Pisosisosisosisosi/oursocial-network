@@ -1,10 +1,10 @@
-const CACHE_NAME = 'pulse-shell-v1';
+const CACHE_NAME = 'skyline-shell-v1';
 
 self.addEventListener('install', (event) => {
   const base = self.registration.scope;
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll([base, `${base}manifest.webmanifest`, `${base}pulse-icon.svg`]))
+      .then((cache) => cache.addAll([base, `${base}manifest.webmanifest`, `${base}skyline-icon.svg`]))
       .then(() => self.skipWaiting()),
   );
 });

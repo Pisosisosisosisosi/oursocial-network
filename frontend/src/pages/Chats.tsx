@@ -905,20 +905,20 @@ export default function Chats() {
   const visibleUsers: (User & { nickname?: string })[] = searchQuery.trim() ? searchResults : contacts;
 
   return (
-    <div className="flex h-full w-full bg-[#090d16] text-slate-100 font-sans absolute top-0 left-0 overflow-hidden selection:bg-indigo-500/30">
+    <div className="flex h-full w-full bg-bg-base text-t-primary font-sans absolute top-0 left-0 overflow-hidden selection:bg-accent/30">
       
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         * { font-family: 'Inter', sans-serif; }
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.3); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(var(--accent-rgb), 0.3); border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(16, 185, 129, 0.6); }
         @keyframes slideIn { from { opacity: 0; transform: translateY(15px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
         @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-5px); } }
         .animate-slide-in { animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.05); }
-        .glass-active { background: linear-gradient(90deg, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0.05) 100%); border-left: 3px solid #6366f1; }
+        .glass-active { background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.15) 0%, rgba(var(--accent-rgb), 0.05) 100%); border-left: 3px solid var(--accent); }
       `}</style>
 
       {/* 1. ЛЕВАЯ КОЛОНКА */}
@@ -981,7 +981,7 @@ export default function Chats() {
               aria-haspopup="menu"
               className={`chat-list-item p-2.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-200 ${
                 activeChat?.id === user.id 
-                  ? 'glass-active shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+                  ? 'glass-active shadow-[0_0_15px_rgba(var(--accent-rgb),0.1)]' 
                   : 'hover:bg-slate-800/40 border-l-3 border-transparent'
               }`}
               style={{ animationDelay: `${idx * 30}ms` }}
@@ -1006,8 +1006,8 @@ export default function Chats() {
       </div>
 
       {/* 2. ЦЕНТРАЛЬНАЯ КОЛОНКА */}
-      <div className={`${activeChat ? 'flex' : 'hidden md:flex'} min-w-0 min-h-0 flex-1 flex-col bg-[#090d16] h-full relative z-0`}>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/10 via-[#090d16] to-black pointer-events-none"></div>
+      <div className={`${activeChat ? 'flex' : 'hidden md:flex'} min-w-0 min-h-0 flex-1 flex-col bg-bg-base h-full relative z-0`}>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-accent/10 via-[#090d16] to-black pointer-events-none"></div>
 
         {activeChat ? (
           <>
@@ -1027,8 +1027,8 @@ export default function Chats() {
                       : activeChat.username?.[0]?.toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <h3 className="flex min-w-0 items-center gap-2 font-bold text-sm text-slate-100">
-                      <button type="button" onClick={() => void openChatProfile()} aria-label={`Профиль ${activeChat.displayName || activeChat.username}`} className="truncate text-left transition hover:text-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60">
+                    <h3 className="flex min-w-0 items-center gap-2 font-bold text-sm text-t-primary">
+                      <button type="button" onClick={() => void openChatProfile()} aria-label={`Профиль ${activeChat.displayName || activeChat.username}`} className="truncate text-left transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
                         {activeChat.nickname || activeChat.displayName || activeChat.username}
                       </button>
                     </h3>
@@ -1046,11 +1046,11 @@ export default function Chats() {
                       onChange={(event) => handleChatSearch(event.target.value)}
                       placeholder="Поиск в переписке"
                       aria-label="Поиск по сообщениям"
-                      className="w-full sm:w-36 md:w-44 rounded-xl border border-white/[0.08] bg-white/[0.03] py-2 pl-9 pr-2 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-400/50"
+                      className="w-full sm:w-36 md:w-44 rounded-xl border border-white/[0.08] bg-white/[0.03] py-2 pl-9 pr-2 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-accent/50"
                     />
                   </label>
                   {chatSearch && (
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <div className="flex items-center gap-1 text-[10px] text-t-secondary">
                       <span>{searchMatches.length ? `${selectedSearchResult + 1}/${searchMatches.length}` : '0/0'}</span>
                       <button type="button" aria-label="Предыдущий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index - 1 + searchMatches.length) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronUp size={14} /></button>
                       <button type="button" aria-label="Следующий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index + 1) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronDown size={14} /></button>
@@ -1061,8 +1061,8 @@ export default function Chats() {
                     <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
                   </button>
                   <div className="flex shrink-0 items-center gap-1">
-                    <button type="button" title="Скачать переписку JSON" aria-label="Экспортировать историю чата в JSON" onClick={() => void handleExportChat('json')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-indigo-300"><Download size={15} /></button>
-                    <button type="button" title="Скачать переписку HTML" aria-label="Экспортировать историю чата в HTML" onClick={() => void handleExportChat('html')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-indigo-300"><FileText size={15} /></button>
+                    <button type="button" title="Скачать переписку JSON" aria-label="Экспортировать историю чата в JSON" onClick={() => void handleExportChat('json')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Download size={15} /></button>
+                    <button type="button" title="Скачать переписку HTML" aria-label="Экспортировать историю чата в HTML" onClick={() => void handleExportChat('html')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><FileText size={15} /></button>
                   </div>
                 </div>
               </div>
@@ -1119,7 +1119,7 @@ export default function Chats() {
               {loadingOlderMessages && (
                 <div role="status" aria-label="Загружаем сообщения" className="space-y-2 py-2">
                   <div className="h-10 w-2/3 animate-pulse rounded-2xl bg-slate-800/70" />
-                  <div className="ml-auto h-10 w-1/2 animate-pulse rounded-2xl bg-indigo-900/50" />
+                  <div className="ml-auto h-10 w-1/2 animate-pulse rounded-2xl bg-accent/50" />
                 </div>
               )}
               {loadingMessages && messages.length === 0 && (
@@ -1145,7 +1145,7 @@ export default function Chats() {
                         }}
                         className={`chat-message max-w-full p-3.5 rounded-2xl text-xs leading-relaxed relative group ${
                           isMe
-                            ? 'bg-gradient-to-br from-indigo-600 to-indigo-800 text-white rounded-br-none shadow-[0_4px_20px_rgba(79,70,229,0.3)] border border-indigo-500/30'
+                            ? 'bg-gradient-to-br from-accent-to to-accent/40 text-white rounded-br-none shadow-[0_4px_20px_rgba(var(--accent-rgb),0.3)] border border-accent/30'
                             : 'bg-slate-800/80 text-slate-200 rounded-bl-none border border-slate-700/50 shadow-lg'
                         }`}
                       >
@@ -1155,8 +1155,8 @@ export default function Chats() {
                           </div>
                         )}
                         {m.type === 'image' && m.fileData ? (
-                          localStorage.getItem('pulseMediaPreview') !== 'false'
-                            ? <button type="button" onClick={() => { setLightboxClosing(false); setLightboxImage(m); }} aria-label={`Открыть изображение ${m.fileName || ''}`} className="mb-2 block max-w-full cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                          localStorage.getItem('skylineMediaPreview') !== 'false'
+                            ? <button type="button" onClick={() => { setLightboxClosing(false); setLightboxImage(m); }} aria-label={`Открыть изображение ${m.fileName || ''}`} className="mb-2 block max-w-full cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-accent">
                                 <img src={m.fileData} alt={m.fileName || 'Изображение'} className="max-h-[55vh] max-w-full rounded-lg object-contain sm:max-h-72" />
                               </button>
                             : <a href={m.fileData} download={m.fileName || 'image'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{m.fileName || 'Скачать изображение'}</span></a>
@@ -1168,16 +1168,16 @@ export default function Chats() {
                         ) : null}
                         {editingMessageId === m.id ? (
                           <div className="min-w-48 space-y-2">
-                            <textarea value={messageEditDraft} onChange={(event) => setMessageEditDraft(event.target.value)} maxLength={4000} className="w-full rounded-lg border border-white/10 bg-slate-950/50 p-2 text-xs text-white outline-none focus:border-indigo-300/50" />
+                            <textarea value={messageEditDraft} onChange={(event) => setMessageEditDraft(event.target.value)} maxLength={4000} className="w-full rounded-lg border border-white/10 bg-slate-950/50 p-2 text-xs text-white outline-none focus:border-accent/50" />
                             <div className="flex justify-end gap-2">
                               <button type="button" onClick={() => setEditingMessageId(null)} className="text-[10px] text-slate-300">Отмена</button>
-                              <button type="button" onClick={() => void handleEditMessage(m)} className="text-[10px] font-semibold text-indigo-200">Сохранить</button>
+                              <button type="button" onClick={() => void handleEditMessage(m)} className="text-[10px] font-semibold text-accent">Сохранить</button>
                             </div>
                           </div>
                         ) : (
                           <>
                             {m.text && <div className="chat-message-content whitespace-pre-wrap break-words">{highlightText(m.text, chatSearch)}</div>}
-                            {m.edited && <span className="mt-1 block text-right text-[9px] text-slate-400">изменено</span>}
+                            {m.edited && <span className="mt-1 block text-right text-[9px] text-t-secondary">изменено</span>}
                           </>
                         )}
                         <button
@@ -1197,9 +1197,9 @@ export default function Chats() {
                         >
                             <MoreHorizontal size={14} />
                           </button>
-                        <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono ${isMe ? 'text-indigo-200/70' : 'text-slate-400/70'}`}>
+                        <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono ${isMe ? 'text-accent/70' : 'text-t-secondary/70'}`}>
                           <time>{m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time>
-                          {isMe && localStorage.getItem('pulseShowReadReceipts') !== 'false' && (
+                          {isMe && localStorage.getItem('skylineShowReadReceipts') !== 'false' && (
                             m.read
                               ? <CheckCheck size={13} aria-label="Прочитано" className="text-sky-300" />
                               : <Check size={13} aria-label="Отправлено" />
@@ -1213,7 +1213,7 @@ export default function Chats() {
                             if (!matchingReactions.length) return null;
                             const mine = matchingReactions.some((reaction) => reaction.userId === currentUser?.id);
                             return (
-                              <button key={emoji} type="button" onClick={() => void handleReaction(m, emoji)} aria-label={`Снять реакцию ${emoji}`} className={`reaction-chip rounded-full border px-2.5 py-1 text-[10px] shadow-sm transition ${mine ? 'border-indigo-400/50 bg-indigo-500/20' : 'border-white/[0.07] bg-slate-900/50 hover:bg-slate-700/70'}`}>
+                              <button key={emoji} type="button" onClick={() => void handleReaction(m, emoji)} aria-label={`Снять реакцию ${emoji}`} className={`reaction-chip rounded-full border px-2.5 py-1 text-[10px] shadow-sm transition ${mine ? 'border-accent/50 bg-accent/20' : 'border-white/[0.07] bg-slate-900/50 hover:bg-slate-700/70'}`}>
                                 {emoji}<span className="ml-1 text-slate-300">{matchingReactions.length}</span>
                               </button>
                             );
@@ -1229,18 +1229,18 @@ export default function Chats() {
 
             <div className="p-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] sm:p-4 relative z-10">
               {typingUser && (
-                <div role="status" className="mb-2 flex items-center gap-2 px-2 text-xs text-slate-400">
+                <div role="status" className="mb-2 flex items-center gap-2 px-2 text-xs text-t-secondary">
                   <span className="flex gap-1" aria-hidden="true">
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-400" />
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-400 [animation-delay:120ms]" />
-                    <span className="h-1 w-1 animate-bounce rounded-full bg-indigo-400 [animation-delay:240ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-accent" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:120ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:240ms]" />
                   </span>
                   <span>{typingUser} печатает...</span>
                 </div>
               )}
               <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void handleAttachment(event)} className="hidden" />
-              <form ref={messageFormRef} onSubmit={handleSend} className="glass-panel p-1.5 sm:p-2 rounded-2xl flex items-center gap-1 sm:gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-indigo-500/30 transition-all">
-                 <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={sending} className="p-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-all disabled:opacity-50" title="Прикрепить изображение или файл" aria-label="Прикрепить файл">
+              <form ref={messageFormRef} onSubmit={handleSend} className="glass-panel p-1.5 sm:p-2 rounded-2xl flex items-center gap-1 sm:gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-accent/30 transition-all">
+                 <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={sending} className="p-2.5 rounded-xl text-t-secondary hover:text-slate-200 hover:bg-slate-800/80 transition-all disabled:opacity-50" title="Прикрепить изображение или файл" aria-label="Прикрепить файл">
                    <Paperclip size={19} />
                  </button>
                  <input 
@@ -1249,16 +1249,16 @@ export default function Chats() {
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' && !event.shiftKey) {
                         event.preventDefault();
-                        if (localStorage.getItem('pulseEnterToSend') !== 'false') {
+                        if (localStorage.getItem('skylineEnterToSend') !== 'false') {
                           messageFormRef.current?.requestSubmit();
                         }
                       }
                     }}
                     placeholder="Введите сообщение..."
-                    className="min-w-0 flex-1 bg-transparent px-1 sm:px-2 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none"
+                    className="min-w-0 flex-1 bg-transparent px-1 sm:px-2 py-2 text-sm text-t-primary placeholder-slate-500 focus:outline-none"
                     disabled={sending}
                  />
-                 <button type="submit" disabled={sending || !text.trim()} className="p-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-emerald-400 text-slate-950 hover:opacity-90 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] disabled:opacity-50">
+                 <button type="submit" disabled={sending || !text.trim()} className="p-2.5 rounded-xl bg-gradient-to-r from-accent-from to-accent-to text-slate-950 hover:opacity-90 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] disabled:opacity-50">
                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                  </button>
               </form>
@@ -1267,9 +1267,9 @@ export default function Chats() {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-500 relative z-10">
              <div className="w-24 h-24 mb-6 rounded-full bg-slate-800/30 flex items-center justify-center border border-slate-700/30 animate-float">
-               <svg className="w-10 h-10 text-indigo-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+               <svg className="w-10 h-10 text-accent/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
              </div>
-             <p className="text-sm font-medium text-slate-400">Выберите пользователя</p>
+             <p className="text-sm font-medium text-t-secondary">Выберите пользователя</p>
              <p className="text-xs text-slate-600 mt-1">чтобы начать общение</p>
           </div>
         )}
@@ -1283,36 +1283,36 @@ export default function Chats() {
             />
             <aside
               aria-label={`Профиль @${chatProfile.username}`}
-              className={`profile-side-panel relative z-10 flex h-full w-[min(360px,90vw)] flex-col border-l border-white/10 bg-[#101725]/95 text-slate-100 shadow-2xl backdrop-blur-2xl ${profilePanelClosing ? 'profile-panel-out' : 'profile-panel-in'}`}
+              className={`profile-side-panel relative z-10 flex h-full w-[min(360px,90vw)] flex-col border-l border-white/10 bg-panel/95 text-t-primary shadow-2xl backdrop-blur-2xl ${profilePanelClosing ? 'profile-panel-out' : 'profile-panel-in'}`}
             >
               <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300">Профиль</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Профиль</p>
                   <p className="mt-1 text-xs text-slate-500">Информация о собеседнике</p>
                 </div>
-                <button type="button" onClick={closeProfilePanel} aria-label="Закрыть профиль" className="rounded-xl p-2 text-slate-400 transition hover:bg-white/10 hover:text-white">
+                <button type="button" onClick={closeProfilePanel} aria-label="Закрыть профиль" className="rounded-xl p-2 text-t-secondary transition hover:bg-white/10 hover:text-white">
                   <X size={18} />
                 </button>
               </div>
               <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-6">
                 <div className="flex flex-col items-center text-center">
-                  <div className="relative mb-4 h-24 w-24 overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-xl shadow-indigo-950/40">
+                  <div className="relative mb-4 h-24 w-24 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-accent-from to-accent-to shadow-xl shadow-black/40">
                     {chatProfile.avatarUrl
                       ? <img src={chatProfile.avatarUrl} alt={`Аватар ${chatProfile.username}`} className="h-full w-full object-cover" />
                       : <span className="grid h-full place-items-center text-3xl font-bold text-white">{chatProfile.username[0]?.toLocaleUpperCase('ru-RU')}</span>}
                     <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-[3px] border-[#101725] ${onlineUsers.has(String(chatProfile.id)) ? 'bg-emerald-400' : 'bg-slate-500'}`} />
                   </div>
                   <h2 className="max-w-full truncate text-xl font-semibold">{chatProfile.displayName || chatProfile.username}</h2>
-                  <p className="mt-1 text-sm text-slate-400">@{chatProfile.username}</p>
-                  <p className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${onlineUsers.has(String(chatProfile.id)) ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-white/[0.08] bg-white/[0.04] text-slate-400'}`}>
+                  <p className="mt-1 text-sm text-t-secondary">@{chatProfile.username}</p>
+                  <p className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${onlineUsers.has(String(chatProfile.id)) ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-white/[0.08] bg-white/[0.04] text-t-secondary'}`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${onlineUsers.has(String(chatProfile.id)) ? 'bg-emerald-400' : 'bg-slate-500'}`} />
                     {onlineUsers.has(String(chatProfile.id)) ? 'В сети' : 'Не в сети'}
                   </p>
                 </div>
 
                 {chatProfile.statusText && (
-                  <div className="profile-info-card mt-7 rounded-2xl border border-indigo-300/10 bg-indigo-300/[0.06] p-4">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-300">Статус</h3>
+                  <div className="profile-info-card mt-7 rounded-2xl border border-accent/10 bg-accent/[0.06] p-4">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">Статус</h3>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{chatProfile.statusText}</p>
                   </div>
                 )}
@@ -1334,7 +1334,7 @@ export default function Chats() {
                 <button
                   type="button"
                   onClick={() => navigate(`/users/${chatProfile.id}`)}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-indigo-500/15 text-sm font-medium text-indigo-200 transition hover:bg-indigo-500/25 hover:text-white"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent/15 text-sm font-medium text-accent transition hover:bg-accent/25 hover:text-white"
                 >
                   <ExternalLink size={15} /> Открыть полный профиль
                 </button>
@@ -1371,7 +1371,7 @@ export default function Chats() {
               type="button"
               role="menuitem"
               onClick={() => { navigate(`/users/${userContextMenu.user.id}`); setUserContextMenu(null); }}
-              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-indigo-400/10 hover:text-indigo-200"
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-accent/10 hover:text-accent"
             >
               <ExternalLink size={15} /> Открыть профиль
             </button>
@@ -1457,7 +1457,7 @@ export default function Chats() {
                       role="menuitem"
                       onClick={() => void handleReaction(menuMessage, emoji)}
                       aria-label={`Поставить реакцию ${emoji}`}
-                      className={`message-reaction-option flex h-10 min-w-10 items-center justify-center rounded-xl text-xl transition ${active ? 'bg-indigo-400/20 ring-1 ring-indigo-300/30' : 'hover:bg-white/10'}`}
+                      className={`message-reaction-option flex h-10 min-w-10 items-center justify-center rounded-xl text-xl transition ${active ? 'bg-accent/20 ring-1 ring-accent/30' : 'hover:bg-white/10'}`}
                     >
                       {emoji}
                     </button>
@@ -1485,7 +1485,7 @@ export default function Chats() {
                     setMessageEditDraft(menuMessage.text);
                     closeMessageMenu();
                   }}
-                  className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-indigo-400/10 hover:text-indigo-200"
+                  className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-accent/10 hover:text-accent"
                 >
                   <Pencil size={15} /> Редактировать
                 </button>

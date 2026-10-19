@@ -41,7 +41,7 @@ function GlobalNotifications() {
         || !event.senderId
         || event.senderId === userId
         || !document.hidden
-        || localStorage.getItem('pulseNotifications') !== 'true'
+        || localStorage.getItem('skylineNotifications') !== 'true'
         || !('Notification' in window)
         || Notification.permission !== 'granted'
       ) return;
@@ -52,9 +52,9 @@ function GlobalNotifications() {
       void api.get(messagePath, { params: { limit: 20 } }).then((response) => {
         const newest = response.data[response.data.length - 1];
         if (!newest || newest.senderId !== event.senderId) return;
-        new Notification('Новое сообщение в Pulse', {
+        new Notification('Новое сообщение в Skyline', {
           body: newest.type === 'text' ? newest.text : `Отправлен файл: ${newest.fileName || 'вложение'}`,
-          icon: `${import.meta.env.BASE_URL}pulse-icon.svg`,
+          icon: `${import.meta.env.BASE_URL}skyline-icon.svg`,
         });
       }).catch((error: unknown) => {
         console.error('Не удалось загрузить данные для уведомления:', error);
@@ -66,13 +66,13 @@ function GlobalNotifications() {
       showToast(`${title}: ${body}`, 'info');
       if (
         document.hidden
-        && localStorage.getItem('pulseNotifications') === 'true'
+        && localStorage.getItem('skylineNotifications') === 'true'
         && 'Notification' in window
         && Notification.permission === 'granted'
       ) {
         new Notification(title, {
           body,
-          icon: `${import.meta.env.BASE_URL}pulse-icon.svg`,
+          icon: `${import.meta.env.BASE_URL}skyline-icon.svg`,
         });
       }
     };
@@ -99,7 +99,7 @@ function GlobalNotifications() {
   return (
     <div role="status" className="fixed inset-x-0 top-0 z-[190] flex items-center justify-center gap-2 bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-lg">
       <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-      {navigator.onLine ? 'Переподключение к Pulse…' : 'Нет соединения с интернетом'}
+      {navigator.onLine ? 'Переподключение к Skyline…' : 'Нет соединения с интернетом'}
     </div>
   );
 }
@@ -113,9 +113,9 @@ function AppRoutes() {
 
   if (loading) {
     return (
-      <div className="grid h-full w-full place-items-center bg-[#090d16] text-sm text-slate-400">
+      <div className="grid h-full w-full place-items-center bg-bg-base text-sm text-t-secondary">
         <span className="flex items-center gap-3">
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent" />
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
           Подключаемся к OurSocial…
         </span>
       </div>
@@ -130,14 +130,14 @@ function AppRoutes() {
       <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
       <Route path="/premium" element={user
-        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем Skyline Premium…</div>}><Premium /></Suspense>
+        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем Skyline Premium…</div>}><Premium /></Suspense>
         : <Navigate to="/login" replace />} />
       <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
       <Route path="/groups" element={user ? <Groups /> : <Navigate to="/login" replace />} />
       <Route path="/channels" element={user
-        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем каналы…</div>}><Channels /></Suspense>
+        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем каналы…</div>}><Channels /></Suspense>
         : <Navigate to="/login" replace />} />
-      <Route path="/join/:inviteCode" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-slate-400">Загружаем канал…</div>}><Channels /></Suspense>} />
+      <Route path="/join/:inviteCode" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем канал…</div>}><Channels /></Suspense>} />
       <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>
@@ -147,11 +147,11 @@ function AppRoutes() {
 export default function App() {
   useEffect(() => {
     applyAppPreferences();
-    document.body.classList.add('h-full', 'overflow-hidden', 'bg-[#090d16]', 'text-slate-100');
-    document.body.style.fontFamily = '"Plus Jakarta Sans", sans-serif';
+    document.body.classList.add('h-full', 'overflow-hidden', 'bg-bg-base', 'text-t-primary');
+    document.body.style.fontFamily = '"Inter", ui-sans-serif, system-ui, sans-serif';
 
     return () => {
-      document.body.classList.remove('h-full', 'overflow-hidden', 'bg-[#090d16]', 'text-slate-100');
+      document.body.classList.remove('h-full', 'overflow-hidden', 'bg-bg-base', 'text-t-primary');
       document.body.style.fontFamily = '';
     };
   }, []);
@@ -168,7 +168,7 @@ export default function App() {
       <HashRouter>
       <ToastProvider>
         <GlobalNotifications />
-        <div className="app-shell relative h-[100dvh] w-screen overflow-hidden bg-[#090d16] font-sans text-slate-100">
+        <div className="app-shell relative h-[100dvh] w-screen overflow-hidden bg-bg-base font-sans text-t-primary">
           <AppRoutes />
         </div>
       </ToastProvider>

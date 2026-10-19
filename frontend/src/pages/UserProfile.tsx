@@ -83,13 +83,13 @@ export default function UserProfile() {
   };
 
   if (loading) {
-    return <main className="grid h-full place-items-center bg-[#090d16] text-sm text-slate-400">Загружаем профиль…</main>;
+    return <main className="grid h-full place-items-center bg-bg-base text-sm text-t-secondary">Загружаем профиль…</main>;
   }
 
   return (
-    <main className="relative h-full overflow-y-auto bg-[#090d16] px-4 py-8 text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(99,102,241,0.15),transparent_55%)]" />
-      <section className="relative mx-auto w-full max-w-xl rounded-[28px] border border-white/[0.08] bg-[#101725]/90 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-9">
+    <main className="relative h-full overflow-y-auto bg-bg-base px-4 py-8 text-t-primary">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(var(--accent-rgb),0.15),transparent_55%)]" />
+      <section className="relative mx-auto w-full max-w-xl rounded-3xl border border-white/[0.08] bg-panel/90 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-9">
         <button type="button" onClick={() => navigate('/')} className="mb-7 inline-flex items-center gap-2 text-xs font-medium text-slate-500 transition hover:text-slate-200">
           <ArrowLeft size={15} /> Назад к контактам
         </button>
@@ -99,7 +99,7 @@ export default function UserProfile() {
         ) : profile && (
           <>
             <div className="flex items-center gap-4">
-              <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-cyan-400 text-2xl font-bold">
+              <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-3xl bg-gradient-to-br from-accent-from to-accent-to text-2xl font-bold">
                 {profile.avatarUrl
                   ? <img src={profile.avatarUrl} alt={`Аватар ${profile.username}`} className="h-full w-full object-cover" />
                   : profile.username[0]?.toLocaleUpperCase('ru-RU')}
@@ -107,7 +107,7 @@ export default function UserProfile() {
               <div className="min-w-0">
                 <h1 className="flex items-center gap-2 truncate text-2xl font-semibold">{profile.displayName || profile.username}{profile.isPremium && <Crown size={19} className="shrink-0 fill-amber-300/20 text-amber-300" aria-label="Skyline Premium" />}</h1>
                 <p className="mt-1 truncate text-sm text-slate-500">@{profile.username}</p>
-                {profile.statusText && <p className="mt-2 text-sm text-indigo-200">{profile.statusText}</p>}
+                {profile.statusText && <p className="mt-2 text-sm text-accent">{profile.statusText}</p>}
               </div>
             </div>
 
@@ -143,7 +143,7 @@ export default function UserProfile() {
 
             {!isOwnProfile && (
               <div className="mt-7 flex flex-wrap gap-3">
-                <button type="button" onClick={() => void handleContact()} disabled={savingContact} className="inline-flex h-11 items-center gap-2 rounded-xl bg-indigo-500 px-4 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50">
+                <button type="button" onClick={() => void handleContact()} disabled={savingContact} className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent disabled:opacity-50">
                   {contact ? <UserRoundCheck size={16} /> : <UserRoundPlus size={16} />}
                   {contact ? `В контактах: ${contact.nickname}` : 'Добавить в контакты'}
                 </button>

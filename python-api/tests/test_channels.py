@@ -18,7 +18,7 @@ def make_channel(visibility: str = "public") -> dict:
     now = datetime.now(timezone.utc)
     return {
         "_id": CHANNEL_ID,
-        "title": "Pulse новости",
+        "title": "Skyline новости",
         "description": "Новости проекта",
         "visibility": visibility,
         "ownerId": OWNER_ID,

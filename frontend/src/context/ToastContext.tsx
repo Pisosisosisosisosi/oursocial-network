@@ -32,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             ? 'border-emerald-400/20 bg-emerald-950/90 text-emerald-100'
             : toast.kind === 'error'
               ? 'border-rose-400/20 bg-rose-950/90 text-rose-100'
-              : 'border-indigo-400/20 bg-slate-950/95 text-slate-100';
+              : 'border-accent/20 bg-slate-950/95 text-t-primary';
           return (
             <div key={toast.id} role={toast.kind === 'error' ? 'alert' : 'status'} className={`toast-enter pointer-events-auto flex items-start gap-3 rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl ${colors}`}>
               <Icon size={18} className="mt-0.5 shrink-0" />

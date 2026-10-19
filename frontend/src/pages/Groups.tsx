@@ -293,8 +293,8 @@ export default function Groups() {
   };
 
   return (
-    <main className="flex h-full min-h-0 w-full bg-[#090d16] text-slate-100">
-      <aside className={`${activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-[#0d1420] md:w-80`}>
+    <main className="flex h-full min-h-0 w-full bg-bg-base text-t-primary">
+      <aside className={`${activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-80`}>
         <WorkspaceSidebarHeader
           searchValue={groupSearch}
           onSearchChange={setGroupSearch}
@@ -302,11 +302,11 @@ export default function Groups() {
         />
         <WorkspaceTabs />
         <header className="flex items-center justify-between border-b border-white/[0.08] p-4">
-          <button type="button" onClick={() => navigate('/')} className="rounded-xl p-2 text-slate-400 transition hover:bg-white/[0.06] hover:text-white" aria-label="Назад к чатам">
+          <button type="button" onClick={() => navigate('/')} className="rounded-xl p-2 text-t-secondary transition hover:bg-white/[0.06] hover:text-white" aria-label="Назад к чатам">
             <ArrowLeft size={18} />
           </button>
-          <h1 className="flex items-center gap-2 text-sm font-semibold"><Users size={17} className="text-indigo-300" /> Общие группы</h1>
-          <button type="button" onClick={() => { setCreating(true); setAddingMembers(false); setSelectedMembers([]); setMemberSearch(''); setActiveGroupId(''); }} className="rounded-xl p-2 text-indigo-300 transition hover:bg-indigo-400/10" aria-label="Создать группу" title="Создать группу">
+          <h1 className="flex items-center gap-2 text-sm font-semibold"><Users size={17} className="text-accent" /> Общие группы</h1>
+          <button type="button" onClick={() => { setCreating(true); setAddingMembers(false); setSelectedMembers([]); setMemberSearch(''); setActiveGroupId(''); }} className="rounded-xl p-2 text-accent transition hover:bg-accent/10" aria-label="Создать группу" title="Создать группу">
             <Plus size={18} />
           </button>
         </header>
@@ -317,21 +317,21 @@ export default function Groups() {
               <h2 className="text-sm font-semibold">Новая группа</h2>
               <button type="button" onClick={() => setCreating(false)} aria-label="Закрыть" className="rounded-lg p-1 text-slate-500 hover:bg-white/5"><X size={16} /></button>
             </div>
-            <input value={groupTitle} onChange={(event) => setGroupTitle(event.target.value)} required minLength={2} maxLength={64} placeholder="Название группы" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 text-sm outline-none focus:border-indigo-400/50" />
+            <input value={groupTitle} onChange={(event) => setGroupTitle(event.target.value)} required minLength={2} maxLength={64} placeholder="Название группы" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 text-sm outline-none focus:border-accent/50" />
             <label className="relative block">
               <Search size={14} className="absolute left-3 top-3 text-slate-500" />
-              <input value={memberSearch} onChange={(event) => handleMemberSearchChange(event.target.value)} placeholder="Найти по полному @username" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-indigo-400/50" />
+              <input value={memberSearch} onChange={(event) => handleMemberSearchChange(event.target.value)} placeholder="Найти по полному @username" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-accent/50" />
             </label>
             {searching && <p className="text-[11px] text-slate-500">Ищем пользователя…</p>}
             <div className="max-h-32 space-y-1 overflow-y-auto">
               {addableResults.map((candidate) => (
                 <button key={candidate.id} type="button" onClick={() => toggleMember(candidate)} className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs hover:bg-white/[0.05]">
-                  <span>@{candidate.username} <span className="text-slate-500">{candidate.displayName}</span></span><UserPlus size={14} className="text-indigo-300" />
+                  <span>@{candidate.username} <span className="text-slate-500">{candidate.displayName}</span></span><UserPlus size={14} className="text-accent" />
                 </button>
               ))}
             </div>
-            {!!selectedMembers.length && <div className="flex flex-wrap gap-1.5">{selectedMembers.map((member) => <button key={member.id} type="button" onClick={() => toggleMember(member)} className="inline-flex items-center gap-1 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-2.5 py-1 text-[10px] text-indigo-200">@{member.username}<X size={11} /></button>)}</div>}
-            <button disabled={groupTitle.trim().length < 2 || !selectedMembers.length} className="w-full rounded-xl bg-indigo-500 px-3 py-2 text-xs font-semibold disabled:opacity-40">Создать группу</button>
+            {!!selectedMembers.length && <div className="flex flex-wrap gap-1.5">{selectedMembers.map((member) => <button key={member.id} type="button" onClick={() => toggleMember(member)} className="inline-flex items-center gap-1 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[10px] text-accent">@{member.username}<X size={11} /></button>)}</div>}
+            <button disabled={groupTitle.trim().length < 2 || !selectedMembers.length} className="w-full rounded-xl bg-accent px-3 py-2 text-xs font-semibold disabled:opacity-40">Создать группу</button>
           </form>
         )}
 
@@ -341,8 +341,8 @@ export default function Groups() {
           ) : visibleGroups.length === 0 ? (
             <p className="p-3 text-xs leading-relaxed text-slate-500">{groupSearch.trim() ? 'Группы не найдены.' : 'Вы пока не состоите в группах. Создайте группу и найдите участников по полному @username.'}</p>
           ) : visibleGroups.map((group) => (
-            <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`mb-1 flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${activeGroup?.id === group.id ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/[0.04]'}`}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-500/15 text-indigo-200"><Users size={18} /></span>
+            <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`mb-1 flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${activeGroup?.id === group.id ? 'bg-accent/15 text-white' : 'text-slate-300 hover:bg-white/[0.04]'}`}>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Users size={18} /></span>
               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{group.title}</span><span className="mt-1 block text-[10px] text-slate-500">{group.memberCount} участников</span></span>
             </button>
           ))}
@@ -352,43 +352,43 @@ export default function Groups() {
       <section className={`${activeGroup ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
         {activeGroup ? (
           <>
-            <header className="flex items-center gap-3 border-b border-white/[0.08] bg-[#0d1420] px-3 py-3 sm:px-5">
-              <button type="button" onClick={() => setActiveGroupId('')} className="rounded-lg p-2 text-slate-400 hover:bg-white/[0.06] md:hidden" aria-label="К списку групп"><ArrowLeft size={18} /></button>
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-500/15 text-indigo-200"><Users size={18} /></div>
+            <header className="flex items-center gap-3 border-b border-white/[0.08] bg-panel px-3 py-3 sm:px-5">
+              <button type="button" onClick={() => setActiveGroupId('')} className="rounded-lg p-2 text-t-secondary hover:bg-white/[0.06] md:hidden" aria-label="К списку групп"><ArrowLeft size={18} /></button>
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Users size={18} /></div>
               <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{activeGroup.title}</h2><p className="text-[11px] text-slate-500">{activeGroup.memberCount} участников</p></div>
-              <button type="button" onClick={() => void exportGroup('json')} title="Экспорт JSON" aria-label="Экспортировать группу в JSON" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-indigo-300"><Download size={15} /></button>
-              <button type="button" onClick={() => void exportGroup('html')} title="Экспорт HTML" aria-label="Экспортировать группу в HTML" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-indigo-300"><FileText size={15} /></button>
+              <button type="button" onClick={() => void exportGroup('json')} title="Экспорт JSON" aria-label="Экспортировать группу в JSON" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-accent"><Download size={15} /></button>
+              <button type="button" onClick={() => void exportGroup('html')} title="Экспорт HTML" aria-label="Экспортировать группу в HTML" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-accent"><FileText size={15} /></button>
               <button type="button" onClick={() => { setAddingMembers(true); setCreating(false); setSelectedMembers([]); setMemberSearch(''); }} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.05]"><UserPlus size={15} /><span className="hidden sm:inline">Добавить участников</span></button>
             </header>
 
             {addingMembers && (
               <div className="border-b border-white/[0.08] bg-slate-900/70 p-3 sm:px-5">
                 <div className="mb-2 flex flex-wrap gap-1.5">
-                  {activeGroup.members.map((member) => <span key={member.userId} className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[10px] text-slate-400">@{member.username}</span>)}
+                  {activeGroup.members.map((member) => <span key={member.userId} className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[10px] text-t-secondary">@{member.username}</span>)}
                 </div>
                 <div className="flex gap-2">
-                  <input value={memberSearch} onChange={(event) => handleMemberSearchChange(event.target.value)} placeholder="Найти по полному @username" className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/50 px-3 text-xs outline-none focus:border-indigo-400/50" />
-                  <button type="button" disabled={!selectedMembers.length} onClick={() => void addMembersToGroup()} className="rounded-xl bg-indigo-500 px-3 text-xs font-semibold disabled:opacity-40">Добавить</button>
-                  <button type="button" onClick={() => { setAddingMembers(false); setMemberSearch(''); setSelectedMembers([]); }} className="rounded-xl p-2 text-slate-400 hover:bg-white/[0.05]" aria-label="Закрыть"><X size={16} /></button>
+                  <input value={memberSearch} onChange={(event) => handleMemberSearchChange(event.target.value)} placeholder="Найти по полному @username" className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/50 px-3 text-xs outline-none focus:border-accent/50" />
+                  <button type="button" disabled={!selectedMembers.length} onClick={() => void addMembersToGroup()} className="rounded-xl bg-accent px-3 text-xs font-semibold disabled:opacity-40">Добавить</button>
+                  <button type="button" onClick={() => { setAddingMembers(false); setMemberSearch(''); setSelectedMembers([]); }} className="rounded-xl p-2 text-t-secondary hover:bg-white/[0.05]" aria-label="Закрыть"><X size={16} /></button>
                 </div>
-                {!!selectedMembers.length && <div className="mt-2 flex flex-wrap gap-1.5">{selectedMembers.map((member) => <button key={member.id} type="button" onClick={() => toggleMember(member)} className="inline-flex items-center gap-1 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-2.5 py-1 text-[10px] text-indigo-200">@{member.username}<X size={11} /></button>)}</div>}
-                {!!addableResults.length && <div className="mt-2 flex flex-wrap gap-2">{addableResults.map((candidate) => <button key={candidate.id} type="button" onClick={() => toggleMember(candidate)} className={`rounded-full border px-3 py-1.5 text-[11px] ${selectedIds.has(candidate.id) ? 'border-indigo-400/40 bg-indigo-500/15 text-indigo-200' : 'border-white/10 text-slate-300'}`}>@{candidate.username}</button>)}</div>}
+                {!!selectedMembers.length && <div className="mt-2 flex flex-wrap gap-1.5">{selectedMembers.map((member) => <button key={member.id} type="button" onClick={() => toggleMember(member)} className="inline-flex items-center gap-1 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[10px] text-accent">@{member.username}<X size={11} /></button>)}</div>}
+                {!!addableResults.length && <div className="mt-2 flex flex-wrap gap-2">{addableResults.map((candidate) => <button key={candidate.id} type="button" onClick={() => toggleMember(candidate)} className={`rounded-full border px-3 py-1.5 text-[11px] ${selectedIds.has(candidate.id) ? 'border-accent/40 bg-accent/15 text-accent' : 'border-white/10 text-slate-300'}`}>@{candidate.username}</button>)}</div>}
                 <p className="mt-2 text-[10px] text-slate-500">Новые участники видят сообщения только после вступления. Все участники могут приглашать других.</p>
               </div>
             )}
 
             <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-6">
-              {hasMore && <button type="button" onClick={() => void loadOlder()} className="mx-auto block rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-slate-400 hover:bg-white/[0.04]">Загрузить более ранние сообщения</button>}
+              {hasMore && <button type="button" onClick={() => void loadOlder()} className="mx-auto block rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-t-secondary hover:bg-white/[0.04]">Загрузить более ранние сообщения</button>}
               {loadingMessages && <div role="status" className="space-y-3">{[0, 1, 2].map((item) => <div key={item} className="chat-skeleton h-14 w-2/3 rounded-2xl" />)}</div>}
               {!loadingMessages && !messages.length && <p className="m-auto py-10 text-center text-xs text-slate-500">В этой группе пока нет сообщений.</p>}
               {messages.map((message) => {
                 const author = activeGroup.members.find((member) => member.userId === message.senderId);
                 const own = message.senderId === user?.id;
                 return (
-                  <article key={message.id} className={`group max-w-[min(80%,640px)] rounded-2xl border px-4 py-3 ${own ? 'ml-auto border-indigo-400/20 bg-indigo-500/10' : 'border-white/[0.07] bg-white/[0.035]'}`}>
-                    {!own && <p className="mb-1 text-[10px] font-semibold text-indigo-300">{author?.displayName || author?.username || 'Участник'} <span className="font-normal text-slate-500">@{author?.username}</span></p>}
+                  <article key={message.id} className={`group max-w-[min(80%,640px)] rounded-2xl border px-4 py-3 ${own ? 'ml-auto border-accent/20 bg-accent/10' : 'border-white/[0.07] bg-white/[0.035]'}`}>
+                    {!own && <p className="mb-1 text-[10px] font-semibold text-accent">{author?.displayName || author?.username || 'Участник'} <span className="font-normal text-slate-500">@{author?.username}</span></p>}
                     {editingMessage === message.id ? (
-                      <div className="space-y-2"><textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="w-full resize-y rounded-lg border border-white/10 bg-slate-950/60 p-2 text-sm outline-none focus:border-indigo-400/40" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingMessage(null)} className="text-[10px] text-slate-400">Отмена</button><button type="button" onClick={() => void saveEdit(message.id)} className="text-[10px] font-semibold text-indigo-300">Сохранить</button></div></div>
+                      <div className="space-y-2"><textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="w-full resize-y rounded-lg border border-white/10 bg-slate-950/60 p-2 text-sm outline-none focus:border-accent/40" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingMessage(null)} className="text-[10px] text-t-secondary">Отмена</button><button type="button" onClick={() => void saveEdit(message.id)} className="text-[10px] font-semibold text-accent">Сохранить</button></div></div>
                     ) : <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>}
                     <div className="mt-2 flex items-center justify-between gap-4 text-[9px] text-slate-500">
                       <time>{new Date(message.createdAt).toLocaleString()}</time>
@@ -401,10 +401,10 @@ export default function Groups() {
               })}
             </div>
 
-            <form onSubmit={(event) => void sendMessage(event)} className="flex items-end gap-2 border-t border-white/[0.08] bg-[#0d1420] p-3 sm:px-5">
-              <div className="hidden max-w-[30%] gap-1 overflow-hidden sm:flex">{activeGroup.members.slice(0, 3).map((member) => <button key={member.userId} type="button" onClick={() => setDraft((value) => `${value}${value && !value.endsWith(' ') ? ' ' : ''}@${member.username} `)} className="truncate rounded-full bg-white/[0.04] px-2 py-1 text-[9px] text-slate-500 hover:text-indigo-300">@{member.username}</button>)}</div>
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} maxLength={4000} placeholder="Сообщение группе… Используйте @username для упоминания" className="max-h-32 min-h-11 min-w-0 flex-1 resize-y rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm outline-none transition focus:border-indigo-400/40" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-              <button type="submit" disabled={!draft.trim()} aria-label="Отправить сообщение" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-indigo-500 text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"><Send size={17} /></button>
+            <form onSubmit={(event) => void sendMessage(event)} className="flex items-end gap-2 border-t border-white/[0.08] bg-panel p-3 sm:px-5">
+              <div className="hidden max-w-[30%] gap-1 overflow-hidden sm:flex">{activeGroup.members.slice(0, 3).map((member) => <button key={member.userId} type="button" onClick={() => setDraft((value) => `${value}${value && !value.endsWith(' ') ? ' ' : ''}@${member.username} `)} className="truncate rounded-full bg-white/[0.04] px-2 py-1 text-[9px] text-slate-500 hover:text-accent">@{member.username}</button>)}</div>
+              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} maxLength={4000} placeholder="Сообщение группе… Используйте @username для упоминания" className="max-h-32 min-h-11 min-w-0 flex-1 resize-y rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm outline-none transition focus:border-accent/40" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+              <button type="submit" disabled={!draft.trim()} aria-label="Отправить сообщение" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"><Send size={17} /></button>
             </form>
           </>
         ) : <div className="grid flex-1 place-items-center text-center text-sm text-slate-500"><div><Users size={28} className="mx-auto mb-3 text-slate-600" />Выберите группу или создайте новую.</div></div>}

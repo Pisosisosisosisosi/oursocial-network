@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import { applyAppPreferences } from '../preferences';
+import GlassPanel from '../components/ui/GlassPanel';
 
 const coinPackages = [
   { coins: 100, price: 99, popular: false },
@@ -23,7 +24,7 @@ export default function Premium() {
   const { user, updateUser } = useAuth();
   const showToast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  const [selectedTheme, setSelectedTheme] = useState(() => localStorage.getItem('pulsePremiumTheme') || 'cyber');
+  const [selectedTheme, setSelectedTheme] = useState(() => localStorage.getItem('skylinePremiumTheme') || 'cyber');
 
   const buyPremium = async () => {
     setBusy('premium');
@@ -60,16 +61,17 @@ export default function Premium() {
       return;
     }
     setSelectedTheme(theme);
-    localStorage.setItem('pulsePremiumTheme', theme);
+    localStorage.setItem('skylinePremiumTheme', theme);
+    localStorage.setItem('skylineAppTheme', theme);
     applyAppPreferences(true);
     showToast('Премиум-тема применена.', 'success');
   };
 
   return (
-    <main className="relative h-full overflow-y-auto bg-[#090d16] px-4 py-6 text-slate-100 sm:px-8 sm:py-9">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(168,85,247,0.16),transparent_55%)]" />
+    <main className="relative h-full overflow-y-auto bg-bg-base px-4 py-6 text-t-primary sm:px-8 sm:py-9 animate-fade-in">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(251,191,36,0.12),transparent_55%)]" />
       <div className="relative mx-auto max-w-5xl">
-        <button type="button" onClick={() => navigate('/profile')} className="mb-6 inline-flex items-center gap-2 text-xs font-medium text-slate-500 transition hover:text-slate-200">
+        <button type="button" onClick={() => navigate('/profile')} className="mb-6 inline-flex min-h-[44px] items-center gap-2 text-xs font-medium text-t-secondary transition hover:text-t-primary">
           <ArrowLeft size={15} /> Назад в профиль
         </button>
 
@@ -77,86 +79,86 @@ export default function Premium() {
           <div>
             <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-300"><Sparkles size={13} /> Skyline</p>
             <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">Подписки и монеты <Crown size={25} className="fill-amber-300/20 text-amber-300" /></h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">Откройте дополнительные возможности, настройте оформление и поддержите развитие Skyline.</p>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-t-secondary">Откройте дополнительные возможности, настройте оформление и поддержите развитие Skyline.</p>
           </div>
-          <div className="flex items-center gap-2 rounded-2xl border border-amber-300/15 bg-amber-300/[0.06] px-4 py-3">
+          <div className="glass-panel flex items-center gap-2 rounded-2xl px-4 py-3">
             <Coins size={19} className="text-amber-300" />
-            <span><span className="block text-[10px] text-slate-500">Баланс</span><span className="text-sm font-bold text-amber-100">{user?.coinsBalance ?? 0} Coins</span></span>
+            <span><span className="block text-[10px] text-t-secondary">Баланс</span><span className="text-sm font-bold text-amber-100">{user?.coinsBalance ?? 0} Coins</span></span>
           </div>
         </header>
 
         <div className="grid gap-4 lg:grid-cols-3">
-          <section className="relative overflow-hidden rounded-3xl border border-amber-300/20 bg-gradient-to-br from-amber-400/[0.12] via-[#151523] to-[#101725] p-5 shadow-[0_18px_60px_rgba(245,158,11,0.06)] sm:p-6">
-            <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-amber-300/[0.08] blur-2xl" />
+          <section className="glass-panel relative flex flex-col overflow-hidden rounded-3xl p-5 shadow-[0_0_40px_rgba(251,191,36,0.10)] transition-all duration-300 hover:shadow-[0_0_60px_rgba(251,191,36,0.22)] hover:-translate-y-1 sm:p-6">
+            <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-gradient-to-br from-amber-300/20 to-emerald-400/10 blur-2xl" />
             <div className="relative flex h-full flex-col">
               <div className="flex items-start justify-between">
-                <div className="grid h-11 w-11 place-items-center rounded-2xl border border-amber-200/20 bg-amber-300/10 text-amber-200"><Crown size={21} /></div>
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-amber-300/20 to-emerald-400/10 text-amber-200"><Crown size={21} /></div>
                 {user?.isPremium && <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/15 bg-emerald-300/[0.08] px-2.5 py-1 text-[10px] font-semibold text-emerald-200"><Check size={12} /> Активен</span>}
               </div>
               <h2 className="mt-5 text-xl font-bold">Skyline Premium</h2>
-              <p className="mt-1 text-xs text-slate-400">Больше возможностей для вашего аккаунта.</p>
-              <p className="mt-5 text-3xl font-bold">150 ₽<span className="ml-1 text-xs font-medium text-slate-500">/ 30 дней</span></p>
+              <p className="mt-1 text-xs text-t-secondary">Больше возможностей для вашего аккаунта.</p>
+              <p className="mt-5 text-3xl font-bold">150 ₽<span className="ml-1 text-xs font-medium text-t-secondary">/ 30 дней</span></p>
               <p className="mt-1 text-[10px] text-slate-600">Годовой план за 1 200 ₽ пока недоступен в симуляции.</p>
-              <ul className="my-5 flex-1 space-y-2.5 text-xs text-slate-300">
+              <ul className="my-5 flex-1 space-y-2.5 text-xs text-t-primary/90">
                 {['Золотой значок Premium в профиле и чатах', 'Эксклюзивные темы оформления', 'Статус подписки в профиле', 'Новые привилегии будут добавляться'].map((feature) => <li key={feature} className="flex items-center gap-2"><BadgeCheck size={14} className="shrink-0 text-amber-300" />{feature}</li>)}
               </ul>
-              {user?.isPremium && user.premiumUntil && <p className="mb-3 text-[10px] text-slate-500">Действует до {new Date(user.premiumUntil).toLocaleDateString('ru-RU')}</p>}
-              <button type="button" disabled={busy !== null} onClick={() => void buyPremium()} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 px-4 text-sm font-bold text-slate-950 transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60">
+              {user?.isPremium && user.premiumUntil && <p className="mb-3 text-[10px] text-t-secondary">Действует до {new Date(user.premiumUntil).toLocaleDateString('ru-RU')}</p>}
+              <button type="button" disabled={busy !== null} onClick={() => void buyPremium()} className="btn-glow flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 px-4 text-sm font-bold text-slate-950 disabled:cursor-wait disabled:opacity-60">
                 <Crown size={16} />{busy === 'premium' ? 'Активируем…' : user?.isPremium ? 'Продлить на 30 дней' : 'Купить Premium'}
               </button>
             </div>
           </section>
 
-          <section className="rounded-3xl border border-indigo-300/15 bg-gradient-to-br from-indigo-400/[0.08] to-[#101725] p-5 sm:p-6">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl border border-indigo-300/15 bg-indigo-300/[0.08] text-indigo-200"><Coins size={21} /></div>
+          <section className="glass-panel flex flex-col rounded-3xl p-5 transition-all duration-300 hover:-translate-y-1 sm:p-6">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-accent/10 text-accent"><Coins size={21} /></div>
             <h2 className="mt-5 text-xl font-bold">Skyline Coins</h2>
-            <p className="mt-1 text-xs text-slate-400">Виртуальная валюта для подарков и других функций.</p>
-            <div className="mt-5 space-y-2.5">
+            <p className="mt-1 text-xs text-t-secondary">Виртуальная валюта для подарков и других функций.</p>
+            <div className="mt-5 flex-1 space-y-2.5">
               {coinPackages.map((pack) => (
-                <div key={pack.coins} className={`flex items-center justify-between gap-2 rounded-2xl border p-3 ${pack.popular ? 'border-indigo-300/25 bg-indigo-300/[0.07]' : 'border-white/[0.07] bg-white/[0.02]'}`}>
-                  <span><span className="block text-sm font-semibold">{pack.coins} <span className="text-amber-200">Coins</span></span><span className="text-[10px] text-slate-500">{pack.price} ₽ · симуляция</span></span>
-                  <button type="button" disabled={busy !== null} onClick={() => void buyCoins(pack.coins, pack.price)} className="rounded-xl bg-indigo-500/15 px-3 py-2 text-[11px] font-semibold text-indigo-200 transition hover:bg-indigo-500/25 disabled:opacity-50">{busy === `coins-${pack.coins}` ? '…' : 'Выбрать'}</button>
+                <div key={pack.coins} className={`flex items-center justify-between gap-2 rounded-2xl border p-3 transition ${pack.popular ? 'border-accent/30 bg-accent/[0.08]' : 'border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04]'}`}>
+                  <span><span className="block text-sm font-semibold">{pack.coins} <span className="text-amber-200">Coins</span></span><span className="text-[10px] text-t-secondary">{pack.price} ₽ · симуляция</span></span>
+                  <button type="button" disabled={busy !== null} onClick={() => void buyCoins(pack.coins, pack.price)} className="btn-glow min-h-[44px] rounded-xl bg-accent/15 px-4 text-[11px] font-semibold text-t-primary disabled:opacity-50">{busy === `coins-${pack.coins}` ? '…' : 'Выбрать'}</button>
                 </div>
               ))}
             </div>
             <p className="mt-4 text-[10px] leading-4 text-slate-600">Покупка демонстрационная. Тратить монеты на подарки и дополнения пока нельзя.</p>
           </section>
 
-          <section className="rounded-3xl border border-cyan-300/15 bg-gradient-to-br from-cyan-400/[0.07] to-[#101725] p-5 sm:p-6">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.07] text-cyan-200"><Gem size={21} /></div>
+          <section className="glass-panel flex flex-col rounded-3xl p-5 transition-all duration-300 hover:-translate-y-1 sm:p-6">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-200"><Gem size={21} /></div>
             <h2 className="mt-5 text-xl font-bold">Skyline Business</h2>
-            <p className="mt-1 text-xs text-slate-400">Инструменты для больших каналов и команд.</p>
-            <p className="mt-5 text-3xl font-bold">500 ₽<span className="ml-1 text-xs font-medium text-slate-500">/ месяц за канал</span></p>
-            <ul className="my-5 space-y-2.5 text-xs text-slate-300">
+            <p className="mt-1 text-xs text-t-secondary">Инструменты для больших каналов и команд.</p>
+            <p className="mt-5 text-3xl font-bold">500 ₽<span className="ml-1 text-xs font-medium text-t-secondary">/ месяц за канал</span></p>
+            <ul className="my-5 flex-1 space-y-2.5 text-xs text-t-primary/90">
               {['Статистика канала', 'До 5 администраторов', 'Автопостинг через API', 'Верификация канала'].map((feature) => <li key={feature} className="flex items-center gap-2"><Check size={14} className="shrink-0 text-cyan-300" />{feature}</li>)}
             </ul>
-            <div className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-xs font-semibold text-slate-500"><LockKeyhole size={14} /> Скоро</div>
+            <div className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-xs font-semibold text-t-secondary"><LockKeyhole size={14} /> Скоро</div>
           </section>
         </div>
 
-        <section className="mt-6 rounded-3xl border border-white/[0.08] bg-[#101725]/90 p-5 sm:p-6">
+        <GlassPanel className="mt-6 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold"><WandSparkles size={18} className="text-fuchsia-300" /> Эксклюзивные темы</h2>
-              <p className="mt-1 text-xs text-slate-500">Выберите оформление для Skyline. Премиум-темы доступны подписчикам.</p>
+              <h2 className="flex items-center gap-2 text-lg font-semibold"><WandSparkles size={18} className="text-accent" /> Эксклюзивные темы</h2>
+              <p className="mt-1 text-xs text-t-secondary">Выберите оформление для Skyline. Премиум-темы доступны подписчикам.</p>
             </div>
-            {!user?.isPremium && <button type="button" onClick={() => void buyPremium()} className="rounded-xl border border-amber-300/20 bg-amber-300/[0.07] px-3 py-2 text-xs font-semibold text-amber-200 transition hover:bg-amber-300/[0.12]">Открыть Premium</button>}
+            {!user?.isPremium && <button type="button" onClick={() => void buyPremium()} className="btn-glow min-h-[44px] rounded-xl border border-amber-300/20 bg-amber-300/[0.07] px-4 text-xs font-semibold text-amber-200 transition hover:bg-amber-300/[0.12]">Открыть Premium</button>}
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {premiumThemes.map((theme) => {
               const isSelected = selectedTheme === theme.id && user?.isPremium;
-              return <button key={theme.id} type="button" onClick={() => chooseTheme(theme.id)} className={`relative overflow-hidden rounded-2xl border p-3 text-left transition ${isSelected ? 'border-fuchsia-300/35 bg-fuchsia-300/[0.07]' : 'border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04]'}`}>
+              return <button key={theme.id} type="button" onClick={() => chooseTheme(theme.id)} className={`relative overflow-hidden rounded-2xl border p-3 text-left transition-all duration-200 ${isSelected ? 'border-accent/40 bg-accent/[0.08] shadow-[0_0_20px_var(--glow)]' : 'border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] hover:-translate-y-0.5'}`}>
                 <div className="mb-3 flex h-16 items-end gap-1 overflow-hidden rounded-xl p-2" style={{ background: `linear-gradient(135deg, ${theme.swatches[0]}, ${theme.swatches[1]})` }}>
                   <span className="h-5 w-1/3 rounded-md opacity-80" style={{ backgroundColor: theme.swatches[2] }} />
                   <span className="mb-2 h-4 w-1/2 rounded-md opacity-50" style={{ backgroundColor: theme.swatches[2] }} />
                 </div>
-                <span className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{theme.name}</span>{!user?.isPremium && <LockKeyhole size={13} className="text-slate-600" />}{isSelected && <Check size={14} className="text-fuchsia-200" />}</span>
-                <span className="mt-1 block text-[10px] text-slate-500">{theme.description}</span>
+                <span className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{theme.name}</span>{!user?.isPremium && <LockKeyhole size={13} className="text-slate-600" />}{isSelected && <Check size={14} className="text-accent" />}</span>
+                <span className="mt-1 block text-[10px] text-t-secondary">{theme.description}</span>
               </button>;
             })}
           </div>
           <p className="mt-4 text-[10px] text-slate-600">Все покупки на этой странице демонстрационные: реальные платежи не выполняются.</p>
-        </section>
+        </GlassPanel>
       </div>
     </main>
   );
