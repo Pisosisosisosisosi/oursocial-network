@@ -244,12 +244,12 @@ def register(payload: RegisterRequest):
 
 
 def send_email_verification_message(email: str, code: str, verification_link: str = "") -> None:
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "").replace(" ", "").strip()
     if not smtp_user or not smtp_password:
-        raise RuntimeError("SMTP_USER and SMTP_PASSWORD must be configured")
+        raise RuntimeError("SMTP_USER and SMTP_PASSWORD must be configured in environment")
 
     message = EmailMessage()
     message["Subject"] = "Код подтверждения OurSocial"
@@ -291,12 +291,74 @@ def send_email_verification_message(email: str, code: str, verification_link: st
 </html>"""
         message.add_alternative(html_content, subtype="html")
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
-        smtp.ehlo()
-        smtp.starttls(context=ssl.create_default_context())
-        smtp.ehlo()
-        smtp.login(smtp_user, smtp_password)
-        smtp.send_message(message)
+    # Connect via port 465 SSL or port 587 STARTTLS with auto-fallback
+    if smtp_port == 465:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ssl.create_default_context(), timeout=15) as smtp_ssl:
+            smtp_ssl.login(smtp_user, smtp_password)
+            smtp_ssl.send_message(message)
+    else:
+        try:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
+                smtp.ehlo()
+                smtp.starttls(context=ssl.create_default_context())
+                smtp.ehlo()
+                smtp.login(smtp_user, smtp_password)
+                smtp.send_message(message)
+        except (TimeoutError, OSError) as port_err:
+            print(f"SMTP port {smtp_port} failed ({port_err}), falling back to port 465 SSL...")
+            with smtplib.SMTP_SSL(smtp_host, 465, context=ssl.create_default_context(), timeout=15) as smtp_ssl:
+                smtp_ssl.login(smtp_user, smtp_password)
+                smtp_ssl.send_message(message)
+
+
+@app.get("/auth/test-smtp")
+def test_smtp_diagnostic():
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "").replace(" ", "").strip()
+    frontend_url = os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com")
+
+    diagnostic = {
+        "smtp_host": smtp_host,
+        "smtp_port": smtp_port,
+        "smtp_user_configured": bool(smtp_user),
+        "smtp_user_masked": (smtp_user[:3] + "***@" + smtp_user.split("@")[-1]) if "@" in smtp_user else (smtp_user[:3] + "***" if smtp_user else "NOT_SET"),
+        "smtp_password_configured": bool(smtp_password),
+        "smtp_password_length": len(smtp_password),
+        "frontend_url": frontend_url,
+    }
+
+    if not smtp_user or not smtp_password:
+        diagnostic["status"] = "error"
+        diagnostic["error"] = "SMTP_USER or SMTP_PASSWORD is not set in environment variables on Render"
+        return diagnostic
+
+    try:
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ssl.create_default_context(), timeout=10) as smtp:
+                smtp.login(smtp_user, smtp_password)
+            diagnostic["connection_result"] = "Success (port 465 SSL)"
+        else:
+            try:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as smtp:
+                    smtp.ehlo()
+                    smtp.starttls(context=ssl.create_default_context())
+                    smtp.ehlo()
+                    smtp.login(smtp_user, smtp_password)
+                diagnostic["connection_result"] = f"Success (port {smtp_port} STARTTLS)"
+            except (TimeoutError, OSError) as e:
+                diagnostic["port_587_error"] = str(e)
+                with smtplib.SMTP_SSL(smtp_host, 465, context=ssl.create_default_context(), timeout=10) as smtp_ssl:
+                    smtp_ssl.login(smtp_user, smtp_password)
+                diagnostic["connection_result"] = "Success (fallback to port 465 SSL)"
+        diagnostic["status"] = "ok"
+    except Exception as e:
+        diagnostic["status"] = "error"
+        diagnostic["error_type"] = type(e).__name__
+        diagnostic["error_details"] = str(e)
+
+    return diagnostic
 
 
 @app.post("/auth/send-email-code")
@@ -323,20 +385,23 @@ def send_email_code(payload: SendEmailCodeRequest):
     verification_link = f"{frontend_base}/#/verify-email?email={quote_plus(email)}&code={code}&token={link_token}"
 
     email_sent = False
+    delivery_error = None
     try:
         send_email_verification_message(email, code, verification_link)
         email_sent = True
     except (OSError, smtplib.SMTPException, RuntimeError, ValueError) as error:
-        print(f"Email delivery note: {type(error).__name__} ({error})")
+        delivery_error = f"{type(error).__name__}: {error}"
+        print(f"Email delivery note: {delivery_error}")
 
     return {
         "status": "ok",
-        "message": "Если адрес может принять письмо, код отправлен. Проверьте почту.",
+        "message": "Письмо с кнопкой подтверждения отправлено на вашу почту." if email_sent else "Код подтверждения подготовлен.",
         "expiresInSeconds": 600,
         "emailSent": email_sent,
-        "code": code if not email_sent else None,
-        "token": link_token if not email_sent else None,
-        "verificationLink": verification_link if not email_sent else None,
+        "code": code,
+        "token": link_token,
+        "verificationLink": verification_link,
+        "deliveryError": delivery_error if not email_sent else None,
     }
 
 
