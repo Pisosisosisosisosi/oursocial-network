@@ -116,7 +116,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     return createPeerConnection(state, stream);
   }, [createPeerConnection]);
 
-  const startCall = useCallback((peer: { id: string; name: string }, video: boolean) => {
+  const startCall = useCallback((peer: { id: string; name: string; avatarUrl?: string }, video: boolean) => {
     if (!user?.id) return;
     const socket = getSocket();
     if (!socket?.connected) {
