@@ -59,10 +59,7 @@ export const authApi = {
       status: string;
       message: string;
       expiresInSeconds: number;
-      emailSent?: boolean;
-      code?: string | null;
-      token?: string | null;
-      verificationLink?: string | null;
+      emailSent: boolean;
     }>('/auth/send-email-code', { email }),
   verifyEmailCode: (email: string, code: string) =>
     api.post<{ status: string; message: string; registrationToken: string }>('/auth/verify-email-code', { email, code }),
