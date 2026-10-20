@@ -26,7 +26,11 @@ class EmailVerificationTests(unittest.TestCase):
         ):
             response = main.send_email_code(main.SendEmailCodeRequest(email="Person@Example.com"))
 
-        send_email.assert_called_once_with("person@example.com", "000042")
+        send_email.assert_called_once()
+        sent_email, sent_code, sent_link = send_email.call_args.args
+        self.assertEqual((sent_email, sent_code), ("person@example.com", "000042"))
+        self.assertIn("email=person%40example.com", sent_link)
+        self.assertIn("code=000042", sent_link)
         stored = verifications.update_one.call_args.args[1]["$set"]
         self.assertEqual(stored["code"], "000042")
         self.assertEqual(stored["failedAttempts"], 0)
