@@ -51,7 +51,6 @@ function GlobalNotifications() {
           body: 'Откройте Skyline, чтобы прочитать сообщение.',
           icon: `${import.meta.env.BASE_URL}skyline-icon.svg`,
           tag: event.groupId ? `skyline-group-${event.groupId}` : 'skyline-chat-message',
-          renotify: false,
         });
         notification.onclick = () => {
           window.focus();

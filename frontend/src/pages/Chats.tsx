@@ -478,7 +478,7 @@ export default function Chats() {
   useEffect(() => {
     const missingReplyIds = [...new Set(messages
       .map((message) => message.replyTo)
-      .filter((messageId): messageId is string => Boolean(messageId) && !(messageId in replyPreviews)))];
+      .filter((messageId): messageId is string => typeof messageId === 'string' && messageId.length > 0 && !(messageId in replyPreviews)))];
     if (!missingReplyIds.length || !currentUser?.id) return;
 
     let active = true;
