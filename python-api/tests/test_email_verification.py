@@ -36,8 +36,32 @@ class EmailVerificationTests(unittest.TestCase):
             delta=1,
         )
         self.assertEqual(response["expiresInSeconds"], 600)
+        self.assertTrue(response["emailSent"])
         self.assertNotIn("email", response)
+        self.assertNotIn("code", response)
+        self.assertNotIn("token", response)
+        self.assertNotIn("verificationLink", response)
+        self.assertNotIn("deliveryError", response)
         tokens.delete_many.assert_called_once_with({"email": "person@example.com"})
+
+    def test_failed_email_delivery_does_not_disclose_verification_secrets(self) -> None:
+        verifications = Mock()
+        tokens = Mock()
+
+        with (
+            patch("main.send_email_verification_message", side_effect=RuntimeError("SMTP unavailable")),
+            patch("main.email_verifications_collection", return_value=verifications),
+            patch("main.verified_email_tokens_collection", return_value=tokens),
+        ):
+            with self.assertRaises(HTTPException) as failed:
+                main.send_email_code(main.SendEmailCodeRequest(email="Person@Example.com"))
+
+        self.assertEqual(failed.exception.status_code, 503)
+        self.assertNotIn("000042", str(failed.exception.detail))
+        verifications.delete_one.assert_called_once_with({
+            "email": "person@example.com",
+            "token": verifications.update_one.call_args.args[1]["$set"]["token"],
+        })
 
     def test_gmail_sender_uses_starttls_and_required_message(self) -> None:
         smtp = MagicMock()
