@@ -16,7 +16,14 @@ const onlineUsers = new Map();
 
 function initSocket(server) {
   io = new Server(server, {
-    cors: { origin: '*', methods: ['GET', 'POST'] },
+    cors: {
+      origin: [
+        ...(process.env.FRONTEND_URL || 'https://pipipipipi.3utilities.com').split(',').map((origin) => origin.trim().replace(/\/$/, '')),
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+      ],
+      methods: ['GET', 'POST'],
+    },
   });
 
   // JWT-аутентификация при подключении
@@ -116,13 +123,21 @@ function initSocket(server) {
           return;
         }
 
+        if (!contentText.startsWith('skyline-e2e:v4:')
+          && !contentText.startsWith('skyline-e2e:v3:')
+          && !contentText.startsWith('oursocial-e2e:v2:')) {
+          if (callback) callback({ status: 'error', error: 'Messages must use the supported end-to-end encrypted format' });
+          return;
+        }
+
         const messageType = ['text', 'image', 'gift'].includes(type) ? type : null;
         if (!messageType) {
           if (callback) callback({ status: 'error', error: 'Unsupported message type' });
           return;
         }
 
-        if (content && !contentText.startsWith('oursocial-e2e:v2:') && containsProfanity(contentText)) {
+        const isEncryptedEnvelope = contentText.startsWith('skyline-e2e:v3:') || contentText.startsWith('oursocial-e2e:v2:');
+        if (content && !isEncryptedEnvelope && containsProfanity(contentText)) {
           console.log(`❌ Сообщение отклонено (мат) от ${socket.userId}`);
           if (callback) callback({ status: 'error', error: 'Сообщение содержит нецензурную лексику' });
           return;
@@ -249,9 +264,15 @@ function initSocket(server) {
     socket.on('delete_message', async ({ messageId }) => {
       try {
         if (!messageId) return;
+        const message = await getMessageById(messageId);
+        if (!message) return;
         const ok = await deleteMessage(messageId, socket.userId);
         if (ok) {
-          io.emit('message_deleted', { messageId, userId: socket.userId });
+          io.to(`chat:${message.chatId}`).emit('message_deleted', {
+            messageId,
+            chatId: String(message.chatId),
+            userId: socket.userId,
+          });
         }
       } catch (err) {
         console.error('❌ delete_message error:', err);

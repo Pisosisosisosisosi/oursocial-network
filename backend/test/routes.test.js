@@ -248,10 +248,10 @@ async function runRouteTests() {
     const sendMsgRes = await makeRequest(
       server,
       { path: `/api/chats/${chatId}/messages`, method: 'POST', headers: authAlice },
-      { text: 'Привет, Боб!' }
+      { text: 'skyline-e2e:v3:encrypted-hello' }
     );
     assert.strictEqual(sendMsgRes.status, 201);
-    assert.strictEqual(sendMsgRes.body.message.encryptedText, 'Привет, Боб!');
+    assert.strictEqual(sendMsgRes.body.message.encryptedText, 'skyline-e2e:v3:encrypted-hello');
     const messageId = sendMsgRes.body.messageId;
     console.log('   ✅ POST /api/chats/:id/messages sent message successfully');
 
@@ -262,7 +262,7 @@ async function runRouteTests() {
     );
     assert.strictEqual(getMsgsRes.status, 200);
     assert.strictEqual(getMsgsRes.body.messages.length, 1);
-    assert.strictEqual(getMsgsRes.body.messages[0].encryptedText, 'Привет, Боб!');
+    assert.strictEqual(getMsgsRes.body.messages[0].encryptedText, 'skyline-e2e:v3:encrypted-hello');
     console.log('   ✅ GET /api/chats/:id/messages retrieved messages');
 
     // 8. 403 Forbidden check — Eve tries to read Alice and Bob messages
@@ -277,10 +277,10 @@ async function runRouteTests() {
     const editRes = await makeRequest(
       server,
       { path: `/api/chats/${chatId}/messages/${messageId}`, method: 'PATCH', headers: authAlice },
-      { text: 'Привет, Боб! Как дела?' }
+      { text: 'skyline-e2e:v3:encrypted-edited' }
     );
     assert.strictEqual(editRes.status, 200);
-    assert.strictEqual(editRes.body.message.encryptedText, 'Привет, Боб! Как дела?');
+    assert.strictEqual(editRes.body.message.encryptedText, 'skyline-e2e:v3:encrypted-edited');
     assert.strictEqual(editRes.body.message.isEdited, true);
     console.log('   ✅ PATCH /api/chats/:id/messages/:messageId edited message');
 

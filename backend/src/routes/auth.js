@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { getDB } = require('../services/db');
 const { ObjectId } = require('mongodb');
 const authMiddleware = require('../middleware/auth');
@@ -32,22 +33,21 @@ function toObjectId(id) {
  */
 router.post('/register', async (req, res, next) => {
   try {
-    const { username, password, name, avatar, email } = req.body;
+    const { username, password, name, avatar, email, verificationToken } = req.body;
 
-    const rawLogin = username || (email ? email.split('@')[0] : '');
-    if (!rawLogin || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+    if (!username || !password || !email || !verificationToken) {
+      return res.status(400).json({ error: 'Email, username, password, and verified email token are required' });
     }
 
-    const cleanUsername = String(rawLogin).trim().toLowerCase();
-    const cleanEmail = email ? String(email).trim().toLowerCase() : `${cleanUsername}@example.com`;
+    const cleanUsername = String(username).trim().toLowerCase();
+    const cleanEmail = String(email).trim().toLowerCase();
 
-    if (cleanUsername.length < 2) {
-      return res.status(400).json({ error: 'Username must be at least 2 characters long' });
+    if (!/^[a-z0-9_.-]{3,32}$/.test(cleanUsername)) {
+      return res.status(400).json({ error: 'Username must be 3–32 letters, digits, dots, underscores, or hyphens' });
     }
 
-    if (String(password).length < 4) {
-      return res.status(400).json({ error: 'Password must be at least 4 characters long' });
+    if (String(password).length < 6 || String(password).length > 128) {
+      return res.status(400).json({ error: 'Password must be between 6 and 128 characters long' });
     }
 
     const db = getDB();
@@ -58,12 +58,23 @@ router.post('/register', async (req, res, next) => {
       return res.status(409).json({ error: 'Username or email is already taken' });
     }
 
+    const verificationTokenHash = crypto.createHash('sha256').update(String(verificationToken)).digest('hex');
+    const consumedToken = await db.collection('verified_email_tokens').findOneAndDelete({
+      email: cleanEmail,
+      tokenHash: verificationTokenHash,
+      expiresAt: { $gt: new Date() },
+    });
+    if (!consumedToken) {
+      return res.status(400).json({ error: 'Verify your email before registering' });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
     const newUser = {
       username: cleanUsername,
       email: cleanEmail,
+      isEmailVerified: true,
       name: name ? String(name).trim() : cleanUsername,
       avatar: avatar || null,
       avatarUrl: avatar || '',
@@ -238,11 +249,12 @@ router.get('/users', authMiddleware, async (req, res, next) => {
 /**
  * GET /users/search
  */
-router.get('/search', async (req, res, next) => {
+router.get('/search', authMiddleware, async (req, res, next) => {
   try {
-    const search = req.query.q || req.query.search || '';
+    const search = String(req.query.q || req.query.search || '').trim().slice(0, 64);
     const db = getDB();
-    const query = search ? { username: new RegExp(search, 'i') } : {};
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const query = search ? { username: new RegExp(escapedSearch, 'i') } : {};
     const results = await db
       .collection('users')
       .find(query, { projection: { passwordHash: 0 } })
@@ -253,7 +265,6 @@ router.get('/search', async (req, res, next) => {
       results.map((u) => ({
         id: String(u._id),
         username: u.username,
-        email: u.email || `${u.username}@example.com`,
         avatarUrl: u.avatar || u.avatarUrl || '',
       }))
     );

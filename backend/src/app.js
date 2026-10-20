@@ -10,8 +10,15 @@ const errorMiddleware = require('./middleware/errors');
 function createApp() {
   const app = express();
 
-  // 1. CORS — чтобы React-фронтенд мог обращаться к API
-  app.use(cors({ origin: '*' }));
+  const allowedOrigins = new Set([
+    ...(process.env.FRONTEND_URL || 'https://pipipipipi.3utilities.com').split(',').map((origin) => origin.trim().replace(/\/$/, '')),
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ]);
+  app.use(cors({ origin: (origin, callback) => {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS'));
+  } }));
 
   // 2. JSON-парсер — чтобы принимать JSON в теле запросов
   app.use(express.json());
@@ -32,12 +39,6 @@ function createApp() {
   app.use('/api/messages', messagesRoutes);
   app.use('/messages', messagesRoutes);
   app.use('/users', authRoutes);
-
-// Онлайн-пользователи (для отладки)
-app.get('/api/online', (req, res) => {
-  const { getOnlineUsers } = require('./socket');
-  res.json({ online: getOnlineUsers() });
-});
 
   // 5. 404-обработчик для несуществующих путей
   app.use((req, res, next) => {

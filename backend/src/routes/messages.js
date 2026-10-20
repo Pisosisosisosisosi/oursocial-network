@@ -22,6 +22,11 @@ function getReqUserId(req) {
   return String(req.user.userId || req.user.id || req.user._id);
 }
 
+function isEncryptedEnvelope(value) {
+  const text = String(value);
+  return text.startsWith('skyline-e2e:v4:') || text.startsWith('skyline-e2e:v3:') || text.startsWith('oursocial-e2e:v2:');
+}
+
 /**
  * Безопасное получение инстанса Socket.IO (если инициализирован)
  */
@@ -116,9 +121,12 @@ async function postMessageHandler(req, res, next) {
     if (!encryptedText && encryptedText !== '') {
       return res.status(400).json({ error: 'encryptedText or text is required' });
     }
+    if (!isEncryptedEnvelope(encryptedText)) {
+      return res.status(400).json({ error: 'Messages must use the supported end-to-end encrypted format' });
+    }
 
     // --- ПРОВЕРКА НА МАТ ---
-    if (encryptedText && !String(encryptedText).startsWith('oursocial-e2e:v2:') && containsProfanity(encryptedText)) {
+    if (encryptedText && !isEncryptedEnvelope(encryptedText) && containsProfanity(encryptedText)) {
       return res.status(400).json({ error: 'Сообщение содержит нецензурную лексику' });
     }
     // -----------------------
@@ -177,9 +185,12 @@ router.patch('/:messageId', async (req, res, next) => {
     if (!newText && newText !== '') {
       return res.status(400).json({ error: 'encryptedText or text is required' });
     }
+    if (!isEncryptedEnvelope(newText)) {
+      return res.status(400).json({ error: 'Messages must use the supported end-to-end encrypted format' });
+    }
 
     // --- ПРОВЕРКА НА МАТ ПРИ РЕДАКТИРОВАНИИ ---
-    if (newText && !String(newText).startsWith('oursocial-e2e:v2:') && containsProfanity(newText)) {
+    if (newText && !isEncryptedEnvelope(newText) && containsProfanity(newText)) {
       return res.status(400).json({ error: 'Сообщение содержит нецензурную лексику' });
     }
     // ------------------------------------------

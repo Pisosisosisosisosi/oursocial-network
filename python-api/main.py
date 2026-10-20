@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, Query
+from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request
 from fastapi.responses import Response, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -31,11 +31,9 @@ from db import (
     events_collection, friend_requests_collection, blocked_users_collection,
     saved_messages_collection, drafts_collection, scheduled_messages_collection,
     quick_replies_collection, user_settings_collection,
-    user_sessions_collection, login_history_collection,
+    login_history_collection,
     reports_collection, bots_collection, gifts_collection,
 )
-# Импортируем новую функцию для сообщений (ее нужно будет добавить в db.py)
-from db import messages_collection 
 from auth import (
     hash_password, verify_password, create_token,
     get_current_user,
@@ -43,7 +41,7 @@ from auth import (
 from crypto import validate_public_key, make_key_document
 from realtime import sio
 import socketio as socketio_server
-from channels import router as channels_router
+from channels import router as channels_router, channel_by_id, get_member, require_read_access
 from premium import router as premium_router, serialize_premium
 
 app = FastAPI(title="Our Social Network API")
@@ -53,10 +51,21 @@ message_send_timestamps: dict[str, deque[float]] = defaultdict(deque)
 message_rate_lock = Lock()
 
 
+configured_frontend_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Разрешаем всем (потом можно сузить до твоего сайта)
-    allow_credentials=False, # Важно: если origins=["*"], credentials должно быть False
+    allow_origins=list(dict.fromkeys([
+        *configured_frontend_origins,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ])),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -125,11 +134,11 @@ class ContactRequest(BaseModel):
 # НОВАЯ МОДЕЛЬ ДЛЯ СООБЩЕНИЙ
 class MessageRequest(BaseModel):
     receiverId: str = Field(min_length=1, max_length=64)
-    text: str = Field(default="", max_length=4000)
+    text: str = Field(default="", max_length=524_288)
     type: Literal["text", "image", "file"] = "text"
     fileName: str = Field(default="", max_length=200)
     contentType: str = Field(default="", max_length=100)
-    fileData: str = Field(default="", max_length=2_800_000)
+    fileData: str = Field(default="", max_length=3_500_000)
 
 
 class ReactionRequest(BaseModel):
@@ -141,7 +150,13 @@ class PinRequest(BaseModel):
 
 
 class EditMessageRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=4000)
+    text: str = Field(min_length=1, max_length=524_288)
+
+
+class GroupMessageRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=3_500_000)
+    type: Literal["text", "file"] = "text"
+    mentionUserIds: list[str] = Field(default_factory=list, max_length=100)
 
 
 class CreateGroupRequest(BaseModel):
@@ -175,8 +190,8 @@ def startup():
     polls_collection().create_index("creatorId")
     votes_collection().create_index([("pollId", 1), ("userId", 1)])
     user_settings_collection().create_index("userId")
-    user_sessions_collection().create_index("userId")
     login_history_collection().create_index("userId")
+    login_history_collection().create_index("loginAt", expireAfterSeconds=180 * 24 * 60 * 60)
     reports_collection().create_index("targetId")
     bots_collection().create_index("ownerId")
     gifts_collection().create_index("name")
@@ -201,8 +216,9 @@ def health():
 def register(payload: RegisterRequest):
     users = users_collection()
     email = str(payload.email).lower()
+    username = payload.username.lower()
 
-    if users.find_one({"username": payload.username}):
+    if users.find_one({"username": {"$regex": f"^{re.escape(username)}$", "$options": "i"}}):
         raise HTTPException(status_code=409, detail="Username already taken")
 
     registration_token_hash = hashlib.sha256(payload.verificationToken.encode()).hexdigest()
@@ -222,8 +238,8 @@ def register(payload: RegisterRequest):
     created_at = datetime.now(timezone.utc)
     doc = {
         "email": email,
-        "username": payload.username,
-        "displayName": payload.username,
+        "username": username,
+        "displayName": username,
         "isEmailVerified": True,
         "passwordHash": hash_password(payload.password),
         "avatarUrl": "",
@@ -331,64 +347,33 @@ def send_email_verification_message(email: str, code: str, verification_link: st
                 smtp_ssl.send_message(message)
 
 
-@app.get("/auth/test-smtp")
-def test_smtp_diagnostic():
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER", "").strip()
-    smtp_password = os.getenv("SMTP_PASSWORD", "").replace(" ", "").strip()
-    frontend_url = os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com")
-
-    diagnostic = {
-        "smtp_host": smtp_host,
-        "smtp_port": smtp_port,
-        "smtp_user_configured": bool(smtp_user),
-        "smtp_user_masked": (smtp_user[:3] + "***@" + smtp_user.split("@")[-1]) if "@" in smtp_user else (smtp_user[:3] + "***" if smtp_user else "NOT_SET"),
-        "smtp_password_configured": bool(smtp_password),
-        "smtp_password_length": len(smtp_password),
-        "frontend_url": frontend_url,
-    }
-
-    if not smtp_user or not smtp_password:
-        diagnostic["status"] = "error"
-        diagnostic["error"] = "SMTP_USER or SMTP_PASSWORD is not set in environment variables on Render"
-        return diagnostic
-
-    try:
-        if smtp_port == 465:
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ssl.create_default_context(), timeout=10) as smtp:
-                smtp.login(smtp_user, smtp_password)
-            diagnostic["connection_result"] = "Success (port 465 SSL)"
-        else:
-            try:
-                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as smtp:
-                    smtp.ehlo()
-                    smtp.starttls(context=ssl.create_default_context())
-                    smtp.ehlo()
-                    smtp.login(smtp_user, smtp_password)
-                diagnostic["connection_result"] = f"Success (port {smtp_port} STARTTLS)"
-            except (TimeoutError, OSError) as e:
-                diagnostic["port_587_error"] = str(e)
-                with smtplib.SMTP_SSL(smtp_host, 465, context=ssl.create_default_context(), timeout=10) as smtp_ssl:
-                    smtp_ssl.login(smtp_user, smtp_password)
-                diagnostic["connection_result"] = "Success (fallback to port 465 SSL)"
-        diagnostic["status"] = "ok"
-    except Exception as e:
-        diagnostic["status"] = "error"
-        diagnostic["error_type"] = type(e).__name__
-        diagnostic["error_details"] = str(e)
-
-    return diagnostic
-
-
 @app.post("/auth/send-email-code")
 def send_email_code(payload: SendEmailCodeRequest):
     email = str(payload.email).lower()
+    verifications = email_verifications_collection()
+    existing = verifications.find_one({"email": email}, {"lastSentAt": 1, "sendWindowStartedAt": 1, "sendCount": 1})
+    if not isinstance(existing, dict):
+        existing = None
+    now = datetime.now(timezone.utc)
+    if existing:
+        last_sent_at = existing.get("lastSentAt")
+        if last_sent_at and (now - last_sent_at.replace(tzinfo=last_sent_at.tzinfo or timezone.utc)).total_seconds() < 60:
+            raise HTTPException(status_code=429, detail="Подождите минуту перед повторным запросом кода.")
+        window_started_at = existing.get("sendWindowStartedAt")
+        if window_started_at:
+            window_started_at = window_started_at.replace(tzinfo=window_started_at.tzinfo or timezone.utc)
+        if window_started_at and (now - window_started_at).total_seconds() < 3600 and int(existing.get("sendCount", 0)) >= 5:
+            raise HTTPException(status_code=429, detail="Превышен лимит запросов кода для этого адреса. Попробуйте позже.")
+    window_started_at = existing.get("sendWindowStartedAt") if existing else None
+    if not window_started_at or (now - window_started_at.replace(tzinfo=window_started_at.tzinfo or timezone.utc)).total_seconds() >= 3600:
+        window_started_at = now
+        send_count = 1
+    else:
+        send_count = int(existing.get("sendCount", 0)) + 1
     code = f"{secrets.randbelow(1_000_000):06d}"
     link_token = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
 
-    email_verifications_collection().update_one(
+    verifications.update_one(
         {"email": email},
         {"$set": {
             "email": email,
@@ -396,6 +381,9 @@ def send_email_code(payload: SendEmailCodeRequest):
             "token": link_token,
             "expiresAt": now + timedelta(minutes=10),
             "failedAttempts": 0,
+            "lastSentAt": now,
+            "sendWindowStartedAt": window_started_at,
+            "sendCount": send_count,
         }},
         upsert=True,
     )
@@ -582,7 +570,7 @@ def verify_email_code(payload: VerifyEmailCodeRequest):
 
 
 @app.post("/auth/login")
-def login(payload: LoginRequest):
+def login(payload: LoginRequest, request: Request):
     users = users_collection()
     user = users.find_one({"email": str(payload.email).lower()})
     if not user:
@@ -598,6 +586,14 @@ def login(payload: LoginRequest):
         {"_id": user["_id"]},
         {"$set": {"lastSeen": datetime.now(timezone.utc)}},
     )
+
+    # Keep a bounded audit trail for the existing login-history endpoint.
+    login_history_collection().insert_one({
+        "userId": user_id,
+        "ipAddress": request.client.host if request.client else "",
+        "userAgent": request.headers.get("user-agent", "")[:512],
+        "loginAt": datetime.now(timezone.utc),
+    })
 
     return {
         "token": token,
@@ -709,8 +705,9 @@ def search_users(q: str = "", current=Depends(get_current_user)):
 def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_user)):
     users = users_collection()
     user_id = current["userId"]
+    username = payload.username.lower()
     
-    existing_user = users.find_one({"username": payload.username})
+    existing_user = users.find_one({"username": {"$regex": f"^{re.escape(username)}$", "$options": "i"}})
     if existing_user and str(existing_user["_id"]) != user_id:
         raise HTTPException(status_code=409, detail="Username already taken")
 
@@ -718,7 +715,7 @@ def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_us
         {"_id": ObjectId(user_id)},
         {"$set": {
             "displayName": payload.displayName,
-            "username": payload.username,
+            "username": username,
             "avatarUrl": payload.avatarUrl,
             "bio": payload.bio,
             "statusText": payload.statusText,
@@ -774,7 +771,9 @@ def get_contacts(current=Depends(get_current_user)):
     contact_ids = []
     for contact in contacts:
         try:
-            contact_ids.append(ObjectId(contact["userId"]))
+            contact_id = contact.get("userId") if isinstance(contact, dict) else contact
+            if ObjectId.is_valid(contact_id):
+                contact_ids.append(ObjectId(contact_id))
         except (KeyError, TypeError, ValueError):
             continue
 
@@ -785,7 +784,6 @@ def get_contacts(current=Depends(get_current_user)):
             {"email": 0, "passwordHash": 0, "contacts": 0},
         )
     }
-
     hidden_chats = {
         entry.get("userId"): entry.get("hiddenAt")
         for entry in owner.get("hiddenChats", [])
@@ -814,7 +812,7 @@ def get_contacts(current=Depends(get_current_user)):
 
     result = []
     for contact in contacts:
-        contact_id = contact.get("userId")
+        contact_id = contact.get("userId") if isinstance(contact, dict) else str(contact)
         if contact_id not in profile_by_id:
             continue
         hidden_at = hidden_chats.get(contact_id)
@@ -833,7 +831,7 @@ def get_contacts(current=Depends(get_current_user)):
         profile = profile_by_id[contact_id]
         result.append({
             "id": contact_id,
-            "nickname": contact["nickname"],
+            "nickname": (contact.get("nickname") or profile.get("username", "Пользователь")) if isinstance(contact, dict) else profile.get("username", "Пользователь"),
             "username": profile["username"],
             "displayName": profile.get("displayName", profile["username"]),
             "avatarUrl": profile.get("avatarUrl", ""),
@@ -985,22 +983,47 @@ def get_user(user_id: str, current=Depends(get_current_user)):
 # ---------- Messages (НОВЫЙ РАЗДЕЛ) ----------
 
 MAX_ATTACHMENT_SIZE = 2 * 1024 * 1024
-ALLOWED_ATTACHMENT_TYPES = {
-    "image/jpeg", "image/png", "image/gif", "image/webp",
-    "application/pdf", "text/plain", "text/csv", "application/zip",
-}
+HYBRID_ENVELOPE_PREFIX = "skyline-e2e:v4:"
+
+
+def validate_v4_envelope(value: str, max_ciphertext_bytes: int, expected_recipients: set[str] | None = None) -> None:
+    if not value.startswith(HYBRID_ENVELOPE_PREFIX):
+        raise HTTPException(status_code=400, detail="Message must use the supported end-to-end encrypted format")
+    try:
+        envelope = json.loads(value[len(HYBRID_ENVELOPE_PREFIX):])
+        recipients = envelope["recipients"]
+        ciphertext = base64.b64decode(envelope["ciphertext"], validate=True)
+        payload_iv = base64.b64decode(envelope["iv"], validate=True)
+        if not isinstance(recipients, dict) or not recipients or len(recipients) > 100:
+            raise ValueError("invalid recipients")
+        if expected_recipients is not None and set(recipients) != expected_recipients:
+            raise ValueError("recipient set mismatch")
+        if len(ciphertext) < 16 or len(ciphertext) > max_ciphertext_bytes or len(payload_iv) != 12:
+            raise ValueError("invalid payload size")
+        for recipient in recipients.values():
+            salt = base64.b64decode(recipient["salt"], validate=True)
+            iv = base64.b64decode(recipient["iv"], validate=True)
+            wrapped_key = base64.b64decode(recipient["wrappedKey"], validate=True)
+            if len(salt) != 16 or len(iv) != 12 or len(wrapped_key) != 48:
+                raise ValueError("invalid wrapped key")
+            ephemeral_key = recipient["ephemeralPublicKey"]
+            if not isinstance(ephemeral_key, dict) or ephemeral_key.get("kty") != "EC" or not validate_public_key(json.dumps(ephemeral_key)):
+                raise ValueError("invalid ephemeral key")
+    except (KeyError, TypeError, ValueError, binascii.Error, json.JSONDecodeError):
+        raise HTTPException(status_code=400, detail="Invalid encrypted message envelope")
 
 
 def serialize_message(message):
+    deleted_for_all = message.get("deletedForAll", False)
     return {
         "id": str(message["_id"]),
         "senderId": message["senderId"],
         "receiverId": message["receiverId"],
-        "text": message.get("text", ""),
-        "type": message.get("type", "text"),
-        "fileName": message.get("fileName", ""),
-        "contentType": message.get("contentType", ""),
-        "fileData": message.get("fileData", ""),
+        "text": "Сообщение удалено" if deleted_for_all else message.get("text", ""),
+        "type": "text" if deleted_for_all else message.get("type", "text"),
+        "fileName": "" if deleted_for_all else message.get("fileName", ""),
+        "contentType": "" if deleted_for_all else message.get("contentType", ""),
+        "fileData": "" if deleted_for_all else message.get("fileData", ""),
         "reactions": message.get("reactions", []),
         "pinned": message.get("pinned", False),
         "pinnedAt": message.get("pinnedAt").isoformat() if message.get("pinnedAt") else None,
@@ -1022,6 +1045,8 @@ def find_message_for_user(message_id: str, user_id: str):
         raise HTTPException(status_code=400, detail="Invalid message id")
     message = messages_collection().find_one({"_id": ObjectId(message_id)})
     if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message.get("deletedForAll"):
         raise HTTPException(status_code=404, detail="Message not found")
     if user_id in (message.get("senderId"), message.get("receiverId")):
         other_id = message["receiverId"] if message["senderId"] == user_id else message["senderId"]
@@ -1094,28 +1119,12 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
     if payload.type == "text":
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Message text cannot be empty")
+        if not payload.text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
+            raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
     else:
-        if payload.contentType not in ALLOWED_ATTACHMENT_TYPES:
-            raise HTTPException(status_code=415, detail="Unsupported attachment type")
-        match = re.fullmatch(
-            r"data:([\w.+-]+/[\w.+-]+);base64,([A-Za-z0-9+/]*={0,2})",
-            payload.fileData,
-        )
-        if not match or match.group(1) != payload.contentType:
-            raise HTTPException(status_code=400, detail="Invalid attachment data")
-        try:
-            decoded = base64.b64decode(match.group(2), validate=True)
-        except (binascii.Error, ValueError):
-            raise HTTPException(status_code=400, detail="Invalid attachment encoding")
-        if not decoded or len(decoded) > MAX_ATTACHMENT_SIZE:
-            raise HTTPException(status_code=413, detail="Attachment must be no larger than 2 MB")
-        is_image = payload.contentType.startswith("image/")
-        if (payload.type == "image") != is_image:
-            raise HTTPException(status_code=400, detail="Attachment type does not match its content")
-        file_name = os.path.basename(payload.fileName.strip().replace("\\", "/"))
-        if not file_name or file_name in {".", ".."}:
-            raise HTTPException(status_code=400, detail="Attachment filename is required")
-        content_type = payload.contentType
+        if payload.fileName or payload.contentType:
+            raise HTTPException(status_code=400, detail="Attachment metadata must be encrypted on the client")
+        validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, {current["userId"], payload.receiverId})
         file_data = payload.fileData
 
     enforce_message_rate_limit(current["userId"])
@@ -1125,7 +1134,8 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
         "senderId": current["userId"],
         "receiverId": payload.receiverId,
         "text": payload.text,
-        "type": payload.type,
+        # Store only a generic attachment type. The actual MIME type and name are encrypted.
+        "type": "file" if payload.type != "text" else "text",
         "fileName": file_name,
         "contentType": content_type,
         "fileData": file_data,
@@ -1359,6 +1369,15 @@ async def edit_message(
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Message text cannot be empty")
+    if message.get("groupId"):
+        group = get_group_for_member(message["groupId"], current["userId"])
+        validate_v4_envelope(
+            text,
+            64_000,
+            {member["userId"] for member in group.get("members", [])},
+        )
+    elif not text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
+        raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
 
     messages_collection().update_one(
         {"_id": message["_id"], "senderId": current["userId"]},
@@ -1397,6 +1416,13 @@ def list_groups(current=Depends(get_current_user)):
             {"username": 1, "displayName": 1, "avatarUrl": 1},
         )
     }
+    public_keys = {
+        key["userId"]: key["publicKey"]
+        for key in keys_collection().find(
+            {"userId": {"$in": list(user_ids)}},
+            {"userId": 1, "publicKey": 1},
+        )
+    }
     return [
         {
             "id": str(group["_id"]),
@@ -1409,6 +1435,7 @@ def list_groups(current=Depends(get_current_user)):
                     "username": profile_by_id.get(member["userId"], {}).get("username", ""),
                     "displayName": profile_by_id.get(member["userId"], {}).get("displayName", ""),
                     "avatarUrl": profile_by_id.get(member["userId"], {}).get("avatarUrl", ""),
+                    "publicKey": public_keys.get(member["userId"], ""),
                     "joinedAt": member["joinedAt"].isoformat(),
                 }
                 for member in group.get("members", [])
@@ -1629,13 +1656,17 @@ def export_messages(
 @app.post("/groups/{group_id}/messages")
 async def send_group_message(
     group_id: str,
-    payload: EditMessageRequest,
+    payload: GroupMessageRequest,
     current=Depends(get_current_user),
 ):
     group = get_group_for_member(group_id, current["userId"])
-    text = payload.text.strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Message text cannot be empty")
+    text = payload.text
+    member_ids = {member["userId"] for member in group.get("members", [])}
+    max_ciphertext = MAX_ATTACHMENT_SIZE + 1024 if payload.type == "file" else 64_000
+    validate_v4_envelope(text, max_ciphertext, member_ids)
+    mentioned_ids = set(payload.mentionUserIds)
+    if not mentioned_ids.issubset(member_ids):
+        raise HTTPException(status_code=400, detail="Mention recipients must be group members")
     enforce_message_rate_limit(current["userId"])
     now = datetime.now(timezone.utc)
     doc = {
@@ -1643,7 +1674,7 @@ async def send_group_message(
         "senderId": current["userId"],
         "receiverId": "",
         "text": text,
-        "type": "text",
+        "type": payload.type,
         "reactions": [],
         "readBy": [current["userId"]],
         "pinned": False,
@@ -1662,31 +1693,17 @@ async def send_group_message(
     for member in group.get("members", []):
         await sio.emit("message_changed", event, to=f"user:{member['userId']}")
 
-    usernames = {match for match in re.findall(r"(?<![\w])@([A-Za-z0-9_.-]{3,32})", text)}
-    if usernames:
-        mentioned = users_collection().find(
-            {"$or": [
-                {"username": {"$regex": f"^{re.escape(username)}$", "$options": "i"}}
-                for username in usernames
-            ]},
-            {"_id": 1, "username": 1},
+    for mentioned_id in mentioned_ids - {current["userId"]}:
+        await sio.emit(
+            "group_mention",
+            {
+                "groupId": group_id,
+                "groupTitle": group["title"],
+                "senderId": current["userId"],
+                "senderUsername": current.get("username", "Пользователь"),
+            },
+            to=f"user:{mentioned_id}",
         )
-        member_ids = {member["userId"] for member in group.get("members", [])}
-        for user in mentioned:
-            mentioned_id = str(user["_id"])
-            if mentioned_id in member_ids and mentioned_id != current["userId"]:
-                await sio.emit(
-                    "group_mention",
-                    {
-                        "groupId": group_id,
-                        "groupTitle": group["title"],
-                        "senderId": current["userId"],
-                        "senderUsername": current.get("username", "Пользователь"),
-                        "username": user["username"],
-                        "message": text,
-                    },
-                    to=f"user:{mentioned_id}",
-                )
     return serialize_message(doc)
 
 
@@ -1769,11 +1786,11 @@ class MessageForwardRequest(BaseModel):
     targetUserId: Optional[str] = Field(default=None, max_length=64)
 
 class MessageReplyRequest(BaseModel):
-    text: str = Field(default="", max_length=4000)
+    text: str = Field(default="", max_length=524_288)
     type: Literal["text", "image", "file"] = "text"
     fileName: str = Field(default="", max_length=200)
     contentType: str = Field(default="", max_length=100)
-    fileData: str = Field(default="", max_length=2_800_000)
+    fileData: str = Field(default="", max_length=3_500_000)
 
 class DisappearingMessagesRequest(BaseModel):
     chatId: str = Field(min_length=1, max_length=64)
@@ -1905,6 +1922,8 @@ def set_disappearing_messages(
     current=Depends(get_current_user),
 ):
     """Установить таймер исчезновения сообщений в чате"""
+    if not ObjectId.is_valid(payload.chatId):
+        raise HTTPException(status_code=400, detail="Invalid chat id")
     chats = groups_collection()
     chat = chats.find_one({
         "_id": ObjectId(payload.chatId),
@@ -1958,55 +1977,11 @@ async def forward_message(
     payload: MessageForwardRequest,
     current=Depends(get_current_user),
 ):
-    """Переслать сообщение в другой чат или пользователю"""
-    if not ObjectId.is_valid(message_id):
-        raise HTTPException(status_code=400, detail="Invalid message id")
-    message = messages_collection().find_one({"_id": ObjectId(message_id)})
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
-    if current["userId"] not in (message.get("senderId"), message.get("receiverId")):
-        group_id = message.get("groupId")
-        if group_id:
-            group = groups_collection().find_one({"_id": ObjectId(group_id), "members.userId": current["userId"]})
-            if not group:
-                raise HTTPException(status_code=403, detail="Access denied")
-        else:
-            raise HTTPException(status_code=403, detail="Access denied")
-
-    now = datetime.now(timezone.utc)
-    forward_doc = {
-        "originalMessageId": message_id,
-        "senderId": current["userId"],
-        "senderName": current.get("username", "Пользователь"),
-        "text": message.get("text", ""),
-        "type": message.get("type", "text"),
-        "fileName": message.get("fileName", ""),
-        "contentType": message.get("contentType", ""),
-        "fileData": message.get("fileData", ""),
-        "createdAt": now,
-        "readBy": [current["userId"]],
-        "deliveredTo": [current["userId"]],
-        "deleted": False,
-        "isEdited": False,
-        "isForwarded": True,
-    }
-    if payload.targetChatId:
-        forward_doc["chatId"] = payload.targetChatId
-    if payload.targetUserId:
-        forward_doc["receiverId"] = payload.targetUserId
-    if message.get("groupId"):
-        forward_doc["groupId"] = message["groupId"]
-
-    result = messages_collection().insert_one(forward_doc)
-    try:
-        sio.emit("message_forwarded", {
-            "messageId": str(result.inserted_id),
-            "originalMessageId": message_id,
-            "senderId": current["userId"],
-        }, to=f"user:{current['userId']}")
-    except Exception:
-        pass
-    return {"status": "ok", "messageId": str(result.inserted_id)}
+    """Do not copy recipient-bound ciphertext into a different conversation."""
+    raise HTTPException(
+        status_code=501,
+        detail="Forwarding is unavailable until the client can re-encrypt for the new recipients.",
+    )
 
 
 @app.post("/messages/{message_id}/reply")
@@ -2016,13 +1991,19 @@ async def reply_to_message(
     current=Depends(get_current_user),
 ):
     """Ответить на конкретное сообщение (цитирование)"""
-    if not ObjectId.is_valid(message_id):
-        raise HTTPException(status_code=400, detail="Invalid message id")
-    original = messages_collection().find_one({"_id": ObjectId(message_id)})
-    if not original:
-        raise HTTPException(status_code=404, detail="Original message not found")
+    original = find_message_for_user(message_id, current["userId"])
     chat_id = original.get("chatId") or original.get("groupId")
     receiver_id = original.get("receiverId") or current["userId"]
+    if payload.type != "text" or payload.fileName or payload.contentType or payload.fileData:
+        raise HTTPException(status_code=501, detail="Attachment replies are not available yet.")
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Reply text cannot be empty")
+    if original.get("groupId"):
+        group = get_group_for_member(original["groupId"], current["userId"])
+        validate_v4_envelope(text, 64_000, {member["userId"] for member in group.get("members", [])})
+    elif not text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
+        raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
 
     now = datetime.now(timezone.utc)
     reply_doc = {
@@ -2031,11 +2012,11 @@ async def reply_to_message(
         "senderName": current.get("username", "Пользователь"),
         "receiverId": receiver_id,
         "groupId": original.get("groupId"),
-        "text": payload.text.strip(),
-        "type": payload.type,
-        "fileName": payload.fileName,
-        "contentType": payload.contentType,
-        "fileData": payload.fileData,
+        "text": text,
+        "type": "text",
+        "fileName": "",
+        "contentType": "",
+        "fileData": "",
         "replyTo": message_id,
         "createdAt": now,
         "readBy": [current["userId"]],
@@ -2069,7 +2050,15 @@ def get_disappearing_settings(
     current=Depends(get_current_user),
 ):
     """Получить настройки исчезающих сообщений для чата"""
-    chat = groups_collection().find_one({"_id": ObjectId(chat_id)})
+    if not ObjectId.is_valid(chat_id):
+        raise HTTPException(status_code=400, detail="Invalid chat id")
+    chat = groups_collection().find_one({
+        "_id": ObjectId(chat_id),
+        "$or": [
+            {"members.userId": current["userId"]},
+            {"createdBy": current["userId"]},
+        ],
+    })
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
     dm = chat.get("disappearingMessages", {})
@@ -2111,9 +2100,7 @@ def save_message_to_bookmarks(
     current=Depends(get_current_user),
 ):
     """Сохранить сообщение в закладки (личное хранилище)"""
-    msg = messages_collection().find_one({"_id": ObjectId(payload.messageId)})
-    if not msg:
-        raise HTTPException(status_code=404, detail="Message not found")
+    find_message_for_user(payload.messageId, current["userId"])
     saved_messages_collection().update_one(
         {"messageId": payload.messageId, "userId": current["userId"]},
         {"$set": {"savedAt": datetime.now(timezone.utc)}},
@@ -2136,6 +2123,10 @@ def list_saved_messages(
     messages = {}
     if message_ids:
         for m in messages_collection().find({"_id": {"$in": message_ids}}):
+            try:
+                find_message_for_user(str(m["_id"]), current["userId"])
+            except HTTPException:
+                continue
             messages[str(m["_id"])] = serialize_message(m)
     return {
         "items": [
@@ -2328,14 +2319,27 @@ def respond_to_friend_request(
             {"_id": ObjectId(request_id)},
             {"$set": {"status": "accepted", "respondedAt": datetime.now(timezone.utc)}}
         )
-        users_collection().update_one(
-            {"_id": ObjectId(current["userId"])},
-            {"$addToSet": {"contacts": req["fromUserId"]}}
-        )
-        users_collection().update_one(
-            {"_id": ObjectId(req["fromUserId"])},
-            {"$addToSet": {"contacts": current["userId"]}}
-        )
+        current_user = users_collection().find_one({"_id": ObjectId(current["userId"])}, {"username": 1}) or {}
+        requester = users_collection().find_one({"_id": ObjectId(req["fromUserId"])}, {"username": 1}) or {}
+        for owner_id, contact_id, nickname in (
+            (current["userId"], req["fromUserId"], requester.get("username", "Пользователь")),
+            (req["fromUserId"], current["userId"], current_user.get("username", "Пользователь")),
+        ):
+            owner_object_id = ObjectId(owner_id)
+            contact_filter = {"_id": owner_object_id, "contacts.userId": contact_id}
+            updated = users_collection().update_one(
+                contact_filter,
+                {"$set": {"contacts.$.nickname": nickname}},
+            )
+            if not updated.matched_count:
+                users_collection().update_one(
+                    {"_id": owner_object_id},
+                    {"$pull": {"contacts": contact_id}},
+                )
+                users_collection().update_one(
+                    {"_id": owner_object_id},
+                    {"$addToSet": {"contacts": {"userId": contact_id, "nickname": nickname}}},
+                )
         try:
             sio.emit("friend_request_accepted", {
                 "requestId": request_id,
@@ -2425,12 +2429,64 @@ def request_verification(
     return {"status": "ok", "message": "Заявка на верификацию отправлена на модерацию"}
 
 
+def require_poll_access(poll: dict, user_id: str) -> None:
+    if poll.get("groupId"):
+        get_group_for_member(poll["groupId"], user_id)
+        return
+    if poll.get("channelId"):
+        channel = channel_by_id(poll["channelId"])
+        require_read_access(channel, user_id)
+        if not get_member(channel, user_id):
+            raise HTTPException(status_code=403, detail="Subscribe to this channel to access its poll")
+        return
+    chat_id = poll.get("chatId")
+    if chat_id and ObjectId.is_valid(chat_id):
+        has_conversation = messages_collection().find_one({
+            "$or": [
+                {"senderId": user_id, "receiverId": chat_id},
+                {"senderId": chat_id, "receiverId": user_id},
+            ]
+        }, {"_id": 1})
+        is_contact = users_collection().find_one({
+            "_id": ObjectId(user_id),
+            "contacts.userId": chat_id,
+        }, {"_id": 1})
+        if has_conversation or is_contact:
+            return
+    raise HTTPException(status_code=404, detail="Poll not found")
+
+
 @app.post("/polls")
 def create_poll(
     payload: PollCreateRequest,
     current=Depends(get_current_user),
 ):
     """Создать опрос (в чате, группе или канале)"""
+    destinations = sum(bool(value) for value in (payload.chatId, payload.groupId, payload.channelId))
+    if destinations != 1:
+        raise HTTPException(status_code=400, detail="Choose exactly one poll destination")
+    if payload.groupId:
+        get_group_for_member(payload.groupId, current["userId"])
+    elif payload.channelId:
+        channel = channel_by_id(payload.channelId)
+        require_read_access(channel, current["userId"])
+        if not get_member(channel, current["userId"]):
+            raise HTTPException(status_code=403, detail="Subscribe to this channel to create a poll")
+    else:
+        if not ObjectId.is_valid(payload.chatId):
+            raise HTTPException(status_code=400, detail="Invalid chat id")
+        has_conversation = messages_collection().find_one({
+            "$or": [
+                {"senderId": current["userId"], "receiverId": payload.chatId},
+                {"senderId": payload.chatId, "receiverId": current["userId"]},
+            ]
+        }, {"_id": 1})
+        is_contact = users_collection().find_one({
+            "_id": ObjectId(current["userId"]),
+            "contacts.userId": payload.chatId,
+        }, {"_id": 1})
+        if not has_conversation and not is_contact:
+            raise HTTPException(status_code=403, detail="You cannot create a poll in this chat")
     doc = {
         "creatorId": current["userId"],
         "question": payload.question,
@@ -2459,19 +2515,18 @@ def vote_poll(
         raise HTTPException(status_code=404, detail="Poll not found")
     if not poll.get("isActive", True):
         raise HTTPException(status_code=400, detail="Poll is closed")
+    require_poll_access(poll, current["userId"])
     if payload.optionIndex < 0 or payload.optionIndex >= len(poll["options"]):
         raise HTTPException(status_code=400, detail="Invalid option index")
+    old_vote = votes_collection().find_one({"pollId": pollId, "userId": current["userId"]})
+    if old_vote and old_vote.get("optionIndex") == payload.optionIndex:
+        return {"status": "ok"}
     votes_collection().delete_one({"pollId": pollId, "userId": current["userId"]})
-    votes_collection().insert_one({
-        "pollId": pollId,
-        "userId": current["userId"],
-        "optionIndex": payload.optionIndex,
-        "votedAt": datetime.now(timezone.utc),
-    })
-    polls_collection().update_one(
-        {"_id": ObjectId(pollId)},
-        {"$inc": {f"options.{payload.optionIndex}.votes": 1}}
-    )
+    votes_collection().insert_one({"pollId": pollId, "userId": current["userId"], "optionIndex": payload.optionIndex, "votedAt": datetime.now(timezone.utc)})
+    increments = {f"options.{payload.optionIndex}.votes": 1}
+    if old_vote:
+        increments[f"options.{old_vote['optionIndex']}.votes"] = -1
+    polls_collection().update_one({"_id": ObjectId(pollId)}, {"$inc": increments})
     return {"status": "ok"}
 
 
@@ -2483,6 +2538,7 @@ def get_poll(pollId: str, current=Depends(get_current_user)):
     poll = polls_collection().find_one({"_id": ObjectId(pollId)})
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
+    require_poll_access(poll, current["userId"])
     user_vote = votes_collection().find_one({"pollId": pollId, "userId": current["userId"]})
     return {
         "id": str(poll["_id"]),
@@ -2665,35 +2721,20 @@ def toggle_two_factor(
     payload: TwoFactorRequest,
     current=Depends(get_current_user),
 ):
-    """Включить/выключить двухфакторную аутентификацию"""
-    update = {"twoFactorEnabled": payload.enable}
-    if payload.enable and payload.code:
-        update["twoFactorCode"] = payload.code
-        update["twoFactorEnabledAt"] = datetime.now(timezone.utc)
-    users_collection().update_one(
-        {"_id": ObjectId(current["userId"])},
-        {"$set": update}
+    """Fail closed until login-time TOTP verification is implemented."""
+    raise HTTPException(
+        status_code=501,
+        detail="Two-factor authentication is not available yet.",
     )
-    return {"status": "ok", "twoFactorEnabled": payload.enable}
 
 
 @app.get("/auth/sessions")
 def list_user_sessions(current=Depends(get_current_user)):
-    """Список активных сессий (входы по устройствам)"""
-    sessions = list(user_sessions_collection().find({"userId": current["userId"]}))
-    return {
-        "sessions": [
-            {
-                "id": str(s["_id"]),
-                "deviceName": s.get("deviceName", "Неизвестное устройство"),
-                "ipAddress": s.get("ipAddress", ""),
-                "userAgent": s.get("userAgent", ""),
-                "lastActive": s.get("lastActive", s.get("createdAt", datetime.now(timezone.utc))).isoformat(),
-                "isCurrent": s.get("isCurrent", False),
-            }
-            for s in sessions
-        ]
-    }
+    """Session inventory is unavailable until tokens can be revoked."""
+    raise HTTPException(
+        status_code=501,
+        detail="Session management is not available yet.",
+    )
 
 
 @app.get("/auth/login-history")
@@ -2721,17 +2762,11 @@ def set_app_pin_code(
     payload: PinCodeRequest,
     current=Depends(get_current_user),
 ):
-    """Установить/убрать PIN-код на приложение"""
-    update = {}
-    if payload.enable is not None:
-        update["pinCodeEnabled"] = payload.enable
-    if payload.pin is not None:
-        update["pinCodeHash"] = hashlib.sha256(payload.pin.encode()).hexdigest()
-    users_collection().update_one(
-        {"_id": ObjectId(current["userId"])},
-        {"$set": update}
+    """A server-side PIN would not lock the local app, so fail closed."""
+    raise HTTPException(
+        status_code=501,
+        detail="App PIN protection is not available yet.",
     )
-    return {"status": "ok", "pinCodeEnabled": payload.enable or False}
 
 
 @app.post("/auth/auto-delete-account")
@@ -2739,15 +2774,11 @@ def request_auto_delete_account(
     payload: AutoDeleteAccountRequest,
     current=Depends(get_current_user),
 ):
-    """Настроить автоудаление аккаунта при бездействии N месяцев"""
-    users_collection().update_one(
-        {"_id": ObjectId(current["userId"])},
-        {"$set": {
-            "autoDeleteAfterMonths": payload.months,
-            "autoDeleteEnabled": True,
-        }}
+    """Do not claim deletion is scheduled when no deletion worker exists."""
+    raise HTTPException(
+        status_code=501,
+        detail="Automatic account deletion is not available yet.",
     )
-    return {"status": "ok", "autoDeleteAfterMonths": payload.months}
 
 
 @app.post("/bots/{bot_id}/commands")

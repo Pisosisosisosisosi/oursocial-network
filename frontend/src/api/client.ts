@@ -302,38 +302,6 @@ export const settingsApi = {
 };
 
 // ============================================================================
-// 51-60: Безопасность
-// ============================================================================
-
-export interface UserSession {
-  id: string;
-  deviceName: string;
-  ipAddress: string;
-  userAgent: string;
-  lastActive: string;
-  isCurrent: boolean;
-}
-
-export interface LoginHistoryItem {
-  id: string;
-  ipAddress: string;
-  userAgent: string;
-  loginAt: string;
-  location: string;
-}
-
-export const securityApi = {
-  toggle2FA: (enable: boolean, code?: string) =>
-    api.post('/auth/2fa', { enable, code }),
-  getSessions: () => api.get<{ sessions: UserSession[] }>('/auth/sessions'),
-  getLoginHistory: () => api.get<{ items: LoginHistoryItem[] }>('/auth/login-history'),
-  setPinCode: (pin?: string, enable?: boolean) =>
-    api.post('/auth/pin-code', { pin, enable }),
-  setAutoDelete: (months: number) =>
-    api.post('/auth/auto-delete-account', { months }),
-};
-
-// ============================================================================
 // 61-70: Продвинутые (боты, подарки уже в mediaApi)
 // ============================================================================
 

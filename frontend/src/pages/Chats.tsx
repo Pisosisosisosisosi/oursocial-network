@@ -7,7 +7,7 @@ import { api, keysApi, type Contact, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
-import { decryptMessage, encryptMessage, isEncryptedMessage } from '../crypto/encrypt';
+import { decryptBytes, decryptMessage, encryptBytes, encryptMessage, isEncryptedMessage, packAttachmentPayload, unpackAttachmentPayload } from '../crypto/encrypt';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import EmojiPicker from '../components/chat/EmojiPicker';
@@ -73,8 +73,31 @@ function formatLastSeen(value?: string | null) {
 }
 
 async function decryptChatMessage(message: ChatMessage, userId?: string): Promise<ChatMessage> {
-  if (message.type !== 'text' || !isEncryptedMessage(message.text)) return message;
-  return { ...message, text: await decryptMessage(message.text, userId) };
+  if (message.type === 'text' && isEncryptedMessage(message.text)) {
+    return { ...message, text: await decryptMessage(message.text, userId) };
+  }
+  if (message.type !== 'text' && message.fileData?.startsWith('skyline-e2e:v4:')) {
+    try {
+      const payload = unpackAttachmentPayload(await decryptBytes(message.fileData, userId));
+      if (!payload || !ALLOWED_ATTACHMENT_TYPES.has(payload.metadata.contentType) || !payload.data.length || payload.data.length > 2 * 1024 * 1024) {
+        throw new Error('Invalid encrypted attachment');
+      }
+      let binary = '';
+      for (let offset = 0; offset < payload.data.length; offset += 0x8000) {
+        binary += String.fromCharCode(...payload.data.subarray(offset, offset + 0x8000));
+      }
+      return {
+        ...message,
+        type: payload.metadata.contentType.startsWith('image/') ? 'image' : 'file',
+        fileName: payload.metadata.fileName,
+        contentType: payload.metadata.contentType,
+        fileData: `data:${payload.metadata.contentType};base64,${btoa(binary)}`,
+      };
+    } catch {
+      return { ...message, type: 'file', fileName: 'Зашифрованное вложение недоступно', fileData: '' };
+    }
+  }
+  return message;
 }
 
 export default function Chats() {
@@ -641,26 +664,21 @@ export default function Chats() {
     try {
       if (!currentUser?.id) throw new Error('Не удалось определить текущего пользователя.');
 
-      let encryptedText = msgText;
-      try {
-        const [recipientKeyResponse, ownKeyResponse] = await Promise.allSettled([
-          keysApi.get(String(activeChat.id)),
-          keysApi.me(),
-        ]);
-        const recipientKey = recipientKeyResponse.status === 'fulfilled' ? recipientKeyResponse.value.data?.publicKey : '';
-        const ownKey = ownKeyResponse.status === 'fulfilled' ? ownKeyResponse.value.data?.publicKey : '';
-
-        const recipients = [
-          { userId: String(activeChat.id), publicKey: recipientKey },
-          { userId: currentUser.id, publicKey: ownKey },
-        ].filter((r) => !!r.publicKey);
-
-        if (recipients.length > 0) {
-          encryptedText = await encryptMessage(msgText, recipients);
-        }
-      } catch (cryptoErr) {
-        console.warn('E2E encryption skipped, sending directly:', cryptoErr);
-        encryptedText = msgText;
+      const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
+        keysApi.get(String(activeChat.id)),
+        keysApi.me(),
+      ]);
+      const recipientKey = recipientKeyResponse.data?.publicKey;
+      const ownKey = ownKeyResponse.data?.publicKey;
+      if (!recipientKey || !ownKey) {
+        throw new Error('Не удалось получить ключи шифрования. Сообщение не отправлено.');
+      }
+      const encryptedText = await encryptMessage(msgText, [
+        { userId: String(activeChat.id), publicKey: recipientKey },
+        { userId: currentUser.id, publicKey: ownKey },
+      ]);
+      if (!encryptedText.startsWith('skyline-e2e:v3:')) {
+        throw new Error('Не удалось зашифровать сообщение. Оно не было отправлено.');
       }
 
       const response = await api.post<ChatMessage>('/messages', {
@@ -712,28 +730,45 @@ export default function Chats() {
       showToast('Размер вложения не должен превышать 2 МБ.', 'error');
       return;
     }
+    if (!file.size) {
+      setChatError('Нельзя отправить пустой файл.');
+      showToast('Нельзя отправить пустой файл.', 'error');
+      return;
+    }
 
     setSending(true);
     setChatError('');
     try {
-      const fileData = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => typeof reader.result === 'string'
-          ? resolve(reader.result)
-          : reject(new Error('Не удалось прочитать выбранный файл.'));
-        reader.onerror = () => reject(new Error('Не удалось прочитать выбранный файл.'));
-        reader.readAsDataURL(file);
+      if (!currentUser?.id) throw new Error('Не удалось определить текущего пользователя.');
+      const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
+        keysApi.get(String(activeChat.id)),
+        keysApi.me(),
+      ]);
+      const recipients = [
+        { userId: String(activeChat.id), publicKey: recipientKeyResponse.data?.publicKey || '' },
+        { userId: currentUser.id, publicKey: ownKeyResponse.data?.publicKey || '' },
+      ];
+      if (recipients.some((recipient) => !recipient.publicKey)) {
+        throw new Error('Не удалось получить ключи участников. Вложение не отправлено.');
+      }
+      const packed = packAttachmentPayload(new Uint8Array(await file.arrayBuffer()), {
+        fileName: file.name,
+        contentType: file.type,
       });
-      const type = file.type.startsWith('image/') ? 'image' : 'file';
+      const encryptedFileData = await encryptBytes(packed, recipients);
+      if (!encryptedFileData.startsWith('skyline-e2e:v4:')) {
+        throw new Error('Не удалось зашифровать вложение. Оно не было отправлено.');
+      }
       const response = await api.post<ChatMessage>('/messages', {
         receiverId: activeChat.id,
         text: '',
-        type,
-        fileName: file.name,
-        contentType: file.type,
-        fileData,
+        type: 'file',
+        fileName: '',
+        contentType: '',
+        fileData: encryptedFileData,
       });
-      setMessages((previous) => [...previous, response.data]);
+      const decryptedMessage = await decryptChatMessage(response.data, currentUser.id);
+      setMessages((previous) => [...previous, decryptedMessage]);
       showToast('Файл отправлен.', 'success');
     } catch (error) {
       console.error('Ошибка отправки вложения:', error);
@@ -763,25 +798,21 @@ export default function Chats() {
     const rawText = messageEditDraft.trim();
     if (!rawText || !activeChat || !currentUser?.id) return;
     try {
-      let encryptedText = rawText;
-      try {
-        const [recipientKeyResponse, ownKeyResponse] = await Promise.allSettled([
-          keysApi.get(String(activeChat.id)),
-          keysApi.me(),
-        ]);
-        const recipientKey = recipientKeyResponse.status === 'fulfilled' ? recipientKeyResponse.value.data.publicKey : '';
-        const ownKey = ownKeyResponse.status === 'fulfilled' ? ownKeyResponse.value.data.publicKey : '';
-        const recipients = [
-          { userId: String(activeChat.id), publicKey: recipientKey },
-          { userId: currentUser.id, publicKey: ownKey },
-        ].filter((r) => !!r.publicKey);
-
-        if (recipients.length > 0) {
-          encryptedText = await encryptMessage(rawText, recipients);
-        }
-      } catch (cryptoErr) {
-        console.warn('Шифрование редактирования не удалось, отправка без шифрования:', cryptoErr);
-        encryptedText = rawText;
+      const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
+        keysApi.get(String(activeChat.id)),
+        keysApi.me(),
+      ]);
+      const recipientKey = recipientKeyResponse.data.publicKey;
+      const ownKey = ownKeyResponse.data.publicKey;
+      if (!recipientKey || !ownKey) {
+        throw new Error('Не удалось получить ключи шифрования. Изменение не сохранено.');
+      }
+      const encryptedText = await encryptMessage(rawText, [
+        { userId: String(activeChat.id), publicKey: recipientKey },
+        { userId: currentUser.id, publicKey: ownKey },
+      ]);
+      if (!encryptedText.startsWith('skyline-e2e:v3:')) {
+        throw new Error('Не удалось зашифровать текст. Изменение не сохранено.');
       }
 
       const response = await api.patch<ChatMessage>(`/messages/${message.id}`, { text: encryptedText });

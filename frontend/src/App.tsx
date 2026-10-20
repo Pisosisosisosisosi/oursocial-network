@@ -10,7 +10,6 @@ import UserProfile from './pages/UserProfile';
 import Settings from './pages/Settings';
 import Groups from './pages/Groups';
 import { applyAppPreferences } from './preferences';
-import { api } from './api/client';
 import { getSocket } from './api/socket';
 import { ToastProvider } from './context/ToastContext';
 import { useToast } from './context/useToast';
@@ -46,18 +45,9 @@ function GlobalNotifications() {
         || Notification.permission !== 'granted'
       ) return;
 
-      const messagePath = typeof event.groupId === 'string'
-        ? `/groups/${event.groupId}/messages`
-        : `/messages/${event.senderId}`;
-      void api.get(messagePath, { params: { limit: 20 } }).then((response) => {
-        const newest = response.data[response.data.length - 1];
-        if (!newest || newest.senderId !== event.senderId) return;
-        new Notification('Новое сообщение в Skyline', {
-          body: newest.type === 'text' ? newest.text : `Отправлен файл: ${newest.fileName || 'вложение'}`,
-          icon: `${import.meta.env.BASE_URL}skyline-icon.svg`,
-        });
-      }).catch((error: unknown) => {
-        console.error('Не удалось загрузить данные для уведомления:', error);
+      new Notification(event.groupId ? 'Новое сообщение в группе Skyline' : 'Новое сообщение в Skyline', {
+        body: 'Откройте Skyline, чтобы прочитать сообщение.',
+        icon: `${import.meta.env.BASE_URL}skyline-icon.svg`,
       });
     };
     const handleGroupMention = (event: { groupTitle?: string; senderUsername?: string }) => {

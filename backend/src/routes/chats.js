@@ -196,10 +196,6 @@ const updateChatHandler = async (req, res, next) => {
       (updatedChat.participants || []).forEach((participantId) => {
         io.to(`user:${participantId}`).emit('chat_updated', updatedChat);
       });
-      const addedIds = Array.isArray(toAdd) ? toAdd : [toAdd];
-      addedIds.forEach((participantId) => {
-        io.to(`user:${participantId}`).emit('chat_created', updatedChat);
-      });
     }
 
     res.status(200).json({
