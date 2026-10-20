@@ -1362,7 +1362,7 @@ export default function Chats() {
               onScroll={(event) => {
                 if (event.currentTarget.scrollTop <= 48) void loadOlderMessages();
               }}
-              className="flex-1 min-h-0 p-3 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10"
+              className="chat-wallpaper-surface flex-1 min-h-0 p-3 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar relative z-10"
             >
               {chatError && <div role="alert" className="rounded-xl border border-rose-400/20 bg-rose-400/[0.08] px-3 py-2 text-xs text-rose-200">{chatError}</div>}
               {loadingOlderMessages && (
@@ -1403,10 +1403,10 @@ export default function Chats() {
                         }}
                         onTouchEnd={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } }}
                         onTouchMove={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } }}
-                        className={`chat-message max-w-full p-3.5 rounded-2xl text-xs leading-relaxed relative ${
+                        className={`chat-message chat-message-bubble max-w-full p-3.5 rounded-2xl text-xs leading-relaxed relative border ${
                           isMe
-                            ? 'bg-gradient-to-br from-accent-to to-accent/40 text-white rounded-br-none shadow-[0_4px_20px_rgba(var(--accent-rgb),0.3)] border border-accent/30'
-                            : 'bg-slate-800/80 text-slate-200 rounded-bl-none border border-slate-700/50 shadow-lg'
+                            ? 'chat-message-own rounded-br-none shadow-[0_4px_20px_rgba(var(--accent-rgb),0.18)]'
+                            : 'chat-message-other rounded-bl-none shadow-lg'
                         }`}
                       >
                         {m.pinned && (

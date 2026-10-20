@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Bell, Contrast, Download, LogOut, MessageSquare, Shield, Smartphone, UserRound } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { ArrowLeft, Bell, Contrast, Download, Image, LogOut, MessageSquare, Shield, Smartphone, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { applyAppPreferences, APP_THEMES, type AppTheme } from '../preferences';
+import { applyAppPreferences, APP_THEMES, CHAT_STYLE_DEFAULTS, type AppTheme, type WallpaperFit } from '../preferences';
 import { api } from '../api/client';
 import { useToast } from '../context/useToast';
 //import GlassPanel from '../components/ui/GlassPanel';
@@ -11,6 +11,16 @@ import Toggle from '../components/ui/Toggle';
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
+function readChatColorPreference(key: string, fallback: string) {
+  const value = localStorage.getItem(key);
+  return value && /^#[\da-f]{6}$/i.test(value) ? value : fallback;
+}
+
+function readChatWallpaper() {
+  const value = localStorage.getItem('skylineChatWallpaper') || '';
+  return value.length <= 2_200_000 && /^data:image\/(?:png|jpeg|webp|gif);base64,[\da-z+/]+=*$/i.test(value) ? value : '';
 }
 
 /* Превью-свотчи совпадают с темами в index.css */
@@ -50,6 +60,16 @@ export default function Settings() {
   const [desktopNotifications, setDesktopNotifications] = useState(() => localStorage.getItem('skylineNotifications') === 'true');
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [notice, setNotice] = useState('');
+  const wallpaperInputRef = useRef<HTMLInputElement>(null);
+  const [wallpaper, setWallpaper] = useState(readChatWallpaper);
+  const [wallpaperFit, setWallpaperFit] = useState<WallpaperFit>(() => {
+    const saved = localStorage.getItem('skylineChatWallpaperFit');
+    return saved === 'contain' || saved === 'repeat' ? saved : 'cover';
+  });
+  const [chatTextColor, setChatTextColor] = useState(() => readChatColorPreference('skylineChatTextColor', CHAT_STYLE_DEFAULTS.text));
+  const [chatBorderColor, setChatBorderColor] = useState(() => readChatColorPreference('skylineChatBorderColor', CHAT_STYLE_DEFAULTS.border));
+  const [ownMessageColor, setOwnMessageColor] = useState(() => readChatColorPreference('skylineChatOwnMessageColor', CHAT_STYLE_DEFAULTS.ownMessage));
+  const [otherMessageColor, setOtherMessageColor] = useState(() => readChatColorPreference('skylineChatOtherMessageColor', CHAT_STYLE_DEFAULTS.otherMessage));
 
   useEffect(() => {
     const handler = (event: Event) => { event.preventDefault(); setInstallPrompt(event as InstallPromptEvent); };
@@ -64,6 +84,55 @@ export default function Settings() {
 
   const chooseTheme = (value: 'dark' | 'light') => { setTheme(value); savePreference('skylineTheme', value); };
   const chooseAppTheme = (id: AppTheme) => { setAppTheme(id); savePreference('skylineAppTheme', id); showToast('Стиль приложения обновлён.', 'success'); };
+
+  const handleWallpaperUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+      setNotice('Выберите изображение JPG, PNG, WebP или GIF.');
+      return;
+    }
+    if (file.size > 1_500_000) {
+      setNotice('Размер изображения не должен превышать 1,5 МБ.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return;
+      try {
+        localStorage.setItem('skylineChatWallpaper', reader.result);
+        setWallpaper(reader.result);
+        setNotice('Обои чата обновлены.');
+        applyAppPreferences(Boolean(user?.isPremium));
+      } catch {
+        setNotice('Не удалось сохранить изображение. Выберите файл меньшего размера.');
+      }
+    };
+    reader.onerror = () => setNotice('Не удалось прочитать изображение.');
+    reader.readAsDataURL(file);
+  };
+
+  const chooseWallpaperFit = (fit: WallpaperFit) => {
+    setWallpaperFit(fit);
+    savePreference('skylineChatWallpaperFit', fit);
+  };
+
+  const resetChatStyle = () => {
+    ['skylineChatWallpaper', 'skylineChatWallpaperFit', 'skylineChatTextColor', 'skylineChatBorderColor', 'skylineChatOwnMessageColor', 'skylineChatOtherMessageColor'].forEach((key) => localStorage.removeItem(key));
+    setWallpaper('');
+    setWallpaperFit('cover');
+    setChatTextColor(CHAT_STYLE_DEFAULTS.text);
+    setChatBorderColor(CHAT_STYLE_DEFAULTS.border);
+    setOwnMessageColor(CHAT_STYLE_DEFAULTS.ownMessage);
+    setOtherMessageColor(CHAT_STYLE_DEFAULTS.otherMessage);
+    applyAppPreferences(Boolean(user?.isPremium));
+  };
+
+  const chooseChatColor = (key: string, value: string, setValue: (value: string) => void) => {
+    setValue(value);
+    savePreference(key, value);
+  };
 
   const handleNotifications = async (enabled: boolean) => {
     if (!enabled) { setDesktopNotifications(false); savePreference('skylineNotifications', 'false'); return; }
@@ -155,6 +224,41 @@ export default function Settings() {
                   </button>
                 ))}
               </div>
+            </fieldset>
+
+            <fieldset className="mt-4 border-t border-white/[0.06] pt-4">
+              <legend className="mb-3 flex items-center gap-2 text-sm font-medium"><Image size={15} className="text-accent" /> Оформление чатов</legend>
+              <div className="grid gap-4 sm:grid-cols-[1fr_1fr]">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => wallpaperInputRef.current?.click()} className="min-h-10 rounded-xl bg-accent/15 px-3 text-xs font-semibold text-t-primary hover:bg-accent/25">Загрузить обои</button>
+                    {wallpaper && <button type="button" onClick={() => { localStorage.removeItem('skylineChatWallpaper'); setWallpaper(''); applyAppPreferences(Boolean(user?.isPremium)); }} className="min-h-10 rounded-xl border border-white/10 px-3 text-xs text-t-secondary hover:bg-white/5">Убрать</button>}
+                    <input ref={wallpaperInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleWallpaperUpload} className="hidden" aria-label="Загрузить обои чата" />
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-t-secondary">JPG, PNG, WebP или GIF · до 1,5 МБ. Изображение хранится в этом браузере.</p>
+                  <label className="block text-xs text-t-secondary">Размещение изображения
+                    <select value={wallpaperFit} onChange={(event) => chooseWallpaperFit(event.target.value as WallpaperFit)} className="mt-1.5 h-10 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-xs text-t-primary outline-none focus:border-accent/50">
+                      <option value="cover">Заполнить область</option><option value="contain">Вписать целиком</option><option value="repeat">Повторять плиткой</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { label: 'Цвет текста сообщений', value: chatTextColor, key: 'skylineChatTextColor', set: setChatTextColor },
+                    { label: 'Цвет обводки сообщений', value: chatBorderColor, key: 'skylineChatBorderColor', set: setChatBorderColor },
+                    { label: 'Цвет моих сообщений', value: ownMessageColor, key: 'skylineChatOwnMessageColor', set: setOwnMessageColor },
+                    { label: 'Цвет сообщений собеседника', value: otherMessageColor, key: 'skylineChatOtherMessageColor', set: setOtherMessageColor },
+                  ].map((color) => <label key={color.key} className="flex min-h-10 items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 text-[11px] text-t-secondary">{color.label}<input type="color" value={color.value} onChange={(event) => chooseChatColor(color.key, event.target.value, color.set)} aria-label={color.label} className="h-7 w-9 cursor-pointer rounded-md border-0 bg-transparent p-0" /></label>)}
+                </div>
+              </div>
+              <div className="mt-4 rounded-2xl border border-white/[0.07] p-3" style={{ backgroundColor: '#0b1020', backgroundImage: wallpaper ? `linear-gradient(rgba(4,8,16,.38),rgba(4,8,16,.38)),url("${wallpaper}")` : undefined, backgroundSize: wallpaperFit === 'repeat' ? 'cover,180px auto' : `cover,${wallpaperFit}`, backgroundRepeat: wallpaperFit === 'repeat' ? 'no-repeat,repeat' : 'no-repeat,no-repeat', backgroundPosition: 'center' }}>
+                <p className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-white/60">Предпросмотр</p>
+                <div className="flex flex-col gap-2">
+                  <div className="max-w-[85%] self-start rounded-2xl rounded-bl-md border px-3 py-2 text-xs" style={{ backgroundColor: otherMessageColor, borderColor: chatBorderColor, color: chatTextColor }}>Привет! Вот так выглядят сообщения.</div>
+                  <div className="max-w-[85%] self-end rounded-2xl rounded-br-md border px-3 py-2 text-xs" style={{ backgroundColor: ownMessageColor, borderColor: chatBorderColor, color: chatTextColor }}>Можно настроить под себя ✨</div>
+                </div>
+              </div>
+              <button type="button" onClick={resetChatStyle} className="mt-3 min-h-9 rounded-lg px-2 text-[11px] text-t-secondary hover:bg-white/5 hover:text-t-primary">Сбросить оформление чатов</button>
             </fieldset>
 
             <div className="mt-2 border-t border-white/[0.06]">

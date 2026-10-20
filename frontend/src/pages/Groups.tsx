@@ -668,7 +668,7 @@ export default function Groups() {
               </div>
             )}
 
-            <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-6">
+            <div className="chat-wallpaper-surface flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-6">
               {hasMore && <button type="button" onClick={() => void loadOlder()} className="mx-auto block rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-t-secondary hover:bg-white/[0.04]">Загрузить более ранние сообщения</button>}
               {loadingMessages && <div role="status" className="space-y-3">{[0, 1, 2].map((item) => <div key={item} className="chat-skeleton h-14 w-2/3 rounded-2xl" />)}</div>}
               {!loadingMessages && !messages.length && <p className="m-auto py-10 text-center text-xs text-slate-500">В этой группе пока нет сообщений.</p>}
@@ -679,7 +679,7 @@ export default function Groups() {
                   ? messages.find((item) => item.id === message.replyTo) || replyPreviews[message.replyTo] || undefined
                   : undefined;
                 return (
-                  <article key={message.id} id={`group-message-${message.id}`} className={`group max-w-[min(80%,640px)] rounded-2xl border px-4 py-3 ${messageSearch.trim() && `${message.text} ${message.fileName || ''}`.toLocaleLowerCase().includes(messageSearch.trim().toLocaleLowerCase()) ? 'border-amber-300/40 ring-1 ring-amber-300/10' : own ? 'border-accent/20 bg-accent/10' : 'border-white/[0.07] bg-white/[0.035]'}`}>
+                  <article key={message.id} id={`group-message-${message.id}`} className={`chat-message-bubble group max-w-[min(80%,640px)] rounded-2xl border px-4 py-3 ${own ? 'chat-message-own' : 'chat-message-other'} ${messageSearch.trim() && `${message.text} ${message.fileName || ''}`.toLocaleLowerCase().includes(messageSearch.trim().toLocaleLowerCase()) ? 'ring-1 ring-amber-300/30' : ''}`}>
                     {!own && <p className="mb-1 text-[10px] font-semibold text-accent">{author?.displayName || author?.username || 'Участник'} <span className="font-normal text-slate-500">@{author?.username}</span></p>}
                     {message.forwardedFrom && <div className="mb-2 flex items-center gap-1 text-[10px] font-medium text-slate-400"><Forward size={11} /> Переслано</div>}
                     {message.replyTo && <button type="button" disabled={!messages.some((item) => item.id === message.replyTo)} onClick={() => document.getElementById(`group-message-${message.replyTo}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="mb-2 block w-full rounded-lg border-l-2 border-accent/60 bg-black/15 px-2.5 py-1.5 text-left disabled:cursor-default"><p className="text-[9px] font-semibold uppercase tracking-wider text-accent">{quotedMessage ? activeGroup.members.find((member) => member.userId === quotedMessage.senderId)?.username || 'Участник' : 'Ответ на сообщение'}</p><p className="truncate text-[10px] text-slate-300">{quotedMessage?.text || (quotedMessage && quotedMessage.type !== 'text' ? '📎 Вложение' : 'Исходное сообщение недоступно')}</p></button>}

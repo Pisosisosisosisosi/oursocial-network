@@ -82,6 +82,14 @@
 /* Базовый фон */
 body, .app-shell { background: var(--bg-base); font-family: var(--font-sans); }
 
+.chat-wallpaper-surface {
+  background-color: var(--bg-base);
+  background-image: linear-gradient(var(--chat-wallpaper-shade, transparent), var(--chat-wallpaper-shade, transparent)), var(--chat-wallpaper-image, none);
+  background-size: cover, var(--chat-wallpaper-size, cover);
+  background-position: center;
+  background-repeat: no-repeat, var(--chat-wallpaper-repeat, no-repeat);
+}
+
 /* ============ сохранённые анимации (используются страницами) ============ */
 @keyframes login-error-shake { 0%,100% { transform: translateX(0);} 20%,60% { transform: translateX(-5px);} 40%,80% { transform: translateX(5px);} }
 .login-error-shake { animation: login-error-shake 300ms ease-in-out; }
@@ -206,6 +214,9 @@ body, .glass-panel, input, textarea, .chat-message, .toggle, .pinned-strip {
   box-shadow: 0 2px 10px rgba(2, 6, 23, 0.35);
   position: relative;
 }
+.chat-message-bubble { color: var(--chat-text-color, var(--text-primary)); border-color: var(--chat-border-color, rgba(255,255,255,.12)); }
+.chat-message-own { background: var(--chat-own-message-color, #4f46e5); }
+.chat-message-other { background: var(--chat-other-message-color, #1e293b); }
 .chat-message::before {
   content: "";
   position: absolute;
