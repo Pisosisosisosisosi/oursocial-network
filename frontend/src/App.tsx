@@ -127,6 +127,7 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/chats" element={user ? <Chats /> : <Navigate to="/login" replace />} />
       <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
       <Route path="/premium" element={user
