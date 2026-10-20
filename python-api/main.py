@@ -139,6 +139,7 @@ class MessageRequest(BaseModel):
     fileName: str = Field(default="", max_length=200)
     contentType: str = Field(default="", max_length=100)
     fileData: str = Field(default="", max_length=3_500_000)
+    replyTo: Optional[str] = Field(default=None, max_length=64)
 
 
 class ReactionRequest(BaseModel):
@@ -1031,6 +1032,8 @@ def serialize_message(message):
         "read": message.get("read", False),
         "groupId": message.get("groupId"),
         "edited": message.get("edited", False),
+        "replyTo": message.get("replyTo"),
+        "forwardedFrom": message.get("forwardedFrom"),
     }
 
 
@@ -1116,6 +1119,14 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
     file_name = ""
     content_type = ""
     file_data = ""
+    reply_to = None
+    if payload.replyTo:
+        original = find_message_for_user(payload.replyTo, current["userId"])
+        if original.get("groupId") or {
+            str(original.get("senderId")), str(original.get("receiverId"))
+        } != {current["userId"], payload.receiverId}:
+            raise HTTPException(status_code=400, detail="Reply target must be in this conversation")
+        reply_to = str(original["_id"])
     if payload.type == "text":
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Message text cannot be empty")
@@ -1143,6 +1154,7 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
         "pinned": False,
         "createdAt": datetime.now(timezone.utc),
         "read": False,
+        "replyTo": reply_to,
     }
     result = messages.insert_one(doc)
     doc["_id"] = result.inserted_id
@@ -1260,6 +1272,13 @@ async def get_messages(
     )
     chat.reverse()
     return [serialize_message(message) for message in chat]
+
+
+@app.get("/messages/{message_id}/preview")
+def get_message_preview(message_id: str, current=Depends(get_current_user)):
+    """Load a reply target without requiring the client to page through older history."""
+    message = find_message_for_user(message_id, current["userId"])
+    return serialize_message(message)
 
 
 @app.delete("/messages/{user_id}")
@@ -1781,9 +1800,11 @@ class MessageDeleteForAllRequest(BaseModel):
     messageId: str = Field(min_length=1, max_length=64)
 
 class MessageForwardRequest(BaseModel):
-    messageId: str = Field(min_length=1, max_length=64)
-    targetChatId: Optional[str] = Field(default=None, max_length=64)
     targetUserId: Optional[str] = Field(default=None, max_length=64)
+    targetGroupId: Optional[str] = Field(default=None, max_length=64)
+    text: str = Field(default="", max_length=524_288)
+    type: Literal["text", "image", "file"] = "text"
+    fileData: str = Field(default="", max_length=3_500_000)
 
 class MessageReplyRequest(BaseModel):
     text: str = Field(default="", max_length=524_288)
@@ -1791,6 +1812,7 @@ class MessageReplyRequest(BaseModel):
     fileName: str = Field(default="", max_length=200)
     contentType: str = Field(default="", max_length=100)
     fileData: str = Field(default="", max_length=3_500_000)
+    mentionUserIds: list[str] = Field(default_factory=list, max_length=100)
 
 class DisappearingMessagesRequest(BaseModel):
     chatId: str = Field(min_length=1, max_length=64)
@@ -1977,11 +1999,91 @@ async def forward_message(
     payload: MessageForwardRequest,
     current=Depends(get_current_user),
 ):
-    """Do not copy recipient-bound ciphertext into a different conversation."""
-    raise HTTPException(
-        status_code=501,
-        detail="Forwarding is unavailable until the client can re-encrypt for the new recipients.",
-    )
+    """Save a client-reencrypted message copy; the server never decrypts the source."""
+    original = find_message_for_user(message_id, current["userId"])
+    if bool(payload.targetUserId) == bool(payload.targetGroupId):
+        raise HTTPException(status_code=400, detail="Choose exactly one forwarding destination")
+
+    group = None
+    if payload.targetGroupId:
+        group = get_group_for_member(payload.targetGroupId, current["userId"])
+        recipient_ids = {member["userId"] for member in group.get("members", [])}
+        receiver_id = ""
+        group_id = payload.targetGroupId
+        if payload.type == "text":
+            validate_v4_envelope(payload.text, 64_000, recipient_ids)
+            text = payload.text
+            file_data = ""
+        else:
+            validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, recipient_ids)
+            text = payload.fileData
+            file_data = ""
+    else:
+        target_user_id = payload.targetUserId
+        if not target_user_id or not ObjectId.is_valid(target_user_id) or target_user_id == current["userId"]:
+            raise HTTPException(status_code=400, detail="Invalid forwarding recipient")
+        if not users_collection().find_one({"_id": ObjectId(target_user_id)}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Forwarding recipient not found")
+        recipient_ids = {current["userId"], target_user_id}
+        receiver_id = target_user_id
+        group_id = None
+        if payload.type == "text":
+            text = payload.text.strip()
+            if not text.startswith("skyline-e2e:v3:"):
+                raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
+            file_data = ""
+        else:
+            validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, recipient_ids)
+            text = ""
+            file_data = payload.fileData
+
+    enforce_message_rate_limit(current["userId"])
+    now = datetime.now(timezone.utc)
+    forwarded_doc = {
+        "chatId": group_id,
+        "groupId": group_id,
+        "senderId": current["userId"],
+        "senderName": current.get("username", "Пользователь"),
+        "receiverId": receiver_id,
+        "text": text,
+        "type": "text" if payload.type == "text" else "file",
+        "fileName": "",
+        "contentType": "",
+        "fileData": file_data,
+        "forwardedFrom": str(original["_id"]),
+        "replyTo": None,
+        "reactions": [],
+        "pinned": False,
+        "createdAt": now,
+        "read": False,
+        "readBy": [current["userId"]],
+        "deliveredTo": [current["userId"]],
+        "deleted": False,
+        "isEdited": False,
+    }
+    inserted = messages_collection().insert_one(forwarded_doc)
+    forwarded_doc["_id"] = inserted.inserted_id
+    if group:
+        groups_collection().update_one({"_id": group["_id"]}, {"$set": {"updatedAt": now}})
+        event = {
+            "messageId": str(inserted.inserted_id),
+            "groupId": group_id,
+            "senderId": current["userId"],
+            "action": "created",
+        }
+    else:
+        event = {
+            "messageId": str(inserted.inserted_id),
+            "senderId": current["userId"],
+            "receiverId": receiver_id,
+            "action": "created",
+        }
+    for recipient_id in recipient_ids:
+        try:
+            await sio.emit("message_changed", event, to=f"user:{recipient_id}")
+        except Exception as exc:
+            print(f"Failed to notify forwarded message recipient {recipient_id}: {exc}")
+    return serialize_message(forwarded_doc)
 
 
 @app.post("/messages/{message_id}/reply")
@@ -1992,31 +2094,56 @@ async def reply_to_message(
 ):
     """Ответить на конкретное сообщение (цитирование)"""
     original = find_message_for_user(message_id, current["userId"])
-    chat_id = original.get("chatId") or original.get("groupId")
-    receiver_id = original.get("receiverId") or current["userId"]
-    if payload.type != "text" or payload.fileName or payload.contentType or payload.fileData:
-        raise HTTPException(status_code=501, detail="Attachment replies are not available yet.")
-    text = payload.text.strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Reply text cannot be empty")
-    if original.get("groupId"):
-        group = get_group_for_member(original["groupId"], current["userId"])
-        validate_v4_envelope(text, 64_000, {member["userId"] for member in group.get("members", [])})
-    elif not text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
-        raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
+    group_id = original.get("groupId")
+    if group_id:
+        group = get_group_for_member(group_id, current["userId"])
+        receiver_id = ""
+        recipient_ids = {member["userId"] for member in group.get("members", [])}
+        mentioned_ids = set(payload.mentionUserIds)
+        if not mentioned_ids.issubset(recipient_ids):
+            raise HTTPException(status_code=400, detail="Mention recipients must be group members")
+    else:
+        if payload.mentionUserIds:
+            raise HTTPException(status_code=400, detail="Mentions are only available in groups")
+        participants = {str(original.get("senderId")), str(original.get("receiverId"))}
+        if len(participants) != 2 or current["userId"] not in participants:
+            raise HTTPException(status_code=404, detail="Message not found")
+        receiver_id = next(participant for participant in participants if participant != current["userId"])
+        recipient_ids = participants
+
+    if payload.fileName or payload.contentType:
+        raise HTTPException(status_code=400, detail="Attachment metadata must be encrypted on the client")
+    if payload.type == "text":
+        text = payload.text.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="Reply text cannot be empty")
+        if group_id:
+            validate_v4_envelope(text, 64_000, recipient_ids)
+        elif not text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
+            raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
+        file_data = ""
+    else:
+        validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, recipient_ids)
+        if group_id:
+            text = payload.fileData
+            file_data = ""
+        else:
+            text = ""
+            file_data = payload.fileData
+    enforce_message_rate_limit(current["userId"])
 
     now = datetime.now(timezone.utc)
     reply_doc = {
-        "chatId": chat_id,
+        "chatId": group_id,
         "senderId": current["userId"],
         "senderName": current.get("username", "Пользователь"),
         "receiverId": receiver_id,
-        "groupId": original.get("groupId"),
+        "groupId": group_id,
         "text": text,
-        "type": "text",
+        "type": "text" if payload.type == "text" else "file",
         "fileName": "",
         "contentType": "",
-        "fileData": "",
+        "fileData": file_data,
         "replyTo": message_id,
         "createdAt": now,
         "readBy": [current["userId"]],
@@ -2026,21 +2153,32 @@ async def reply_to_message(
     }
     result = messages_collection().insert_one(reply_doc)
     reply_doc["_id"] = result.inserted_id
-    recipients = [receiver_id, current["userId"]]
-    if original.get("groupId"):
-        group = groups_collection().find_one({"_id": ObjectId(original["groupId"])})
-        if group:
-            recipients = [m["userId"] for m in group.get("members", [])]
-    for rid in set(recipients):
+    if group_id:
+        groups_collection().update_one({"_id": group["_id"]}, {"$set": {"updatedAt": now}})
+    event = {
+        "messageId": str(result.inserted_id),
+        "replyTo": message_id,
+        "senderId": current["userId"],
+        "receiverId": receiver_id,
+        "groupId": group_id,
+        "action": "created",
+    }
+    for recipient_id in recipient_ids:
         try:
-            sio.emit("message_replied", {
-                "messageId": str(result.inserted_id),
-                "replyTo": message_id,
-                "senderId": current["userId"],
-                "chatId": chat_id,
-            }, to=f"user:{rid}")
-        except Exception:
-            pass
+            await sio.emit("message_changed", event, to=f"user:{recipient_id}")
+        except Exception as exc:
+            print(f"Failed to notify message reply recipient {recipient_id}: {exc}")
+    if group_id:
+        for mentioned_id in mentioned_ids - {current["userId"]}:
+            try:
+                await sio.emit("group_mention", {
+                    "groupId": group_id,
+                    "groupTitle": group["title"],
+                    "senderId": current["userId"],
+                    "senderUsername": current.get("username", "Пользователь"),
+                }, to=f"user:{mentioned_id}")
+            except Exception as exc:
+                print(f"Failed to notify mentioned group member {mentioned_id}: {exc}")
     return serialize_message(reply_doc)
 
 

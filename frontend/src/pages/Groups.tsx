@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, Download, FileText, Paperclip, Plus, Search, Send, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { ArrowLeft, Download, FileText, Forward, Paperclip, Plus, Reply, Search, Send, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { api, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +36,8 @@ interface GroupMessage {
   fileName?: string;
   contentType?: string;
   fileData?: string;
+  replyTo?: string | null;
+  forwardedFrom?: string | null;
 }
 
 const REACTIONS = ['❤️', '👍', '😂'];
@@ -96,6 +99,30 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function groupDraftKey(userId: string, groupId: string) {
+  return `skyline:group-draft:${userId}:${groupId}`;
+}
+
+function readGroupDraft(userId: string | undefined, groupId: string | undefined) {
+  if (!userId || !groupId) return '';
+  try {
+    return localStorage.getItem(groupDraftKey(userId, groupId)) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeGroupDraft(userId: string | undefined, groupId: string | undefined, value: string) {
+  if (!userId || !groupId) return;
+  try {
+    const key = groupDraftKey(userId, groupId);
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch (error) {
+    console.warn('Не удалось сохранить черновик группы:', error);
+  }
+}
+
 export default function Groups() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -104,10 +131,14 @@ export default function Groups() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
+  const [messageSearch, setMessageSearch] = useState('');
+  const [searchingHistory, setSearchingHistory] = useState(false);
+  const [searchedHistoryPages, setSearchedHistoryPages] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadedGroupId, setLoadedGroupId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
   const [creating, setCreating] = useState(false);
   const [addingMembers, setAddingMembers] = useState(false);
   const [groupTitle, setGroupTitle] = useState('');
@@ -118,6 +149,11 @@ export default function Groups() {
   const [searching, setSearching] = useState(false);
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  const [replyingMessage, setReplyingMessage] = useState<GroupMessage | null>(null);
+  const [replyPreviews, setReplyPreviews] = useState<Record<string, GroupMessage | null>>({});
+  const [forwardingMessage, setForwardingMessage] = useState<GroupMessage | null>(null);
+  const [forwardSearch, setForwardSearch] = useState('');
+  const [forwarding, setForwarding] = useState(false);
   const activeGroup = activeGroupId === ''
     ? null
     : groups.find((group) => group.id === activeGroupId) || groups[0] || null;
@@ -126,6 +162,8 @@ export default function Groups() {
     return query ? groups.filter((group) => group.title.toLocaleLowerCase().includes(query)) : groups;
   }, [groupSearch, groups]);
   const loadingMessages = Boolean(activeGroup && activeGroup.id !== loadedGroupId);
+  const activeGroupKey = activeGroup?.id;
+  const activeGroupKeyRef = useRef<string | undefined>(activeGroupKey);
 
   const loadGroups = useCallback(async () => {
     const response = await api.get<Group[]>('/groups');
@@ -147,6 +185,7 @@ export default function Groups() {
     const decryptedMessages = userId
       ? await Promise.all(response.data.map((message) => decryptGroupMessage(message, userId)))
       : response.data;
+    if (activeGroupKeyRef.current !== groupId) return decryptedMessages;
     setMessages((current) => {
       if (!before) return decryptedMessages;
       const ids = new Set(current.map((message) => message.id));
@@ -156,7 +195,11 @@ export default function Groups() {
     setLoadedGroupId(groupId);
   }, [userId]);
 
-  const activeGroupKey = activeGroup?.id;
+  useEffect(() => {
+    activeGroupKeyRef.current = activeGroupKey;
+    setReplyingMessage(null);
+    setDraft(readGroupDraft(userId, activeGroupKey));
+  }, [activeGroupKey, userId]);
   useEffect(() => {
     if (!activeGroupKey) return;
     void loadMessages(activeGroupKey).catch((error: unknown) => {
@@ -164,6 +207,25 @@ export default function Groups() {
       showToast('Не удалось загрузить сообщения группы.', 'error');
     });
   }, [activeGroupKey, loadMessages, showToast]);
+
+  useEffect(() => {
+    const missingReplyIds = [...new Set(messages
+      .map((message) => message.replyTo)
+      .filter((messageId): messageId is string => Boolean(messageId) && !(messageId in replyPreviews)))];
+    if (!missingReplyIds.length || !userId) return;
+    let active = true;
+    void Promise.all(missingReplyIds.map(async (messageId) => {
+      try {
+        const response = await api.get<GroupMessage>(`/messages/${messageId}/preview`);
+        return [messageId, await decryptGroupMessage(response.data, userId)] as const;
+      } catch {
+        return [messageId, null] as const;
+      }
+    })).then((entries) => {
+      if (active) setReplyPreviews((current) => ({ ...current, ...Object.fromEntries(entries) }));
+    });
+    return () => { active = false; };
+  }, [messages, replyPreviews, userId]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -286,25 +348,37 @@ export default function Groups() {
 
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
-    if (!activeGroup || !user?.id || !draft.trim()) return;
+    if (!activeGroup || !user?.id || !draft.trim() || sending) return;
+    const targetGroup = activeGroup;
+    const replyTarget = replyingMessage;
+    const messageText = draft;
+    setSending(true);
     try {
       const encrypted = await encryptBytes(
-        new TextEncoder().encode(JSON.stringify({ kind: 'text', text: draft })),
-        groupRecipients(activeGroup),
+        new TextEncoder().encode(JSON.stringify({ kind: 'text', text: messageText })),
+        groupRecipients(targetGroup),
       );
-      const mentionedUserIds = activeGroup.members
-        .filter((member) => member.userId !== user.id && new RegExp(`(^|[^\\w])@${escapeRegExp(member.username)}(?![\\w.-])`, 'i').test(draft))
+      const mentionedUserIds = targetGroup.members
+        .filter((member) => member.userId !== user.id && new RegExp(`(^|[^\\w])@${escapeRegExp(member.username)}(?![\\w.-])`, 'i').test(messageText))
         .map((member) => member.userId);
-      const response = await api.post<GroupMessage>(`/groups/${activeGroup.id}/messages`, {
-        text: encrypted,
-        mentionUserIds: mentionedUserIds,
-      });
+      const response = replyTarget
+        ? await api.post<GroupMessage>(`/messages/${replyTarget.id}/reply`, { text: encrypted, type: 'text', mentionUserIds: mentionedUserIds })
+        : await api.post<GroupMessage>(`/groups/${targetGroup.id}/messages`, {
+          text: encrypted,
+          mentionUserIds: mentionedUserIds,
+        });
       const decrypted = await decryptGroupMessage(response.data, user.id);
-      setMessages((current) => [...current, decrypted]);
-      setDraft('');
+      if (activeGroupKeyRef.current === targetGroup.id) {
+        setMessages((current) => [...current, decrypted]);
+        setDraft('');
+        setReplyingMessage(null);
+      }
+      writeGroupDraft(user.id, targetGroup.id, '');
     } catch (error) {
       console.error('Не удалось отправить сообщение в группу:', error);
       showToast(error instanceof Error ? error.message : 'Не удалось отправить сообщение.', 'error');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -348,7 +422,9 @@ export default function Groups() {
   const sendAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file || !activeGroup || !user?.id) return;
+    if (!file || !activeGroup || !user?.id || sending) return;
+    const targetGroup = activeGroup;
+    const replyTarget = replyingMessage;
     if (!GROUP_ATTACHMENT_TYPES.has(file.type)) {
       showToast('Неподдерживаемый формат файла.', 'error');
       return;
@@ -361,19 +437,71 @@ export default function Groups() {
       showToast('Нельзя отправить пустой файл.', 'error');
       return;
     }
+    setSending(true);
     try {
       const packed = packAttachmentPayload(new Uint8Array(await file.arrayBuffer()), {
         fileName: file.name,
         contentType: file.type,
       });
-      const encrypted = await encryptBytes(packed, groupRecipients(activeGroup));
-      const response = await api.post<GroupMessage>(`/groups/${activeGroup.id}/messages`, { text: encrypted, type: 'file' });
+      const encrypted = await encryptBytes(packed, groupRecipients(targetGroup));
+      const response = replyTarget
+        ? await api.post<GroupMessage>(`/messages/${replyTarget.id}/reply`, { type: 'file', fileData: encrypted })
+        : await api.post<GroupMessage>(`/groups/${targetGroup.id}/messages`, { text: encrypted, type: 'file' });
       const decrypted = await decryptGroupMessage(response.data, user.id);
-      setMessages((current) => [...current, decrypted]);
+      if (activeGroupKeyRef.current === targetGroup.id) {
+        setMessages((current) => [...current, decrypted]);
+        setReplyingMessage(null);
+      }
       showToast('Файл отправлен в зашифрованном виде.', 'success');
     } catch (error) {
       console.error('Не удалось отправить вложение в группу:', error);
       showToast(error instanceof Error ? error.message : 'Не удалось отправить файл.', 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const forwardMessage = async (targetGroup: Group) => {
+    const source = forwardingMessage;
+    if (!source || !user?.id || forwarding) return;
+    setForwarding(true);
+    try {
+      let payload: { targetGroupId: string; text?: string; type: 'text' | 'file'; fileData?: string };
+      if (source.type === 'text') {
+        const encrypted = await encryptBytes(
+          new TextEncoder().encode(JSON.stringify({ kind: 'text', text: source.text })),
+          groupRecipients(targetGroup),
+        );
+        payload = { targetGroupId: targetGroup.id, text: encrypted, type: 'text' };
+      } else {
+        if (!source.fileData || !source.fileName || !source.contentType || !GROUP_ATTACHMENT_TYPES.has(source.contentType)) {
+          throw new Error('Исходное вложение недоступно для пересылки.');
+        }
+        const sourceBlob = await fetch(source.fileData).then((response) => {
+          if (!response.ok) throw new Error('Не удалось прочитать вложение.');
+          return response.blob();
+        });
+        if (!sourceBlob.size || sourceBlob.size > 2 * 1024 * 1024) throw new Error('Вложение превышает допустимый размер.');
+        const packed = packAttachmentPayload(new Uint8Array(await sourceBlob.arrayBuffer()), {
+          fileName: source.fileName,
+          contentType: source.contentType,
+        });
+        const encrypted = await encryptBytes(packed, groupRecipients(targetGroup));
+        payload = { targetGroupId: targetGroup.id, type: 'file', fileData: encrypted };
+      }
+      const response = await api.post<GroupMessage>(`/messages/${source.id}/forward`, payload);
+      if (activeGroupKeyRef.current === targetGroup.id) {
+        const decrypted = await decryptGroupMessage(response.data, user.id);
+        setMessages((current) => [...current, decrypted]);
+      }
+      setForwardingMessage(null);
+      setForwardSearch('');
+      showToast(`Сообщение переслано в группу «${targetGroup.title}».`, 'success');
+    } catch (error) {
+      console.error('Не удалось переслать сообщение в группу:', error);
+      showToast(error instanceof Error ? error.message : 'Не удалось переслать сообщение.', 'error');
+    } finally {
+      setForwarding(false);
     }
   };
 
@@ -384,6 +512,40 @@ export default function Groups() {
     } catch (error) {
       console.error('Не удалось загрузить предыдущие сообщения:', error);
       showToast('Не удалось загрузить предыдущие сообщения.', 'error');
+    }
+  };
+
+  const searchEntireGroupHistory = async () => {
+    if (!activeGroup || !hasMore || searchingHistory || !messages.length) return;
+    const groupId = activeGroup.id;
+    let cursor = messages[0].id;
+    let pages = 0;
+    setSearchingHistory(true);
+    setSearchedHistoryPages(0);
+    try {
+      while (cursor && activeGroupKeyRef.current === groupId) {
+        const response = await api.get<GroupMessage[]>(`/groups/${groupId}/messages`, { params: { limit: 20, before: cursor } });
+        const page = userId ? await Promise.all(response.data.map((message) => decryptGroupMessage(message, userId))) : response.data;
+        if (activeGroupKeyRef.current !== groupId) break;
+        if (!page.length) {
+          setHasMore(false);
+          break;
+        }
+        setMessages((current) => {
+          const ids = new Set(current.map((message) => message.id));
+          return [...page.filter((message) => !ids.has(message.id)), ...current];
+        });
+        cursor = page[0].id;
+        pages += 1;
+        setSearchedHistoryPages(pages);
+        setHasMore(page.length === 20);
+        if (page.length < 20) break;
+      }
+    } catch (error) {
+      console.error('Не удалось выполнить поиск по истории группы:', error);
+      showToast('Не удалось загрузить часть истории для поиска.', 'error');
+    } finally {
+      setSearchingHistory(false);
     }
   };
 
@@ -412,6 +574,7 @@ export default function Groups() {
   };
 
   return (
+    <>
     <main className="flex h-full min-h-0 w-full bg-bg-base text-t-primary">
       <aside className={`${activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-80`}>
         <WorkspaceSidebarHeader
@@ -483,6 +646,12 @@ export default function Groups() {
               <button type="button" onClick={() => { setAddingMembers(true); setCreating(false); setSelectedMembers([]); setMemberSearch(''); }} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.05]"><UserPlus size={15} /><span className="hidden sm:inline">Добавить участников</span></button>
             </header>
 
+            <div className="flex items-center gap-2 border-b border-white/[0.06] bg-panel px-3 py-2 sm:px-5">
+              <label className="relative min-w-0 flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} placeholder="Поиск в переписке" aria-label="Поиск по сообщениям группы" className="h-9 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-accent/40" /></label>
+              {messageSearch.trim() && <span className="shrink-0 text-[10px] text-t-secondary">{messages.filter((message) => `${message.text} ${message.fileName || ''}`.toLocaleLowerCase().includes(messageSearch.trim().toLocaleLowerCase())).length} в загруженной истории</span>}
+              {messageSearch.trim() && hasMore && <button type="button" disabled={searchingHistory} onClick={() => void searchEntireGroupHistory()} className="shrink-0 rounded-lg border border-white/10 px-2 py-1.5 text-[10px] text-t-secondary hover:border-accent/30 hover:text-accent disabled:opacity-50">{searchingHistory ? `Ищем… ${searchedHistoryPages}` : 'Искать дальше'}</button>}
+            </div>
+
             {addingMembers && (
               <div className="border-b border-white/[0.08] bg-slate-900/70 p-3 sm:px-5">
                 <div className="mb-2 flex flex-wrap gap-1.5">
@@ -506,16 +675,21 @@ export default function Groups() {
               {messages.map((message) => {
                 const author = activeGroup.members.find((member) => member.userId === message.senderId);
                 const own = message.senderId === user?.id;
+                const quotedMessage = message.replyTo
+                  ? messages.find((item) => item.id === message.replyTo) || replyPreviews[message.replyTo] || undefined
+                  : undefined;
                 return (
-                  <article key={message.id} className={`group max-w-[min(80%,640px)] rounded-2xl border px-4 py-3 ${own ? 'ml-auto border-accent/20 bg-accent/10' : 'border-white/[0.07] bg-white/[0.035]'}`}>
+                  <article key={message.id} id={`group-message-${message.id}`} className={`group max-w-[min(80%,640px)] rounded-2xl border px-4 py-3 ${messageSearch.trim() && `${message.text} ${message.fileName || ''}`.toLocaleLowerCase().includes(messageSearch.trim().toLocaleLowerCase()) ? 'border-amber-300/40 ring-1 ring-amber-300/10' : own ? 'border-accent/20 bg-accent/10' : 'border-white/[0.07] bg-white/[0.035]'}`}>
                     {!own && <p className="mb-1 text-[10px] font-semibold text-accent">{author?.displayName || author?.username || 'Участник'} <span className="font-normal text-slate-500">@{author?.username}</span></p>}
+                    {message.forwardedFrom && <div className="mb-2 flex items-center gap-1 text-[10px] font-medium text-slate-400"><Forward size={11} /> Переслано</div>}
+                    {message.replyTo && <button type="button" disabled={!messages.some((item) => item.id === message.replyTo)} onClick={() => document.getElementById(`group-message-${message.replyTo}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="mb-2 block w-full rounded-lg border-l-2 border-accent/60 bg-black/15 px-2.5 py-1.5 text-left disabled:cursor-default"><p className="text-[9px] font-semibold uppercase tracking-wider text-accent">{quotedMessage ? activeGroup.members.find((member) => member.userId === quotedMessage.senderId)?.username || 'Участник' : 'Ответ на сообщение'}</p><p className="truncate text-[10px] text-slate-300">{quotedMessage?.text || (quotedMessage && quotedMessage.type !== 'text' ? '📎 Вложение' : 'Исходное сообщение недоступно')}</p></button>}
                     {message.type === 'image' && message.fileData ? <img src={message.fileData} alt={message.fileName || 'Изображение'} className="mb-2 max-h-72 max-w-full rounded-lg object-contain" /> : message.type === 'file' && message.fileData ? <a href={message.fileData} download={message.fileName || 'attachment'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{message.fileName || 'Скачать файл'}</span></a> : null}
                     {editingMessage === message.id && message.type === 'text' ? (
                       <div className="space-y-2"><textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="w-full resize-y rounded-lg border border-white/10 bg-slate-950/60 p-2 text-sm outline-none focus:border-accent/40" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingMessage(null)} className="text-[10px] text-t-secondary">Отмена</button><button type="button" onClick={() => void saveEdit(message.id)} className="text-[10px] font-semibold text-accent">Сохранить</button></div></div>
-                    ) : message.type === 'text' ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p> : null}
+                    ) : message.type === 'text' ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{messageSearch.trim() && message.text.toLocaleLowerCase().includes(messageSearch.trim().toLocaleLowerCase()) ? <>{message.text.split(new RegExp(`(${escapeRegExp(messageSearch.trim())})`, 'ig')).map((part, index) => part.toLocaleLowerCase() === messageSearch.trim().toLocaleLowerCase() ? <mark key={index} className="rounded bg-amber-300/30 text-inherit">{part}</mark> : part)}</> : message.text}</p> : null}
                     <div className="mt-2 flex items-center justify-between gap-4 text-[9px] text-slate-500">
                       <time>{new Date(message.createdAt).toLocaleString()}</time>
-                      <span className="flex items-center gap-1">{message.edited && <span>изменено</span>}{own && <>{message.type === 'text' && <button type="button" onClick={() => { setEditingMessage(message.id); setEditDraft(message.text); }} aria-label="Редактировать" className="rounded p-1 hover:bg-white/10 hover:text-white"><span className="sr-only">Редактировать</span>✎</button>}<button type="button" onClick={() => void deleteMessage(message)} aria-label="Удалить" className="rounded p-1 hover:bg-rose-500/10 hover:text-rose-300"><Trash2 size={12} /></button></>}</span>
+                      <span className="flex items-center gap-1"><button type="button" onClick={() => setReplyingMessage(message)} aria-label="Ответить на сообщение" className="rounded p-1 hover:bg-white/10 hover:text-accent"><Reply size={12} /></button><button type="button" onClick={() => { setForwardingMessage(message); setForwardSearch(''); }} aria-label="Переслать сообщение" className="rounded p-1 hover:bg-white/10 hover:text-accent"><Forward size={12} /></button>{message.edited && <span>изменено</span>}{own && <>{message.type === 'text' && <button type="button" onClick={() => { setEditingMessage(message.id); setEditDraft(message.text); }} aria-label="Редактировать" className="rounded p-1 hover:bg-white/10 hover:text-white"><span className="sr-only">Редактировать</span>✎</button>}<button type="button" onClick={() => void deleteMessage(message)} aria-label="Удалить" className="rounded p-1 hover:bg-rose-500/10 hover:text-rose-300"><Trash2 size={12} /></button></>}</span>
                     </div>
                     {!!message.reactions.length && <div className="mt-2 flex flex-wrap gap-1">{REACTIONS.map((emoji) => { const count = message.reactions.filter((reaction) => reaction.emoji === emoji).length; return count ? <button key={emoji} type="button" onClick={() => void toggleReaction(message, emoji)} className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-xs">{emoji} {count}</button> : null; })}</div>}
                     <div className="mt-1 flex gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">{REACTIONS.map((emoji) => <button key={emoji} type="button" onClick={() => void toggleReaction(message, emoji)} aria-label={`Поставить реакцию ${emoji}`} className="rounded-md p-1 text-[11px] hover:bg-white/10"><SmilePlus size={12} className="inline" /> {emoji}</button>)}</div>
@@ -524,15 +698,29 @@ export default function Groups() {
               })}
             </div>
 
+            {replyingMessage && <div className="flex items-center gap-3 border-t border-white/[0.08] bg-panel px-4 pt-3"><Reply size={14} className="shrink-0 text-accent" /><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold uppercase tracking-wider text-accent">Ответ участнику группы</p><p className="truncate text-xs text-t-secondary">{replyingMessage.text || '📎 Вложение'}</p></div><button type="button" onClick={() => setReplyingMessage(null)} aria-label="Отменить ответ" className="grid h-10 w-10 place-items-center rounded-xl text-t-secondary hover:bg-white/5 hover:text-white"><X size={15} /></button></div>}
             <form onSubmit={(event) => void sendMessage(event)} className="flex items-end gap-2 border-t border-white/[0.08] bg-panel p-3 sm:px-5">
-              <label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-xl text-t-secondary transition hover:bg-white/5 hover:text-accent" title="Зашифрованное вложение"><Paperclip size={17} /><input type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void sendAttachment(event)} className="hidden" /></label>
+              <label className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-t-secondary transition ${sending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-white/5 hover:text-accent'}`} title="Зашифрованное вложение"><Paperclip size={17} /><input type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void sendAttachment(event)} className="hidden" disabled={sending} /></label>
               <div className="hidden max-w-[30%] gap-1 overflow-hidden sm:flex">{activeGroup.members.slice(0, 3).map((member) => <button key={member.userId} type="button" onClick={() => setDraft((value) => `${value}${value && !value.endsWith(' ') ? ' ' : ''}@${member.username} `)} className="truncate rounded-full bg-white/[0.04] px-2 py-1 text-[9px] text-slate-500 hover:text-accent">@{member.username}</button>)}</div>
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} maxLength={4000} placeholder="Сообщение группе… Используйте @username для упоминания" className="max-h-32 min-h-11 min-w-0 flex-1 resize-y rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm outline-none transition focus:border-accent/40" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-              <button type="submit" disabled={!draft.trim()} aria-label="Отправить сообщение" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"><Send size={17} /></button>
+              <textarea value={draft} onChange={(event) => { setDraft(event.target.value); writeGroupDraft(userId, activeGroupKey, event.target.value); }} rows={1} maxLength={4000} disabled={sending} placeholder="Сообщение группе… Используйте @username для упоминания" className="max-h-32 min-h-11 min-w-0 flex-1 resize-y rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm outline-none transition focus:border-accent/40" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && localStorage.getItem('skylineEnterToSend') !== 'false') { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+              <button type="submit" disabled={!draft.trim() || sending} aria-label="Отправить сообщение" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">{sending ? <span className="text-xs">…</span> : <Send size={17} />}</button>
             </form>
           </>
         ) : <div className="grid flex-1 place-items-center text-center text-sm text-slate-500"><div><Users size={28} className="mx-auto mb-3 text-slate-600" />Выберите группу или создайте новую.</div></div>}
       </section>
     </main>
+    {forwardingMessage && createPortal(
+      <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" onClick={(event) => { if (event.target === event.currentTarget && !forwarding) setForwardingMessage(null); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="group-forward-dialog-title" className="w-full max-w-md rounded-3xl border border-white/10 bg-panel p-5 shadow-2xl">
+          <div className="mb-4 flex items-center justify-between gap-3"><div><h2 id="group-forward-dialog-title" className="text-sm font-semibold text-t-primary">Переслать сообщение</h2><p className="mt-1 text-xs text-t-secondary">Выберите группу-получателя</p></div><button type="button" disabled={forwarding} onClick={() => setForwardingMessage(null)} aria-label="Закрыть" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-t-secondary hover:bg-white/5 hover:text-white disabled:opacity-50"><X size={17} /></button></div>
+          <input value={forwardSearch} onChange={(event) => setForwardSearch(event.target.value)} autoFocus placeholder="Найти группу" aria-label="Найти группу-получателя" className="mb-3 h-11 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 text-sm text-t-primary outline-none placeholder:text-slate-500 focus:border-accent/50" />
+          <div className="max-h-72 space-y-1 overflow-y-auto">{groups.filter((group) => group.id !== activeGroupKey && group.title.toLocaleLowerCase().includes(forwardSearch.trim().toLocaleLowerCase())).map((group) => <button key={group.id} type="button" disabled={forwarding} onClick={() => void forwardMessage(group)} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-50"><span className="grid h-9 w-9 place-items-center rounded-xl bg-accent/10 text-accent"><Users size={16} /></span><span className="min-w-0 flex-1 truncate text-sm text-t-primary">{group.title}</span><span className="text-[10px] text-t-secondary">{group.memberCount} участников</span>{forwarding ? <span className="text-[10px] text-accent">Отправляю…</span> : <Forward size={15} className="text-t-secondary" />}</button>)}
+            {!groups.some((group) => group.id !== activeGroupKey && group.title.toLocaleLowerCase().includes(forwardSearch.trim().toLocaleLowerCase())) && <p className="px-3 py-8 text-center text-xs text-t-secondary">Другие группы не найдены.</p>}
+          </div>
+        </section>
+      </div>,
+      document.body,
+    )}
+    </>
   );
 }

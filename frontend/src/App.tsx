@@ -13,6 +13,7 @@ import { applyAppPreferences } from './preferences';
 import { getSocket } from './api/socket';
 import { ToastProvider } from './context/ToastContext';
 import { useToast } from './context/useToast';
+import { CallProvider } from './context/CallContext';
 
 const Channels = lazy(() => import('./pages/Channels'));
 const Premium = lazy(() => import('./pages/Premium'));
@@ -45,10 +46,20 @@ function GlobalNotifications() {
         || Notification.permission !== 'granted'
       ) return;
 
-      new Notification(event.groupId ? 'Новое сообщение в группе Skyline' : 'Новое сообщение в Skyline', {
-        body: 'Откройте Skyline, чтобы прочитать сообщение.',
-        icon: `${import.meta.env.BASE_URL}skyline-icon.svg`,
-      });
+      try {
+        const notification = new Notification(event.groupId ? 'Новое сообщение в группе Skyline' : 'Новое сообщение в Skyline', {
+          body: 'Откройте Skyline, чтобы прочитать сообщение.',
+          icon: `${import.meta.env.BASE_URL}skyline-icon.svg`,
+          tag: event.groupId ? `skyline-group-${event.groupId}` : 'skyline-chat-message',
+          renotify: false,
+        });
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+      } catch (error) {
+        console.warn('Не удалось показать desktop-уведомление:', error);
+      }
     };
     const handleGroupMention = (event: { groupTitle?: string; senderUsername?: string }) => {
       const title = `Упоминание в группе «${event.groupTitle || 'Общая группа'}»`;
@@ -158,10 +169,12 @@ export default function App() {
     <AuthProvider>
       <HashRouter>
       <ToastProvider>
-        <GlobalNotifications />
-        <div className="app-shell relative h-[100dvh] w-screen overflow-hidden bg-bg-base font-sans text-t-primary">
-          <AppRoutes />
-        </div>
+        <CallProvider>
+          <GlobalNotifications />
+          <div className="app-shell relative h-[100dvh] w-screen overflow-hidden bg-bg-base font-sans text-t-primary">
+            <AppRoutes />
+          </div>
+        </CallProvider>
       </ToastProvider>
       </HashRouter>
     </AuthProvider>

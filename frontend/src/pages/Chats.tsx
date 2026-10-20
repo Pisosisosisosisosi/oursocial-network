@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Paperclip, Pencil, Pin, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Paperclip, Pencil, Phone, Pin, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Video, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { decryptBytes, decryptMessage, encryptBytes, encryptMessage, isEncrypted
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import EmojiPicker from '../components/chat/EmojiPicker';
+import { useCallActions } from '../context/CallContext';
 
 interface ChatMessage {
   id: string;
@@ -25,6 +26,8 @@ interface ChatMessage {
   pinned?: boolean;
   pinnedAt?: string | null;
   edited?: boolean;
+  replyTo?: string | null;
+  forwardedFrom?: string | null;
   createdAt: string;
   read: boolean;
 }
@@ -72,6 +75,30 @@ function formatLastSeen(value?: string | null) {
   })}`;
 }
 
+function chatDraftKey(userId: string, chatId: string) {
+  return `skyline:draft:${userId}:${chatId}`;
+}
+
+function readChatDraft(userId: string | undefined, chatId: string) {
+  if (!userId) return '';
+  try {
+    return localStorage.getItem(chatDraftKey(userId, chatId)) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeChatDraft(userId: string | null | undefined, chatId: string | null | undefined, value: string) {
+  if (!userId || !chatId) return;
+  try {
+    const key = chatDraftKey(userId, chatId);
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch (error) {
+    console.warn('Не удалось сохранить черновик сообщения:', error);
+  }
+}
+
 async function decryptChatMessage(message: ChatMessage, userId?: string): Promise<ChatMessage> {
   if (message.type === 'text' && isEncryptedMessage(message.text)) {
     return { ...message, text: await decryptMessage(message.text, userId) };
@@ -104,6 +131,7 @@ export default function Chats() {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const showToast = useToast();
+  const { startCall } = useCallActions();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
@@ -112,6 +140,8 @@ export default function Chats() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [searchingHistory, setSearchingHistory] = useState(false);
+  const [searchedHistoryPages, setSearchedHistoryPages] = useState(0);
   const [text, setText] = useState('');
   const [chatSearch, setChatSearch] = useState('');
   const [activeSearchResult, setActiveSearchResult] = useState(0);
@@ -146,7 +176,10 @@ export default function Chats() {
   } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingMessage, setReplyingMessage] = useState<ChatMessage | null>(null);
-  const [localQuotes, setLocalQuotes] = useState<Record<string, { senderName: string; text: string }>>({});
+  const [replyPreviews, setReplyPreviews] = useState<Record<string, ChatMessage | null>>({});
+  const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
+  const [forwardSearch, setForwardSearch] = useState('');
+  const [forwarding, setForwarding] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesListRef = useRef<HTMLDivElement>(null);
@@ -162,7 +195,7 @@ export default function Chats() {
   const pinnedHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileRequestRef = useRef(0);
   const typingRecipientRef = useRef<string | null>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
   const activeChatId = activeChat ? String(activeChat.id) : null;
@@ -414,6 +447,13 @@ export default function Chats() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeChat?.id, messages.length]);
 
+  useLayoutEffect(() => {
+    const input = textInputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 144)}px`;
+  }, [text]);
+
   const refreshMessages = async (userId: string, before?: string) => {
     const response = await api.get<ChatMessage[]>(`/messages/${userId}`, {
       params: { limit: 20, ...(before ? { before } : {}) },
@@ -421,6 +461,7 @@ export default function Chats() {
     const decryptedMessages = await Promise.all(
       response.data.map((message) => decryptChatMessage(message, currentUser?.id)),
     );
+    if (activeChatIdRef.current !== String(userId)) return decryptedMessages;
     if (before) {
       pendingScrollHeightRef.current = messagesListRef.current?.scrollHeight ?? null;
       setMessages((current) => {
@@ -434,6 +475,27 @@ export default function Chats() {
     return decryptedMessages;
   };
 
+  useEffect(() => {
+    const missingReplyIds = [...new Set(messages
+      .map((message) => message.replyTo)
+      .filter((messageId): messageId is string => Boolean(messageId) && !(messageId in replyPreviews)))];
+    if (!missingReplyIds.length || !currentUser?.id) return;
+
+    let active = true;
+    void Promise.all(missingReplyIds.map(async (messageId) => {
+      try {
+        const response = await api.get<ChatMessage>(`/messages/${messageId}/preview`);
+        return [messageId, await decryptChatMessage(response.data, currentUser.id)] as const;
+      } catch {
+        return [messageId, null] as const;
+      }
+    })).then((entries) => {
+      if (active) setReplyPreviews((current) => ({ ...current, ...Object.fromEntries(entries) }));
+    });
+
+    return () => { active = false; };
+  }, [messages, currentUser?.id, replyPreviews]);
+
   const loadOlderMessages = async () => {
     if (!activeChat || loadingOlderMessages || !hasMoreMessages || !messages.length) return;
     setLoadingOlderMessages(true);
@@ -444,6 +506,40 @@ export default function Chats() {
       showToast('Не удалось загрузить более старые сообщения.', 'error');
     } finally {
       setLoadingOlderMessages(false);
+    }
+  };
+
+  const searchEntireHistory = async () => {
+    if (!activeChat || !hasMoreMessages || searchingHistory || !messages.length) return;
+    const chatId = String(activeChat.id);
+    let cursor = messages[0].id;
+    let pages = 0;
+    setSearchingHistory(true);
+    setSearchedHistoryPages(0);
+    try {
+      while (cursor && activeChatIdRef.current === chatId) {
+        const response = await api.get<ChatMessage[]>(`/messages/${chatId}`, { params: { limit: 20, before: cursor } });
+        const page = await Promise.all(response.data.map((message) => decryptChatMessage(message, currentUser?.id)));
+        if (activeChatIdRef.current !== chatId) break;
+        if (!page.length) {
+          setHasMoreMessages(false);
+          break;
+        }
+        setMessages((current) => {
+          const currentIds = new Set(current.map((message) => message.id));
+          return [...page.filter((message) => !currentIds.has(message.id)), ...current];
+        });
+        cursor = page[0].id;
+        pages += 1;
+        setSearchedHistoryPages(pages);
+        setHasMoreMessages(page.length === 20);
+        if (page.length < 20) break;
+      }
+    } catch (error) {
+      console.error('Не удалось выполнить поиск по всей истории:', error);
+      showToast('Не удалось загрузить часть истории для поиска.', 'error');
+    } finally {
+      setSearchingHistory(false);
     }
   };
 
@@ -516,6 +612,7 @@ export default function Chats() {
         void api.get<Contact[]>('/contacts').then((res) => setContacts(res.data)).catch(() => undefined);
         return Promise.all(response.data.map((message) => decryptChatMessage(message, currentUser?.id)));
       }).then((decryptedMessages) => {
+        if (activeChatIdRef.current !== String(activeChat.id)) return;
         setMessages((previous) => {
           const refreshedIds = new Set(decryptedMessages.map((message) => message.id));
           const olderLoaded = previous.filter((message) => !refreshedIds.has(message.id));
@@ -581,6 +678,9 @@ export default function Chats() {
     setChatProfile(null);
     setActiveChat(user);
     setMessages([]);
+    setText(readChatDraft(currentUser?.id, String(user.id)));
+    setReplyingMessage(null);
+    setEditingMessageId(null);
     setHasMoreMessages(false);
     setLoadingMessages(true);
     setChatError('');
@@ -639,10 +739,13 @@ export default function Chats() {
     if (!window.confirm(`Удалить историю чата с «${contact.nickname}» только у вас?`)) return;
     try {
       await api.delete(`/chats/${contact.id}`);
+      writeChatDraft(currentUser?.id, String(contact.id), '');
       setContacts((current) => current.filter((item) => item.id !== contact.id));
       if (activeChat?.id === contact.id) {
         stopTyping(contact.id);
         setMessages([]);
+        setText('');
+        setReplyingMessage(null);
         setActiveChat(null);
       }
       showToast('История чата удалена только у вас.', 'success');
@@ -656,8 +759,10 @@ export default function Chats() {
     e.preventDefault();
     if (!text.trim() || !activeChat || sending) return;
 
+    const targetChat = activeChat;
+    const replyTarget = replyingMessage;
     const msgText = text;
-    stopTyping(String(activeChat.id));
+    stopTyping(String(targetChat.id));
     setSending(true);
     setChatError('');
 
@@ -665,7 +770,7 @@ export default function Chats() {
       if (!currentUser?.id) throw new Error('Не удалось определить текущего пользователя.');
 
       const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
-        keysApi.get(String(activeChat.id)),
+        keysApi.get(String(targetChat.id)),
         keysApi.me(),
       ]);
       const recipientKey = recipientKeyResponse.data?.publicKey;
@@ -674,43 +779,41 @@ export default function Chats() {
         throw new Error('Не удалось получить ключи шифрования. Сообщение не отправлено.');
       }
       const encryptedText = await encryptMessage(msgText, [
-        { userId: String(activeChat.id), publicKey: recipientKey },
+        { userId: String(targetChat.id), publicKey: recipientKey },
         { userId: currentUser.id, publicKey: ownKey },
       ]);
       if (!encryptedText.startsWith('skyline-e2e:v3:')) {
         throw new Error('Не удалось зашифровать сообщение. Оно не было отправлено.');
       }
 
-      const response = await api.post<ChatMessage>('/messages', {
-        receiverId: activeChat.id,
-        chatId: activeChat.id,
-        text: encryptedText,
-        encryptedText: encryptedText,
-        type: 'text',
-      });
-      setMessages((previous) => [...previous, { ...response.data, text: msgText }]);
-      void api.get<Contact[]>('/contacts').then((res) => setContacts(res.data)).catch(() => undefined);
-      if (replyingMessage) {
-        const quoteSender = replyingMessage.senderId === currentUser.id
-          ? 'Вы'
-          : (activeChat.displayName || activeChat.username || 'Собеседник');
-        const quoteText = replyingMessage.text || (replyingMessage.type !== 'text' ? '📎 Вложение' : '');
-        setLocalQuotes((prev) => ({ ...prev, [response.data.id]: { senderName: quoteSender, text: quoteText } }));
+      const response = replyTarget
+        ? await api.post<ChatMessage>(`/messages/${replyTarget.id}/reply`, { text: encryptedText, type: 'text' })
+        : await api.post<ChatMessage>('/messages', {
+          receiverId: targetChat.id,
+          text: encryptedText,
+          type: 'text',
+        });
+      if (activeChatIdRef.current === String(targetChat.id)) {
+        setMessages((previous) => [...previous, { ...response.data, text: msgText }]);
+        setText('');
         setReplyingMessage(null);
       }
-      setText('');
+      writeChatDraft(currentUser.id, String(targetChat.id), '');
+      void api.get<Contact[]>('/contacts').then((res) => setContacts(res.data)).catch(() => undefined);
     } catch (err) {
       console.error("Ошибка отправки:", err);
       const detail = isAxiosError(err) && err.response?.data?.detail
         ? err.response.data.detail
         : 'Не удалось отправить сообщение. Проверьте соединение с сервером.';
-      setChatError(detail);
-      showToast(
-        isAxiosError(err) && err.response?.status === 429
-          ? 'Слишком часто отправляете сообщения. Подождите немного.'
-          : detail,
-        'error',
-      );
+      if (activeChatIdRef.current === String(targetChat.id)) {
+        setChatError(detail);
+        showToast(
+          isAxiosError(err) && err.response?.status === 429
+            ? 'Слишком часто отправляете сообщения. Подождите немного.'
+            : detail,
+          'error',
+        );
+      }
     } finally {
       setSending(false);
     }
@@ -720,6 +823,8 @@ export default function Chats() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !activeChat || sending) return;
+    const targetChat = activeChat;
+    const replyTarget = replyingMessage;
     if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
       setChatError('Можно отправить JPG, PNG, GIF, WebP, PDF, TXT, CSV или ZIP.');
       showToast('Неподдерживаемый формат файла.', 'error');
@@ -741,11 +846,11 @@ export default function Chats() {
     try {
       if (!currentUser?.id) throw new Error('Не удалось определить текущего пользователя.');
       const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
-        keysApi.get(String(activeChat.id)),
+        keysApi.get(String(targetChat.id)),
         keysApi.me(),
       ]);
       const recipients = [
-        { userId: String(activeChat.id), publicKey: recipientKeyResponse.data?.publicKey || '' },
+        { userId: String(targetChat.id), publicKey: recipientKeyResponse.data?.publicKey || '' },
         { userId: currentUser.id, publicKey: ownKeyResponse.data?.publicKey || '' },
       ];
       if (recipients.some((recipient) => !recipient.publicKey)) {
@@ -759,21 +864,31 @@ export default function Chats() {
       if (!encryptedFileData.startsWith('skyline-e2e:v4:')) {
         throw new Error('Не удалось зашифровать вложение. Оно не было отправлено.');
       }
-      const response = await api.post<ChatMessage>('/messages', {
-        receiverId: activeChat.id,
-        text: '',
-        type: 'file',
-        fileName: '',
-        contentType: '',
-        fileData: encryptedFileData,
-      });
+      const response = replyTarget
+        ? await api.post<ChatMessage>(`/messages/${replyTarget.id}/reply`, {
+          type: 'file',
+          fileData: encryptedFileData,
+        })
+        : await api.post<ChatMessage>('/messages', {
+          receiverId: targetChat.id,
+          text: '',
+          type: 'file',
+          fileName: '',
+          contentType: '',
+          fileData: encryptedFileData,
+        });
       const decryptedMessage = await decryptChatMessage(response.data, currentUser.id);
-      setMessages((previous) => [...previous, decryptedMessage]);
+      if (activeChatIdRef.current === String(targetChat.id)) {
+        setMessages((previous) => [...previous, decryptedMessage]);
+        setReplyingMessage(null);
+      }
       showToast('Файл отправлен.', 'success');
     } catch (error) {
       console.error('Ошибка отправки вложения:', error);
-      setChatError('Не удалось отправить файл. Проверьте его формат и размер.');
-      showToast('Не удалось отправить файл. Проверьте формат и размер.', 'error');
+      if (activeChatIdRef.current === String(targetChat.id)) {
+        setChatError('Не удалось отправить файл. Проверьте его формат и размер.');
+        showToast('Не удалось отправить файл. Проверьте формат и размер.', 'error');
+      }
     } finally {
       setSending(false);
     }
@@ -825,6 +940,69 @@ export default function Chats() {
     } catch (error) {
       console.error('Не удалось изменить сообщение:', error);
       showToast('Не удалось изменить сообщение.', 'error');
+    }
+  };
+
+  const handleForwardMessage = async (target: Contact) => {
+    const source = forwardingMessage;
+    if (!source || !currentUser?.id || forwarding) return;
+    setForwarding(true);
+    try {
+      let payload: { targetUserId: string; text?: string; type: 'text' | 'file'; fileData?: string };
+      if (source.type === 'text') {
+        const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
+          keysApi.get(String(target.id)),
+          keysApi.me(),
+        ]);
+        const recipientKey = recipientKeyResponse.data?.publicKey;
+        const ownKey = ownKeyResponse.data?.publicKey;
+        if (!recipientKey || !ownKey) throw new Error('Не удалось получить ключи получателей. Пересылка не выполнена.');
+        const encryptedText = await encryptMessage(source.text, [
+          { userId: String(target.id), publicKey: recipientKey },
+          { userId: currentUser.id, publicKey: ownKey },
+        ]);
+        if (!encryptedText.startsWith('skyline-e2e:v3:')) throw new Error('Не удалось зашифровать пересылаемое сообщение.');
+        payload = { targetUserId: String(target.id), text: encryptedText, type: 'text' };
+      } else {
+        if (!source.fileData || !source.fileName || !source.contentType || !ALLOWED_ATTACHMENT_TYPES.has(source.contentType)) {
+          throw new Error('Исходное вложение недоступно для пересылки.');
+        }
+        const sourceBlob = await fetch(source.fileData).then((response) => {
+          if (!response.ok) throw new Error('Не удалось прочитать вложение.');
+          return response.blob();
+        });
+        if (!sourceBlob.size || sourceBlob.size > 2 * 1024 * 1024) throw new Error('Вложение превышает допустимый размер.');
+        const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
+          keysApi.get(String(target.id)),
+          keysApi.me(),
+        ]);
+        const recipients = [
+          { userId: String(target.id), publicKey: recipientKeyResponse.data?.publicKey || '' },
+          { userId: currentUser.id, publicKey: ownKeyResponse.data?.publicKey || '' },
+        ];
+        if (recipients.some((recipient) => !recipient.publicKey)) throw new Error('Не удалось получить ключи получателей. Пересылка не выполнена.');
+        const packed = packAttachmentPayload(new Uint8Array(await sourceBlob.arrayBuffer()), {
+          fileName: source.fileName,
+          contentType: source.contentType,
+        });
+        const encryptedFile = await encryptBytes(packed, recipients);
+        if (!encryptedFile.startsWith('skyline-e2e:v4:')) throw new Error('Не удалось зашифровать вложение.');
+        payload = { targetUserId: String(target.id), type: 'file', fileData: encryptedFile };
+      }
+
+      const response = await api.post<ChatMessage>(`/messages/${source.id}/forward`, payload);
+      if (activeChatIdRef.current === String(target.id)) {
+        const decrypted = await decryptChatMessage(response.data, currentUser.id);
+        setMessages((current) => [...current, decrypted]);
+      }
+      setForwardingMessage(null);
+      setForwardSearch('');
+      showToast(`Сообщение переслано ${target.nickname || target.displayName || target.username}.`, 'success');
+    } catch (error) {
+      console.error('Не удалось переслать сообщение:', error);
+      showToast(error instanceof Error ? error.message : 'Не удалось переслать сообщение.', 'error');
+    } finally {
+      setForwarding(false);
     }
   };
 
@@ -920,6 +1098,7 @@ export default function Chats() {
 
   const handleTextChange = (value: string) => {
     setText(value);
+    writeChatDraft(currentUser?.id, activeChatId, value);
     if (!activeChat) return;
 
     const recipientId = String(activeChat.id);
@@ -1122,9 +1301,14 @@ export default function Chats() {
                       <button type="button" aria-label="Закрыть поиск" onClick={() => handleChatSearch('')} className="rounded p-1 hover:bg-white/10"><X size={14} /></button>
                     </div>
                   )}
+                  {chatSearch && hasMoreMessages && <button type="button" disabled={searchingHistory} onClick={() => void searchEntireHistory()} className="max-w-28 rounded-lg border border-white/10 px-2 py-1.5 text-[10px] leading-tight text-t-secondary hover:border-accent/30 hover:text-accent disabled:opacity-50 sm:max-w-none">{searchingHistory ? `Ищем… ${searchedHistoryPages}` : 'Искать дальше'}</button>}
                   <button type="button" onClick={() => void openChatProfile()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
                     <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
                   </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
+                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>
+                  </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button type="button" title="Скачать переписку JSON" aria-label="Экспортировать историю чата в JSON" onClick={() => void handleExportChat('json')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Download size={15} /></button>
                     <button type="button" title="Скачать переписку HTML" aria-label="Экспортировать историю чата в HTML" onClick={() => void handleExportChat('html')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><FileText size={15} /></button>
@@ -1200,6 +1384,9 @@ export default function Chats() {
               
               {messages.map((m) => {
                 const isMe = m.senderId === currentUser?.id;
+                const quotedMessage = m.replyTo
+                  ? messages.find((message) => message.id === m.replyTo) || replyPreviews[m.replyTo] || undefined
+                  : undefined;
                 return (
                   <div key={m.id} ref={(element) => { if (element) messageRefs.current.set(m.id, element); else messageRefs.current.delete(m.id); }} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-slide-in`}>
                     <div className={`message-row-content max-w-[88%] sm:max-w-[80%] ${highlightedMessageId === m.id ? 'pinned-message-highlight' : ''}`}>
@@ -1227,6 +1414,7 @@ export default function Chats() {
                             <Pin size={12} /> Закреплено
                           </div>
                         )}
+                        {m.forwardedFrom && <div className="mb-2 flex items-center gap-1 text-[10px] font-medium text-slate-400"><Forward size={11} /> Переслано</div>}
                         {m.type === 'image' && m.fileData ? (
                           localStorage.getItem('skylineMediaPreview') !== 'false'
                             ? <button type="button" onClick={() => { setLightboxClosing(false); setLightboxImage(m); }} aria-label={`Открыть изображение ${m.fileName || ''}`} className="mb-2 block max-w-full cursor-zoom-in rounded-lg focus:outline-none focus:ring-2 focus:ring-accent">
@@ -1249,11 +1437,21 @@ export default function Chats() {
                           </div>
                         ) : (
                           <>
-                            {localQuotes[m.id] && (
-                              <div className="mb-2 rounded-lg border-l-2 border-accent/60 bg-black/15 px-2.5 py-1.5">
-                                <p className="text-[9px] font-semibold uppercase tracking-wider text-accent">{localQuotes[m.id].senderName}</p>
-                                <p className="truncate text-[10px] text-slate-300">{localQuotes[m.id].text}</p>
-                              </div>
+                            {m.replyTo && (
+                              <button
+                                type="button"
+                                disabled={!messages.some((item) => item.id === m.replyTo)}
+                                onClick={() => m.replyTo && messageRefs.current.get(m.replyTo)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                                className="mb-2 block w-full rounded-lg border-l-2 border-accent/60 bg-black/15 px-2.5 py-1.5 text-left disabled:cursor-default"
+                                aria-label="Перейти к сообщению, на которое ответили"
+                              >
+                                <p className="text-[9px] font-semibold uppercase tracking-wider text-accent">
+                                  {quotedMessage?.senderId === currentUser?.id ? 'Вы' : quotedMessage ? `@${activeChat?.username ?? 'собеседник'}` : 'Ответ на сообщение'}
+                                </p>
+                                <p className="truncate text-[10px] text-slate-300">
+                                  {quotedMessage?.text || (quotedMessage && quotedMessage.type !== 'text' ? '📎 Вложение' : 'Исходное сообщение недоступно')}
+                                </p>
+                              </button>
                             )}
                             {m.text && <div className="chat-message-content whitespace-pre-wrap break-words">{highlightText(m.text, chatSearch)}</div>}
                             {m.edited && <span className="mt-1 block text-right text-[9px] text-t-secondary">изменено</span>}
@@ -1315,7 +1513,7 @@ export default function Chats() {
                   </button>
                 </div>
               )}
-              <form ref={messageFormRef} onSubmit={handleSend} className="glass-panel p-1.5 sm:p-2 rounded-2xl flex items-center gap-1 sm:gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-accent/30 transition-all">
+               <form ref={messageFormRef} onSubmit={handleSend} className="glass-panel p-1.5 sm:p-2 rounded-2xl flex items-end gap-1 sm:gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-accent/30 transition-all">
                  <div className="relative">
                    <button type="button" onClick={() => setShowEmojiPicker((v) => !v)} className={`p-2.5 rounded-xl transition-all ${showEmojiPicker ? 'text-accent bg-accent/10' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title="Эмодзи" aria-label="Эмодзи" aria-expanded={showEmojiPicker}>
                      <Smile size={19} />
@@ -1329,20 +1527,25 @@ export default function Chats() {
                  <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={sending} className="p-2.5 rounded-xl text-t-secondary hover:text-slate-200 hover:bg-slate-800/80 transition-all disabled:opacity-50" title="Прикрепить изображение или файл" aria-label="Прикрепить файл">
                    <Paperclip size={19} />
                  </button>
-                 <input
+                  <textarea
                     ref={textInputRef}
                     value={text}
                     onChange={e => handleTextChange(e.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
+                       if (event.key === 'Enter' && !event.shiftKey && localStorage.getItem('skylineEnterToSend') !== 'false') {
                         event.preventDefault();
-                        if (localStorage.getItem('skylineEnterToSend') !== 'false') {
-                          messageFormRef.current?.requestSubmit();
-                        }
+                         messageFormRef.current?.requestSubmit();
                       }
                     }}
+                     onInput={(event) => {
+                       event.currentTarget.style.height = 'auto';
+                       event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 144)}px`;
+                     }}
                     placeholder="Введите сообщение..."
-                    className="min-w-0 flex-1 bg-transparent px-1 sm:px-2 py-2 text-sm text-t-primary placeholder-slate-500 focus:outline-none"
+                     aria-label="Текст сообщения"
+                     rows={1}
+                     maxLength={4000}
+                     className="min-w-0 max-h-36 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent px-1 sm:px-2 py-2 text-sm leading-5 text-t-primary placeholder-slate-500 focus:outline-none"
                     disabled={sending}
                  />
                  <button type="submit" disabled={sending || !text.trim()} className="btn-shine p-2.5 rounded-xl bg-gradient-to-r from-accent-from to-accent-to text-slate-950 hover:opacity-90 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] disabled:opacity-50">
@@ -1564,6 +1767,18 @@ export default function Chats() {
             >
               <Reply size={15} /> Ответить
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setForwardingMessage(menuMessage);
+                setForwardSearch('');
+                closeMessageMenu();
+              }}
+              className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-accent/10 hover:text-accent"
+            >
+              <Forward size={15} /> Переслать
+            </button>
             {menuMessage.text && (
               <button
                 type="button"
@@ -1638,6 +1853,37 @@ export default function Chats() {
             className="max-h-[90dvh] max-w-full rounded-lg object-contain shadow-2xl"
           />
         </div>
+      )}
+      {forwardingMessage && createPortal(
+        <div
+          role="presentation"
+          onClick={(event) => { if (event.target === event.currentTarget && !forwarding) setForwardingMessage(null); }}
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+        >
+          <section role="dialog" aria-modal="true" aria-labelledby="forward-dialog-title" className="w-full max-w-md rounded-3xl border border-white/10 bg-panel p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 id="forward-dialog-title" className="text-sm font-semibold text-t-primary">Переслать сообщение</h2>
+                <p className="mt-1 text-[11px] text-t-secondary">Копия будет заново зашифрована для выбранного контакта.</p>
+              </div>
+              <button type="button" disabled={forwarding} onClick={() => setForwardingMessage(null)} aria-label="Закрыть" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-t-secondary hover:bg-white/5 hover:text-white disabled:opacity-50"><X size={17} /></button>
+            </div>
+            <input value={forwardSearch} onChange={(event) => setForwardSearch(event.target.value)} autoFocus placeholder="Найти контакт" aria-label="Найти получателя" className="mb-3 h-11 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 text-sm text-t-primary outline-none placeholder:text-slate-500 focus:border-accent/50" />
+            <div className="max-h-72 space-y-1 overflow-y-auto">
+              {contacts
+                .filter((contact) => `${contact.nickname || ''} ${contact.displayName || ''} ${contact.username}`.toLocaleLowerCase().includes(forwardSearch.trim().toLocaleLowerCase()))
+                .map((contact) => (
+                  <button key={contact.id} type="button" disabled={forwarding} onClick={() => void handleForwardMessage(contact)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-50">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-accent/15 text-xs font-semibold text-accent">{contact.avatarUrl ? <img src={contact.avatarUrl} alt="" className="h-full w-full object-cover" /> : (contact.displayName || contact.username)[0]?.toLocaleUpperCase()}</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-t-primary">{contact.nickname || contact.displayName || contact.username}</span><span className="block truncate text-[11px] text-t-secondary">@{contact.username}</span></span>
+                    {forwarding ? <span className="text-[10px] text-accent">Отправляю…</span> : <Forward size={15} className="text-t-secondary" />}
+                  </button>
+                ))}
+              {!contacts.some((contact) => `${contact.nickname || ''} ${contact.displayName || ''} ${contact.username}`.toLocaleLowerCase().includes(forwardSearch.trim().toLocaleLowerCase())) && <p className="px-3 py-8 text-center text-xs text-t-secondary">Контакты не найдены.</p>}
+            </div>
+          </section>
+        </div>,
+        document.body,
       )}
     </div>
   );
