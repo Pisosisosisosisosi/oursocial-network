@@ -42,6 +42,17 @@ const THEME_PREVIEW: Record<AppTheme, [string, string, string]> = {
   mocha:   ['#140f0a', '#78350f', '#d6a26a'],
 };
 
+const CHAT_PALETTES = [
+  { id: 'skyline', name: 'Skyline', note: 'Индиго и графит', text: '#f8fafc', border: '#475569', own: '#4f46e5', other: '#1e293b' },
+  { id: 'lavender', name: 'Лаванда', note: 'Мягкий фиолетовый', text: '#f5f3ff', border: '#8b5cf6', own: '#7c3aed', other: '#312e81' },
+  { id: 'mint', name: 'Мята', note: 'Свежий зелёный', text: '#ecfdf5', border: '#34d399', own: '#059669', other: '#064e3b' },
+  { id: 'sunset', name: 'Закат', note: 'Тёплый коралловый', text: '#fff7ed', border: '#fb923c', own: '#ea580c', other: '#431407' },
+  { id: 'rose', name: 'Розовый кварц', note: 'Яркий и нежный', text: '#fff1f2', border: '#fb7185', own: '#e11d48', other: '#4c0519' },
+  { id: 'ice', name: 'Лёд', note: 'Чистый голубой', text: '#f0f9ff', border: '#38bdf8', own: '#0284c7', other: '#0c4a6e' },
+  { id: 'mono', name: 'Монохром', note: 'Сдержанная классика', text: '#f8fafc', border: '#94a3b8', own: '#475569', other: '#1e293b' },
+  { id: 'berry', name: 'Ягода', note: 'Глубокий малиновый', text: '#fff1f2', border: '#c084fc', own: '#a21caf', other: '#3b0764' },
+] as const;
+
 export default function Settings() {
   const navigate = useNavigate();
   const { user, logout, updateUser } = useAuth();
@@ -70,6 +81,8 @@ export default function Settings() {
   const [chatBorderColor, setChatBorderColor] = useState(() => readChatColorPreference('skylineChatBorderColor', CHAT_STYLE_DEFAULTS.border));
   const [ownMessageColor, setOwnMessageColor] = useState(() => readChatColorPreference('skylineChatOwnMessageColor', CHAT_STYLE_DEFAULTS.ownMessage));
   const [otherMessageColor, setOtherMessageColor] = useState(() => readChatColorPreference('skylineChatOtherMessageColor', CHAT_STYLE_DEFAULTS.otherMessage));
+  const [bubbleStyle, setBubbleStyle] = useState(() => ['outlined', 'glass'].includes(localStorage.getItem('skylineChatBubbleStyle') || '') ? localStorage.getItem('skylineChatBubbleStyle')! : 'soft');
+  const [textStyle, setTextStyle] = useState(() => ['glow', 'bold'].includes(localStorage.getItem('skylineChatTextStyle') || '') ? localStorage.getItem('skylineChatTextStyle')! : 'normal');
 
   useEffect(() => {
     const handler = (event: Event) => { event.preventDefault(); setInstallPrompt(event as InstallPromptEvent); };
@@ -119,18 +132,38 @@ export default function Settings() {
   };
 
   const resetChatStyle = () => {
-    ['skylineChatWallpaper', 'skylineChatWallpaperFit', 'skylineChatTextColor', 'skylineChatBorderColor', 'skylineChatOwnMessageColor', 'skylineChatOtherMessageColor'].forEach((key) => localStorage.removeItem(key));
+    ['skylineChatWallpaper', 'skylineChatWallpaperFit', 'skylineChatTextColor', 'skylineChatBorderColor', 'skylineChatOwnMessageColor', 'skylineChatOtherMessageColor', 'skylineChatBubbleStyle', 'skylineChatTextStyle'].forEach((key) => localStorage.removeItem(key));
     setWallpaper('');
     setWallpaperFit('cover');
     setChatTextColor(CHAT_STYLE_DEFAULTS.text);
     setChatBorderColor(CHAT_STYLE_DEFAULTS.border);
     setOwnMessageColor(CHAT_STYLE_DEFAULTS.ownMessage);
     setOtherMessageColor(CHAT_STYLE_DEFAULTS.otherMessage);
+    setBubbleStyle('soft');
+    setTextStyle('normal');
     applyAppPreferences(Boolean(user?.isPremium));
   };
 
   const chooseChatColor = (key: string, value: string, setValue: (value: string) => void) => {
     setValue(value);
+    savePreference(key, value);
+  };
+
+  const chooseChatPalette = (palette: typeof CHAT_PALETTES[number]) => {
+    setChatTextColor(palette.text);
+    setChatBorderColor(palette.border);
+    setOwnMessageColor(palette.own);
+    setOtherMessageColor(palette.other);
+    localStorage.setItem('skylineChatTextColor', palette.text);
+    localStorage.setItem('skylineChatBorderColor', palette.border);
+    localStorage.setItem('skylineChatOwnMessageColor', palette.own);
+    localStorage.setItem('skylineChatOtherMessageColor', palette.other);
+    applyAppPreferences(Boolean(user?.isPremium));
+    showToast(`Сочетание «${palette.name}» применено.`, 'success');
+  };
+
+  const chooseChatStyle = (key: 'skylineChatBubbleStyle' | 'skylineChatTextStyle', value: string, setter: (value: string) => void) => {
+    setter(value);
     savePreference(key, value);
   };
 
@@ -228,6 +261,27 @@ export default function Settings() {
 
             <fieldset className="mt-4 border-t border-white/[0.06] pt-4">
               <legend className="mb-3 flex items-center gap-2 text-sm font-medium"><Image size={15} className="text-accent" /> Оформление чатов</legend>
+              <div className="mb-4">
+                <div className="mb-2 flex items-end justify-between gap-3">
+                  <div><p className="text-xs font-semibold text-t-primary">Готовые сочетания</p><p className="mt-0.5 text-[10px] text-t-secondary">Палитра сразу подберёт фон и обводку сообщений.</p></div>
+                  {CHAT_PALETTES.some((p) => p.text === chatTextColor && p.border === chatBorderColor && p.own === ownMessageColor && p.other === otherMessageColor) && <span className="rounded-full bg-accent/10 px-2 py-1 text-[9px] font-semibold text-accent">Тема выбрана</span>}
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {CHAT_PALETTES.map((palette) => {
+                    const active = palette.text === chatTextColor && palette.border === chatBorderColor && palette.own === ownMessageColor && palette.other === otherMessageColor;
+                    return <button key={palette.id} type="button" onClick={() => chooseChatPalette(palette)} aria-pressed={active}
+                      className={`group min-h-[82px] rounded-2xl border p-2.5 text-left transition-all hover:-translate-y-0.5 ${active ? 'border-accent/60 bg-accent/[0.08] shadow-[0_0_18px_var(--glow)]' : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.045]'}`}>
+                      <span className="mb-2 flex h-6 items-center gap-1.5 rounded-lg px-1.5" style={{ background: palette.other, border: `1px solid ${palette.border}` }}>
+                        <i className="h-2 w-2 rounded-full" style={{ backgroundColor: palette.border }} />
+                        <i className="h-2 w-7 rounded-full" style={{ backgroundColor: palette.text, opacity: .9 }} />
+                        <i className="ml-auto h-2 w-5 rounded-full" style={{ backgroundColor: palette.own }} />
+                      </span>
+                      <span className={`block text-[11px] font-semibold ${active ? 'text-accent' : 'text-t-primary'}`}>{palette.name}</span>
+                      <span className="mt-0.5 block text-[9px] text-t-secondary">{palette.note}</span>
+                    </button>;
+                  })}
+                </div>
+              </div>
               <div className="grid gap-4 sm:grid-cols-[1fr_1fr]">
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
@@ -243,6 +297,7 @@ export default function Settings() {
                   </label>
                 </div>
                 <div className="space-y-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-t-secondary">Точная настройка</p>
                   {[
                     { label: 'Цвет текста сообщений', value: chatTextColor, key: 'skylineChatTextColor', set: setChatTextColor },
                     { label: 'Цвет обводки сообщений', value: chatBorderColor, key: 'skylineChatBorderColor', set: setChatBorderColor },
@@ -251,11 +306,25 @@ export default function Settings() {
                   ].map((color) => <label key={color.key} className="flex min-h-10 items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 text-[11px] text-t-secondary">{color.label}<input type="color" value={color.value} onChange={(event) => chooseChatColor(color.key, event.target.value, color.set)} aria-label={color.label} className="h-7 w-9 cursor-pointer rounded-md border-0 bg-transparent p-0" /></label>)}
                 </div>
               </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <fieldset>
+                  <legend className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-t-secondary">Форма сообщений</legend>
+                  <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/[0.07] bg-slate-950/30 p-1">
+                    {([['soft', 'Мягкая'], ['outlined', 'Контур'], ['glass', 'Стекло']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={bubbleStyle === value} onClick={() => chooseChatStyle('skylineChatBubbleStyle', value, setBubbleStyle)} className={`min-h-9 rounded-lg px-1 text-[10px] font-semibold transition ${bubbleStyle === value ? 'bg-accent/20 text-accent shadow-sm' : 'text-t-secondary hover:bg-white/5'}`}>{label}</button>)}
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-t-secondary">Характер текста</legend>
+                  <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/[0.07] bg-slate-950/30 p-1">
+                    {([['normal', 'Чистый'], ['bold', 'Выразительный'], ['glow', 'Сияние']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={textStyle === value} onClick={() => chooseChatStyle('skylineChatTextStyle', value, setTextStyle)} className={`min-h-9 rounded-lg px-1 text-[10px] font-semibold transition ${textStyle === value ? 'bg-accent/20 text-accent shadow-sm' : 'text-t-secondary hover:bg-white/5'}`}>{label}</button>)}
+                  </div>
+                </fieldset>
+              </div>
               <div className="mt-4 rounded-2xl border border-white/[0.07] p-3" style={{ backgroundColor: '#0b1020', backgroundImage: wallpaper ? `linear-gradient(rgba(4,8,16,.38),rgba(4,8,16,.38)),url("${wallpaper}")` : undefined, backgroundSize: wallpaperFit === 'repeat' ? 'cover,180px auto' : `cover,${wallpaperFit}`, backgroundRepeat: wallpaperFit === 'repeat' ? 'no-repeat,repeat' : 'no-repeat,no-repeat', backgroundPosition: 'center' }}>
                 <p className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-white/60">Предпросмотр</p>
                 <div className="flex flex-col gap-2">
-                  <div className="max-w-[85%] self-start rounded-2xl rounded-bl-md border px-3 py-2 text-xs" style={{ backgroundColor: otherMessageColor, borderColor: chatBorderColor, color: chatTextColor }}>Привет! Вот так выглядят сообщения.</div>
-                  <div className="max-w-[85%] self-end rounded-2xl rounded-br-md border px-3 py-2 text-xs" style={{ backgroundColor: ownMessageColor, borderColor: chatBorderColor, color: chatTextColor }}>Можно настроить под себя ✨</div>
+                  <div className="chat-message-bubble chat-message-other max-w-[85%] self-start rounded-2xl rounded-bl-md border px-3 py-2 text-xs" style={{ borderColor: chatBorderColor, color: chatTextColor }}>Привет! Вот так выглядят сообщения.</div>
+                  <div className="chat-message-bubble chat-message-own max-w-[85%] self-end rounded-2xl rounded-br-md border px-3 py-2 text-xs" style={{ borderColor: chatBorderColor, color: chatTextColor }}>Можно настроить под себя ✨</div>
                 </div>
               </div>
               <button type="button" onClick={resetChatStyle} className="mt-3 min-h-9 rounded-lg px-2 text-[11px] text-t-secondary hover:bg-white/5 hover:text-t-primary">Сбросить оформление чатов</button>

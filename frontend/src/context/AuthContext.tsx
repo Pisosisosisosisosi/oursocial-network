@@ -2,12 +2,21 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { authApi, type User } from '../api/client';
 import { connectSocket, disconnectSocket } from '../api/socket';
 import { keysApi } from '../api/client';
-import { getOrCreateKeyPair } from '../crypto/keys';
+import {
+  encryptStoredPrivateKeyBackup,
+  generateKeyPair,
+  getStoredPublicKey,
+  hasStoredPrivateKey,
+  restorePrivateKeyBackup,
+} from '../crypto/keys';
+
+export type E2EEStatus = 'checking' | 'ready' | 'backup-needed' | 'key-mismatch' | 'recovery-required' | 'temporarily-unavailable';
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
+  e2eeStatus: E2EEStatus;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, username: string, verificationToken: string) => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
@@ -16,15 +25,76 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-async function uploadE2EPublicKey(userId: string) {
-  const { publicKeyJwk } = await getOrCreateKeyPair(userId);
-  await keysApi.upload(publicKeyJwk);
+async function inspectE2EEStatus(userId: string): Promise<E2EEStatus> {
+  const [backup, localHasPrivateKey] = await Promise.all([
+    keysApi.getBackup(),
+    hasStoredPrivateKey(userId),
+  ]);
+  const localPublicKey = getStoredPublicKey(userId);
+  if (backup) {
+    return localHasPrivateKey && localPublicKey === backup.data.publicKey ? 'ready' : 'recovery-required';
+  }
+  if (!localHasPrivateKey || !localPublicKey) {
+    try {
+      await keysApi.getOwn();
+      return 'recovery-required';
+    } catch (error) {
+      if ((error as { response?: { status?: number } })?.response?.status === 404) {
+        const generated = await generateKeyPair(userId);
+        await keysApi.upload(generated.publicKeyJwk);
+        return 'backup-needed';
+      }
+      throw error;
+    }
+  }
+  try {
+    const remote = await keysApi.getOwn();
+    return remote.data.publicKey === localPublicKey ? 'backup-needed' : 'key-mismatch';
+  } catch (error) {
+    if ((error as { response?: { status?: number } })?.response?.status === 404) {
+      await keysApi.upload(localPublicKey);
+      return 'backup-needed';
+    }
+    throw error;
+  }
+}
+
+async function synchronizeE2EEKey(userId: string, password: string): Promise<E2EEStatus> {
+  const backup = await keysApi.getBackup();
+  if (backup) {
+    try {
+      await restorePrivateKeyBackup(userId, password, backup.data);
+    } catch {
+      const localKeyMatchesBackup = await hasStoredPrivateKey(userId)
+        && getStoredPublicKey(userId) === backup.data.publicKey;
+      if (!localKeyMatchesBackup) return 'recovery-required';
+    }
+    await keysApi.uploadBackup(await encryptStoredPrivateKeyBackup(userId, password));
+    return 'ready';
+  }
+
+  if (await hasStoredPrivateKey(userId) && getStoredPublicKey(userId)) {
+    await keysApi.uploadBackup(await encryptStoredPrivateKeyBackup(userId, password));
+    return 'ready';
+  }
+
+  try {
+    await keysApi.getOwn();
+    return 'recovery-required';
+  } catch (error) {
+    if ((error as { response?: { status?: number } })?.response?.status !== 404) throw error;
+  }
+
+  await generateKeyPair(userId);
+  await keysApi.uploadBackup(await encryptStoredPrivateKeyBackup(userId, password));
+  return 'ready';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+  const [e2eeStatus, setE2eeStatus] = useState<E2EEStatus>('checking');
 
   useEffect(() => {
     const init = async () => {
@@ -36,14 +106,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(userData);
           setToken(savedToken);
           connectSocket(savedToken);
-          try {
-            await uploadE2EPublicKey(userData.id);
-          } catch (error) {
-            console.error('❌ Failed to generate/upload E2E keys:', error);
-          }
+          try { setE2eeStatus(await inspectE2EEStatus(userData.id)); }
+          catch (error) { console.error('Failed to check E2EE key status:', error); setE2eeStatus('temporarily-unavailable'); }
         } catch {
           localStorage.removeItem('token');
           setToken(null);
+          setE2eeStatus('recovery-required');
         }
       }
       setLoading(false);
@@ -61,10 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     connectSocket(token);
 
     try {
-      await uploadE2EPublicKey(userData.id);
-      console.log('✅ E2E public key uploaded');
+      setE2eeStatus(await synchronizeE2EEKey(userData.id, password));
     } catch (err) {
-      console.error('❌ Failed to generate/upload keys:', err);
+      console.error('Failed to synchronize E2EE key:', err);
+      setE2eeStatus('temporarily-unavailable');
     }
   };
 
@@ -78,10 +146,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     connectSocket(token);
 
     try {
-      await uploadE2EPublicKey(userData.id);
-      console.log('✅ E2E keys generated and uploaded');
+      setE2eeStatus(await synchronizeE2EEKey(userData.id, password));
     } catch (err) {
-      console.error('❌ Failed to generate/upload keys:', err);
+      console.error('Failed to synchronize E2EE key:', err);
+      setE2eeStatus('temporarily-unavailable');
     }
   };
 
@@ -93,11 +161,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);
+    setE2eeStatus('checking');
     disconnectSocket();
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, e2eeStatus, login, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

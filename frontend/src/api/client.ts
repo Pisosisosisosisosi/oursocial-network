@@ -74,6 +74,17 @@ export const authApi = {
 
 export const keysApi = {
   upload: (publicKey: string) => api.post('/keys/upload', { publicKey }),
+  uploadBackup: (backup: { publicKey: string; encryptedPrivateKey: string; salt: string; iv: string }) =>
+    api.post('/keys/backup', backup),
+  getBackup: async () => {
+    try {
+      return await api.get<{ publicKey: string; encryptedPrivateKey: string; salt: string; iv: string }>('/keys/backup');
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) return null;
+      throw error;
+    }
+  },
+  getOwn: () => api.get<{ userId: string; publicKey: string }>('/keys/me'),
   me: async () => {
     try {
       return await api.get<{ userId: string; publicKey: string }>('/keys/me');

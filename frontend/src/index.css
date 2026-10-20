@@ -217,6 +217,12 @@ body, .glass-panel, input, textarea, .chat-message, .toggle, .pinned-strip {
 .chat-message-bubble { color: var(--chat-text-color, var(--text-primary)); border-color: var(--chat-border-color, rgba(255,255,255,.12)); }
 .chat-message-own { background: var(--chat-own-message-color, #4f46e5); }
 .chat-message-other { background: var(--chat-other-message-color, #1e293b); }
+.chat-message-bubble { transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease; }
+html[data-chat-bubble-style="outlined"] .chat-message-bubble { border-width: 2px; box-shadow: 0 8px 28px rgba(0,0,0,.16); }
+html[data-chat-bubble-style="glass"] .chat-message-bubble { background-color: color-mix(in srgb, var(--chat-own-message-color, #4f46e5) 76%, transparent); backdrop-filter: blur(14px); box-shadow: 0 8px 28px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.08); }
+html[data-chat-bubble-style="glass"] .chat-message-other { background-color: color-mix(in srgb, var(--chat-other-message-color, #1e293b) 78%, transparent); }
+html[data-chat-text-style="bold"] .chat-message-bubble { font-weight: 600; letter-spacing: .005em; }
+html[data-chat-text-style="glow"] .chat-message-bubble { text-shadow: 0 0 12px color-mix(in srgb, var(--chat-text-color, #f8fafc) 28%, transparent); }
 .chat-message::before {
   content: "";
   position: absolute;

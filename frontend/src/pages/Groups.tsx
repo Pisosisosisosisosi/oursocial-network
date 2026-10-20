@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
+import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
 import { decryptBytes, encryptBytes, packAttachmentPayload, unpackAttachmentPayload, type RecipientPublicKey } from '../crypto/encrypt';
 
 interface GroupMember extends User {
@@ -125,7 +126,7 @@ function writeGroupDraft(userId: string | undefined, groupId: string | undefined
 
 export default function Groups() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, e2eeStatus } = useAuth();
   const userId = user?.id;
   const showToast = useToast();
   const [groups, setGroups] = useState<Group[]>([]);
@@ -349,6 +350,7 @@ export default function Groups() {
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     if (!activeGroup || !user?.id || !draft.trim() || sending) return;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     const targetGroup = activeGroup;
     const replyTarget = replyingMessage;
     const messageText = draft;
@@ -403,6 +405,7 @@ export default function Groups() {
 
   const saveEdit = async (messageId: string) => {
     if (!activeGroup || !user?.id) return;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Изменение приостановлено: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     try {
       const encrypted = await encryptBytes(
         new TextEncoder().encode(JSON.stringify({ kind: 'text', text: editDraft })),
@@ -423,6 +426,7 @@ export default function Groups() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !activeGroup || !user?.id || sending) return;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     const targetGroup = activeGroup;
     const replyTarget = replyingMessage;
     if (!GROUP_ATTACHMENT_TYPES.has(file.type)) {
@@ -464,6 +468,7 @@ export default function Groups() {
   const forwardMessage = async (targetGroup: Group) => {
     const source = forwardingMessage;
     if (!source || !user?.id || forwarding) return;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Пересылка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     setForwarding(true);
     try {
       let payload: { targetGroupId: string; text?: string; type: 'text' | 'file'; fileData?: string };
@@ -637,6 +642,7 @@ export default function Groups() {
       <section className={`${activeGroup ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
         {activeGroup ? (
           <>
+            <EncryptionNotice />
             <header className="flex items-center gap-3 border-b border-white/[0.08] bg-panel px-3 py-3 sm:px-5">
               <button type="button" onClick={() => setActiveGroupId('')} className="rounded-lg p-2 text-t-secondary hover:bg-white/[0.06] md:hidden" aria-label="К списку групп"><ArrowLeft size={18} /></button>
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Users size={18} /></div>

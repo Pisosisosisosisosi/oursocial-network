@@ -11,6 +11,7 @@ import { decryptBytes, decryptMessage, encryptBytes, encryptMessage, isEncrypted
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import EmojiPicker from '../components/chat/EmojiPicker';
+import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
 import { useCallActions } from '../context/CallContext';
 
 interface ChatMessage {
@@ -129,7 +130,7 @@ async function decryptChatMessage(message: ChatMessage, userId?: string): Promis
 
 export default function Chats() {
   const navigate = useNavigate();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, e2eeStatus } = useAuth();
   const showToast = useToast();
   const { startCall } = useCallActions();
 
@@ -758,6 +759,7 @@ export default function Chats() {
   const handleSend = async (e: FormEvent) => {
     e.preventDefault();
     if (!text.trim() || !activeChat || sending) return;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
 
     const targetChat = activeChat;
     const replyTarget = replyingMessage;
@@ -823,6 +825,7 @@ export default function Chats() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !activeChat || sending) return;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     const targetChat = activeChat;
     const replyTarget = replyingMessage;
     if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
@@ -912,6 +915,7 @@ export default function Chats() {
   const handleEditMessage = async (message: ChatMessage) => {
     const rawText = messageEditDraft.trim();
     if (!rawText || !activeChat || !currentUser?.id) return;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Изменение приостановлено: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     try {
       const [recipientKeyResponse, ownKeyResponse] = await Promise.all([
         keysApi.get(String(activeChat.id)),
@@ -946,6 +950,7 @@ export default function Chats() {
   const handleForwardMessage = async (target: Contact) => {
     const source = forwardingMessage;
     if (!source || !currentUser?.id || forwarding) return;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Пересылка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     setForwarding(true);
     try {
       let payload: { targetUserId: string; text?: string; type: 'text' | 'file'; fileData?: string };
@@ -1255,6 +1260,7 @@ export default function Chats() {
 
         {activeChat ? (
           <>
+            <EncryptionNotice />
             <div className="relative z-10 flex flex-col gap-2 border-b border-slate-800/60 p-2.5 glass-panel sm:gap-3 sm:p-4">
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-2 sm:gap-3">

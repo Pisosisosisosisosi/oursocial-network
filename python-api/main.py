@@ -105,6 +105,13 @@ class UploadKeyRequest(BaseModel):
     publicKey: str
 
 
+class UploadKeyBackupRequest(BaseModel):
+    publicKey: str = Field(min_length=32, max_length=8192)
+    encryptedPrivateKey: str = Field(min_length=24, max_length=16384)
+    salt: str = Field(min_length=24, max_length=24)
+    iv: str = Field(min_length=16, max_length=16)
+
+
 class ExchangeRequest(BaseModel):
     targetUserId: str
 
@@ -1756,6 +1763,51 @@ def get_my_key(current=Depends(get_current_user)):
         "userId": doc["userId"],
         "publicKey": doc["publicKey"],
         "createdAt": doc.get("createdAt"),
+    }
+
+
+@app.post("/keys/backup")
+def upload_key_backup(payload: UploadKeyBackupRequest, current=Depends(get_current_user)):
+    """Store a client-encrypted private-key backup; the server never receives plaintext key material."""
+    if not validate_public_key(payload.publicKey):
+        raise HTTPException(status_code=400, detail="Invalid public key")
+    try:
+        encrypted_private_key = base64.b64decode(payload.encryptedPrivateKey, validate=True)
+        salt = base64.b64decode(payload.salt, validate=True)
+        iv = base64.b64decode(payload.iv, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid key backup encoding")
+    if not 16 <= len(encrypted_private_key) <= 12_288 or len(salt) != 16 or len(iv) != 12:
+        raise HTTPException(status_code=400, detail="Invalid key backup parameters")
+
+    user_id = current["userId"]
+    keys_collection().update_one(
+        {"userId": user_id},
+        {"$set": {
+            **make_key_document(user_id, payload.publicKey),
+            "encryptedPrivateKey": payload.encryptedPrivateKey,
+            "backupSalt": payload.salt,
+            "backupIv": payload.iv,
+            "backupVersion": 1,
+        }},
+        upsert=True,
+    )
+    return {"status": "ok"}
+
+
+@app.get("/keys/backup")
+def get_key_backup(current=Depends(get_current_user)):
+    doc = keys_collection().find_one(
+        {"userId": current["userId"]},
+        {"publicKey": 1, "encryptedPrivateKey": 1, "backupSalt": 1, "backupIv": 1, "backupVersion": 1},
+    )
+    if not doc or doc.get("backupVersion") != 1:
+        raise HTTPException(status_code=404, detail="Encrypted key backup not found")
+    return {
+        "publicKey": doc["publicKey"],
+        "encryptedPrivateKey": doc["encryptedPrivateKey"],
+        "salt": doc["backupSalt"],
+        "iv": doc["backupIv"],
     }
 
 

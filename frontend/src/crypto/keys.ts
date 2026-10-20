@@ -14,6 +14,15 @@ const RSA_ALGO = {
 const STORAGE_KEY_PREFIX = 'e2e_p256_private_key';
 const PUBLIC_KEY_STORAGE_PREFIX = 'e2e_p256_public_key';
 const LEGACY_STORAGE_KEY = 'e2e_private_key';
+const BACKUP_ITERATIONS = 310_000;
+const BACKUP_ALGORITHM = 'skyline-e2e-key-backup:v1';
+
+export interface EncryptedKeyBackup {
+  publicKey: string;
+  encryptedPrivateKey: string;
+  salt: string;
+  iv: string;
+}
 
 export async function generateKeyPair(userId: string): Promise<{ publicKeyJwk: string; privateKey: CryptoKey }> {
   const keyPair = await window.crypto.subtle.generateKey(ECDH_ALGO, true, ['deriveBits']);
@@ -81,6 +90,91 @@ export async function getOrCreateKeyPair(userId: string): Promise<{ publicKeyJwk
   }
 
   return generateKeyPair(userId);
+}
+
+export function getStoredPublicKey(userId: string): string | null {
+  return localStorage.getItem(publicStorageKey(userId));
+}
+
+export async function hasStoredPrivateKey(userId: string): Promise<boolean> {
+  return Boolean(await loadPrivateKey(userId));
+}
+
+export async function encryptStoredPrivateKeyBackup(userId: string, password: string): Promise<EncryptedKeyBackup> {
+  const privateJwk = localStorage.getItem(privateStorageKey(userId));
+  const publicKey = getStoredPublicKey(userId);
+  if (!privateJwk || !publicKey) throw new Error('На этом устройстве нет ключа шифрования для синхронизации.');
+
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const wrappingKey = await deriveBackupKey(password, salt, ['encrypt']);
+  const encrypted = await window.crypto.subtle.encrypt({
+    name: 'AES-GCM',
+    iv,
+    additionalData: new TextEncoder().encode(`${BACKUP_ALGORITHM}:${userId}`),
+  }, wrappingKey, new TextEncoder().encode(privateJwk));
+
+  return {
+    publicKey,
+    encryptedPrivateKey: toBase64(encrypted),
+    salt: toBase64(salt.buffer),
+    iv: toBase64(iv.buffer),
+  };
+}
+
+export async function restorePrivateKeyBackup(
+  userId: string,
+  password: string,
+  backup: EncryptedKeyBackup,
+): Promise<void> {
+  const salt = fromBase64(backup.salt);
+  const iv = fromBase64(backup.iv);
+  if (salt.byteLength !== 16 || iv.byteLength !== 12) throw new Error('Резервная копия ключа повреждена.');
+
+  const wrappingKey = await deriveBackupKey(password, salt, ['decrypt']);
+  const plaintext = await window.crypto.subtle.decrypt({
+    name: 'AES-GCM',
+    iv,
+    additionalData: new TextEncoder().encode(`${BACKUP_ALGORITHM}:${userId}`),
+  }, wrappingKey, fromBase64(backup.encryptedPrivateKey));
+  const privateJwk = JSON.parse(new TextDecoder().decode(plaintext)) as JsonWebKey;
+  const publicJwk = JSON.parse(backup.publicKey) as JsonWebKey;
+  if (privateJwk.kty !== 'EC' || privateJwk.crv !== 'P-256' || !privateJwk.d
+    || privateJwk.x !== publicJwk.x || privateJwk.y !== publicJwk.y
+    || publicJwk.kty !== 'EC' || publicJwk.crv !== 'P-256' || publicJwk.d) {
+    throw new Error('Резервная копия содержит несовместимую пару ключей.');
+  }
+
+  await window.crypto.subtle.importKey('jwk', privateJwk, ECDH_ALGO, true, ['deriveBits']);
+  await window.crypto.subtle.importKey('jwk', publicJwk, ECDH_ALGO, true, []);
+  localStorage.setItem(privateStorageKey(userId), JSON.stringify(privateJwk));
+  localStorage.setItem(publicStorageKey(userId), backup.publicKey);
+}
+
+async function deriveBackupKey(password: string, salt: Uint8Array<ArrayBuffer>, usage: KeyUsage[]): Promise<CryptoKey> {
+  const material = await window.crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey'],
+  );
+  return window.crypto.subtle.deriveKey({
+    name: 'PBKDF2',
+    hash: 'SHA-256',
+    salt,
+    iterations: BACKUP_ITERATIONS,
+  }, material, { name: 'AES-GCM', length: 256 }, false, usage);
+}
+
+function toBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function fromBase64(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }
 
 function privateStorageKey(userId: string) {
