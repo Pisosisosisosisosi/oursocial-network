@@ -341,6 +341,26 @@ html[data-theme='light'] input::placeholder,
 html[data-theme='light'] textarea::placeholder { color: #77849a; }
 html[data-theme='light'] [class*="hover:bg-white"]:hover { background-color: rgba(15, 23, 42, .055) !important; }
 
+/* Цветовая схема, подобранная по загруженным обоям */
+html[data-wallpaper-theme='true'] .glass-panel { background-color: color-mix(in srgb, var(--panel) 84%, transparent); border-color: var(--border-subtle); }
+html[data-wallpaper-theme='true'] [class*="bg-slate-950"],
+html[data-wallpaper-theme='true'] [class*="bg-slate-900"],
+html[data-wallpaper-theme='true'] [class*="bg-[#090d16]"],
+html[data-wallpaper-theme='true'] [class*="bg-[#111a2a]"],
+html[data-wallpaper-theme='true'] [class*="bg-[#0f172a]"] {
+  background-color: color-mix(in srgb, var(--panel) 82%, var(--accent) 18%) !important;
+}
+html[data-wallpaper-theme='true'] [class*="bg-white/[0."] { background-color: color-mix(in srgb, var(--accent) 9%, var(--panel)) !important; }
+html[data-wallpaper-theme='true'] [class*="border-white"],
+html[data-wallpaper-theme='true'] [class*="border-slate-"] { border-color: var(--border-subtle) !important; }
+html[data-wallpaper-theme='true'] [class~="via-[#090d16]"],
+html[data-wallpaper-theme='true'] [class~="to-[#090d16]"],
+html[data-wallpaper-theme='true'] [class~="to-black"] {
+  --tw-gradient-via: var(--bg-base) !important;
+  --tw-gradient-to: var(--bg-base) !important;
+}
+html[data-wallpaper-theme='true'] .chat-card.chat-active { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+
 html[data-reduce-motion='true'] *, html[data-reduce-motion='true'] *::before, html[data-reduce-motion='true'] *::after {
   animation-duration: .01ms !important;
   animation-iteration-count: 1 !important;
