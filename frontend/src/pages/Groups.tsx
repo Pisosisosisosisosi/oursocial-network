@@ -5,8 +5,8 @@ import { api, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
-import WorkspaceTabs from '../components/WorkspaceTabs';
-import WorkspaceSidebarHeader from '../components/WorkspaceSidebarHeader';
+import WorkspaceTabs from '../components/layout/WorkspaceTabs';
+import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 
 interface GroupMember extends User {
   userId: string;
@@ -331,17 +331,20 @@ export default function Groups() {
               ))}
             </div>
             {!!selectedMembers.length && <div className="flex flex-wrap gap-1.5">{selectedMembers.map((member) => <button key={member.id} type="button" onClick={() => toggleMember(member)} className="inline-flex items-center gap-1 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[10px] text-accent">@{member.username}<X size={11} /></button>)}</div>}
-            <button disabled={groupTitle.trim().length < 2 || !selectedMembers.length} className="w-full rounded-xl bg-accent px-3 py-2 text-xs font-semibold disabled:opacity-40">Создать группу</button>
+            <button disabled={groupTitle.trim().length < 2 || !selectedMembers.length} className="btn-glow btn-shine min-h-[44px] w-full rounded-xl bg-gradient-to-r from-accent-from to-accent-to px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Создать группу</button>
           </form>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="stagger min-h-0 flex-1 overflow-y-auto p-3">
           {loading ? (
             <div role="status" className="space-y-2 p-2">{[0, 1, 2].map((item) => <div key={item} className="chat-skeleton h-14 rounded-xl" />)}</div>
           ) : visibleGroups.length === 0 ? (
-            <p className="p-3 text-xs leading-relaxed text-slate-500">{groupSearch.trim() ? 'Группы не найдены.' : 'Вы пока не состоите в группах. Создайте группу и найдите участников по полному @username.'}</p>
+            <div className="m-2 flex flex-col items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 text-center animate-scale-in">
+              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-accent/10 text-accent"><Users size={20} /></span>
+              <p className="text-xs leading-relaxed text-slate-400">{groupSearch.trim() ? 'Группы не найдены.' : 'Вы пока не состоите в группах. Создайте группу и найдите участников по полному @username.'}</p>
+            </div>
           ) : visibleGroups.map((group) => (
-            <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`mb-1 flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${activeGroup?.id === group.id ? 'bg-accent/15 text-white' : 'text-slate-300 hover:bg-white/[0.04]'}`}>
+            <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`chat-card mb-1 flex w-full items-center gap-3 rounded-xl p-3 text-left ${activeGroup?.id === group.id ? 'chat-active text-white' : 'text-slate-300'}`}>
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Users size={18} /></span>
               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{group.title}</span><span className="mt-1 block text-[10px] text-slate-500">{group.memberCount} участников</span></span>
             </button>

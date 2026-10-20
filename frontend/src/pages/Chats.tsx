@@ -8,9 +8,9 @@ import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import { decryptMessage, encryptMessage, isEncryptedMessage } from '../crypto/encrypt';
-import WorkspaceTabs from '../components/WorkspaceTabs';
-import WorkspaceSidebarHeader from '../components/WorkspaceSidebarHeader';
-import EmojiPicker from '../components/EmojiPicker';
+import WorkspaceTabs from '../components/layout/WorkspaceTabs';
+import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
+import EmojiPicker from '../components/chat/EmojiPicker';
 
 interface ChatMessage {
   id: string;
@@ -1008,10 +1008,10 @@ export default function Chats() {
                 });
               }}
               aria-haspopup="menu"
-              className={`chat-list-item p-2.5 rounded-2xl cursor-pointer flex items-center gap-3 transition-all duration-200 ${
+              className={`chat-card chat-list-item p-2.5 rounded-2xl cursor-pointer flex items-center gap-3 ${
                 activeChat?.id === user.id 
-                  ? 'glass-active shadow-[0_0_15px_rgba(var(--accent-rgb),0.1)]' 
-                  : 'hover:bg-slate-800/40 border-l-3 border-transparent'
+                  ? 'chat-active glass-active shadow-[0_0_15px_rgba(var(--accent-rgb),0.1)]' 
+                  : ''
               }`}
               style={{ animationDelay: `${idx * 30}ms` }}
             >
@@ -1029,7 +1029,7 @@ export default function Chats() {
                 </div>
                 <div className="text-[10px] text-slate-500 truncate font-mono">@{user.username}</div>
                 {((user as Contact).unreadCount ?? 0) > 0 && activeChat?.id !== user.id && (
-                  <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                  <span className="badge-pop grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
                     {(user as Contact).unreadCount! > 99 ? '99+' : (user as Contact).unreadCount}
                   </span>
                 )}
@@ -1266,7 +1266,7 @@ export default function Chats() {
                     <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:120ms]" />
                     <span className="h-1 w-1 animate-bounce rounded-full bg-accent [animation-delay:240ms]" />
                   </span>
-                  <span>{typingUser} печатает...</span>
+                  <span className="inline-flex items-center gap-1.5">{typingUser}<span className="typing-dots"><span /><span /><span /></span></span>
                 </div>
               )}
               <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void handleAttachment(event)} className="hidden" />
@@ -1314,7 +1314,7 @@ export default function Chats() {
                     className="min-w-0 flex-1 bg-transparent px-1 sm:px-2 py-2 text-sm text-t-primary placeholder-slate-500 focus:outline-none"
                     disabled={sending}
                  />
-                 <button type="submit" disabled={sending || !text.trim()} className="p-2.5 rounded-xl bg-gradient-to-r from-accent-from to-accent-to text-slate-950 hover:opacity-90 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] disabled:opacity-50">
+                 <button type="submit" disabled={sending || !text.trim()} className="btn-shine p-2.5 rounded-xl bg-gradient-to-r from-accent-from to-accent-to text-slate-950 hover:opacity-90 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] disabled:opacity-50">
                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                  </button>
               </form>

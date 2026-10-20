@@ -122,7 +122,7 @@ export default function Profile() {
           </section>
 
           <div className="mb-7 flex flex-wrap items-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
-            <Avatar src={avatarUrl} name={displayName || username || 'U'} size={64} online />
+            <Avatar src={avatarUrl} name={displayName || username || 'U'} size={64} online className={user?.isPremium ? 'ring-premium' : ''} />
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-1.5 truncate text-sm font-semibold">{displayName || username}{user?.isPremium && <Crown size={14} className="shrink-0 fill-amber-300/20 text-amber-300" aria-label="Skyline Premium" />}</p>
               <p className="mt-1 truncate text-xs text-t-secondary">@{username}</p>

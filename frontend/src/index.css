@@ -117,3 +117,141 @@ body, .app-shell { background: var(--bg-base); font-family: var(--font-sans); }
 .profile-panel-in { animation: profile-panel-enter 220ms cubic-bezier(.2,.8,.2,1) both; }
 .profile-panel-out { animation: profile-panel-exit 180ms ease-in both; }
 .pinned-message-label { animation: toast-enter 180ms cubic-bezier(.2,.8,.2,1) both; }
+
+/* ============ V2 POLISH: тени, фокус, микро-детали ============ */
+:root {
+  --shadow-card: 0 8px 30px rgba(2, 6, 23, 0.45);
+  --shadow-float: 0 12px 44px rgba(2, 6, 23, 0.6);
+}
+.shadow-card { box-shadow: var(--shadow-card); }
+.shadow-float { box-shadow: var(--shadow-float); }
+
+/* Единое кольцо фокуса для интерактивных элементов */
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, [role="switch"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: 2px;
+}
+
+/* Выделение текста в цветах акцента */
+::selection { background: rgba(var(--accent-rgb), 0.35); color: #fff; }
+
+/* Плавность по всему приложению */
+a, button, input, textarea { transition-property: background-color, border-color, color, opacity, transform, box-shadow; }
+
+/* Карточка с hover-подъёмом */
+.card-hover { transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 200ms ease, border-color 200ms ease; }
+.card-hover:hover { transform: translateY(-2px); box-shadow: var(--shadow-card); border-color: rgba(var(--accent-rgb), 0.25); }
+
+/* Заголовки секций */
+.section-title { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-secondary); }
+
+/* ================= V3 MOTION & DEPTH: полный редизайн ================= */
+
+/* --- Живой фон: медленное северное сияние из цвета темы --- */
+.app-aurora, body::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 32% at 18% 12%, rgba(var(--accent-rgb), 0.14), transparent 70%),
+    radial-gradient(30% 28% at 85% 8%, rgba(16, 185, 129, 0.10), transparent 70%),
+    radial-gradient(42% 38% at 60% 95%, rgba(var(--accent-rgb), 0.08), transparent 70%);
+  animation: aurora-drift 26s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(2.5%, -1.5%, 0) scale(1.04); }
+  100% { transform: translate3d(-2%, 2%, 0) scale(1.02); }
+}
+
+/* --- Плавная смена темы (только цвета, без лагов) --- */
+body, .glass-panel, input, textarea, .chat-message, .toggle, .pinned-strip {
+  transition: background-color 0.35s ease, border-color 0.35s ease;
+}
+
+/* --- Каскадное появление списков --- */
+.stagger > * { animation: slide-up 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.stagger > *:nth-child(1)  { animation-delay: 0.02s; }
+.stagger > *:nth-child(2)  { animation-delay: 0.05s; }
+.stagger > *:nth-child(3)  { animation-delay: 0.08s; }
+.stagger > *:nth-child(4)  { animation-delay: 0.11s; }
+.stagger > *:nth-child(5)  { animation-delay: 0.14s; }
+.stagger > *:nth-child(6)  { animation-delay: 0.17s; }
+.stagger > *:nth-child(7)  { animation-delay: 0.20s; }
+.stagger > *:nth-child(8)  { animation-delay: 0.23s; }
+.stagger > *:nth-child(9)  { animation-delay: 0.26s; }
+.stagger > *:nth-child(10) { animation-delay: 0.29s; }
+.stagger > *:nth-child(n+11) { animation-delay: 0.32s; }
+
+/* --- Кнопки: блик при наведении --- */
+.btn-shine { position: relative; overflow: hidden; }
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -80%;
+  width: 50%; height: 100%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.55s ease;
+  pointer-events: none;
+}
+.btn-shine:hover:not(:disabled)::after { left: 130%; }
+.btn-shine:active:not(:disabled) { transform: scale(0.97); }
+
+/* --- Пузыри сообщений: глубина и «стеклянный» блик --- */
+.chat-message {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 10px rgba(2, 6, 23, 0.35);
+  position: relative;
+}
+.chat-message::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 45%);
+  pointer-events: none;
+}
+
+/* --- Карточки чатов: подъём и индикатор активности --- */
+.chat-card { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 180ms ease, box-shadow 180ms ease; }
+.chat-card:not(.chat-active):hover { transform: translateX(3px); background: rgba(255, 255, 255, 0.04); }
+.chat-card.chat-active { background: rgba(var(--accent-rgb), 0.10); box-shadow: inset 3px 0 0 var(--accent); }
+
+/* --- Бейдж счётчика: упругое появление --- */
+.badge-pop { animation: badge-pop 320ms cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+@keyframes badge-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+/* --- Индикатор «печатает…»: три точки --- */
+.typing-dots { display: inline-flex; gap: 3px; align-items: center; }
+.typing-dots span {
+  width: 5px; height: 5px; border-radius: 999px;
+  background: var(--text-secondary);
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+
+/* --- Кольцо Premium на аватаре --- */
+.ring-premium { box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px rgba(251, 191, 36, 0.8), 0 0 18px rgba(251, 191, 36, 0.35); }
+
+/* --- Скроллбар: подсветка при наведении --- */
+*::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-rgb), 0.8); }
+
+/* --- Мягкое появление изображений --- */
+img { transition: opacity 0.3s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-aurora, body::before, .stagger > *, .btn-shine::after, .typing-dots span, .badge-pop {
+    animation: none !important;
+  }
+}

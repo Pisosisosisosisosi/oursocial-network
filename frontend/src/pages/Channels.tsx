@@ -5,8 +5,8 @@ import { api } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
-import WorkspaceTabs from '../components/WorkspaceTabs';
-import WorkspaceSidebarHeader from '../components/WorkspaceSidebarHeader';
+import WorkspaceTabs from '../components/layout/WorkspaceTabs';
+import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 
 interface Channel {
   id: string;
@@ -435,16 +435,16 @@ export default function Channels() {
             <button type="button" onClick={() => setListMode('discover')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'discover' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Найти каналы</button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        <div className="stagger min-h-0 flex-1 overflow-y-auto p-2">
           {loading && <div className="space-y-2 p-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-[70px] animate-pulse rounded-2xl bg-white/[0.04]" />)}</div>}
-          {!loading && visibleChannels.length === 0 && <div className="px-5 py-12 text-center">
+          {!loading && visibleChannels.length === 0 && <div className="m-2 flex flex-col items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 text-center animate-scale-in">
             <Radio size={26} className="mx-auto text-slate-600" />
             <p className="mt-3 text-sm font-medium text-slate-300">{listMode === 'mine' ? 'Вы пока ни на что не подписаны' : 'Каналы не найдены'}</p>
             <p className="mt-1 text-xs leading-5 text-slate-500">{listMode === 'mine' ? 'Откройте каталог или создайте свой канал.' : 'Попробуйте изменить запрос.'}</p>
             {listMode === 'mine' && <button type="button" onClick={() => setListMode('discover')} className="mt-4 rounded-lg bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25">Найти каналы</button>}
           </div>}
           {visibleChannels.map((channel) => (
-            <button key={channel.id} type="button" onClick={() => selectChannel(channel.id)} className={`mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left transition ${activeChannelId === channel.id ? 'bg-accent/15 ring-1 ring-accent/20' : 'hover:bg-white/[0.04]'}`}>
+            <button key={channel.id} type="button" onClick={() => selectChannel(channel.id)} className={`chat-card mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${activeChannelId === channel.id ? 'chat-active' : ''}`}>
               <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent/20 to-cyan-400/10 text-accent">
                 {channel.avatarUrl ? <img src={channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : channel.visibility === 'private' ? <LockKeyhole size={18} /> : <Radio size={19} />}
               </span>
@@ -490,7 +490,7 @@ export default function Channels() {
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-8">
             {loadingPosts && <div className="mx-auto max-w-2xl space-y-3">{[0, 1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-3xl bg-white/[0.04]" />)}</div>}
-            {!loadingPosts && activePosts.length === 0 && <div className="mx-auto mt-16 max-w-sm text-center">
+            {!loadingPosts && activePosts.length === 0 && <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-2.5 rounded-3xl border border-white/[0.06] bg-white/[0.02] p-8 text-center animate-scale-in">
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.04] text-slate-500"><Hash size={22} /></div>
               <p className="mt-4 text-sm font-semibold">Пока нет публикаций</p>
               <p className="mt-1 text-xs text-slate-500">{activeChannel.isOwner ? 'Напишите первый пост для подписчиков.' : 'Здесь появятся новые публикации канала.'}</p>

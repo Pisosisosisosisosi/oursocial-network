@@ -116,7 +116,7 @@ function AppRoutes() {
       <div className="grid h-full w-full place-items-center bg-bg-base text-sm text-t-secondary">
         <span className="flex items-center gap-3">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-          Подключаемся к OurSocial…
+          Подключаемся к Skyline…
         </span>
       </div>
     );

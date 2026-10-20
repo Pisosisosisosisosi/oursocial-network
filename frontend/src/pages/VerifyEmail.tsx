@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, ArrowRight, Loader2, MessageCircle } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { AlertCircle, ArrowRight, CheckCircle2, CloudLightning } from 'lucide-react';
 import { authApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import GlassPanel from '../components/ui/GlassPanel';
+import Button from '../components/ui/Button';
+import Spinner from '../components/ui/Spinner';
 
 export default function VerifyEmail() {
   const location = useLocation();
@@ -21,15 +24,12 @@ export default function VerifyEmail() {
         const token = searchParams.get('token') || '';
         const registrationTokenParam = searchParams.get('registrationToken') || '';
 
-        // If email was not in search, check hash parameters
         if (!email && location.hash.includes('?')) {
-          const hashQuery = location.hash.split('?')[1];
-          const hashParams = new URLSearchParams(hashQuery);
+          const hashParams = new URLSearchParams(location.hash.split('?')[1]);
           email = hashParams.get('email') || email;
         }
 
         let registrationToken = registrationTokenParam;
-
         if (!registrationToken) {
           if (token && email) {
             const res = await authApi.verifyEmailToken(email, token);
@@ -44,7 +44,6 @@ export default function VerifyEmail() {
           }
         }
 
-        // Check if there is pending registration in sessionStorage
         const saved = sessionStorage.getItem('pendingRegistration');
         if (saved) {
           try {
@@ -54,9 +53,7 @@ export default function VerifyEmail() {
               sessionStorage.removeItem('pendingRegistration');
               setStatus('success');
               setMessage('Почта успешно подтверждена! Входим в аккаунт…');
-              setTimeout(() => {
-                navigate('/', { replace: true });
-              }, 1200);
+              window.setTimeout(() => navigate('/', { replace: true }), 1200);
               return;
             }
           } catch {
@@ -64,86 +61,74 @@ export default function VerifyEmail() {
           }
         }
 
-        // If opened on another device / session without saved password
         if (registrationToken && email) {
           sessionStorage.setItem('verifiedEmailToken', registrationToken);
           sessionStorage.setItem('verifiedEmailAddress', email);
           setStatus('success');
           setMessage('Email успешно подтверждён в 1 клик! Завершите ввод имени и пароля.');
-          setTimeout(() => {
-            navigate('/register', { replace: true });
-          }, 1800);
+          window.setTimeout(() => navigate('/register', { replace: true }), 1800);
           return;
         }
 
         setStatus('success');
         setMessage('Email успешно подтверждён!');
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Email verification error:', err);
+        const data = (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data;
         setStatus('error');
-        setMessage(
-          err?.response?.data?.detail ||
-          err?.response?.data?.error ||
-          'Срок действия ссылки истёк или она уже была использована.'
-        );
+        setMessage(data?.detail || data?.error || 'Срок действия ссылки истёк или она уже была использована.');
       }
     };
 
-    runVerification();
+    void runVerification();
   }, [location, navigate, register]);
 
   return (
-    <main className="relative grid h-full w-full place-items-center overflow-y-auto bg-bg-base px-4 py-8 text-t-primary">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(var(--accent-rgb),0.18),transparent_55%)]" />
+    <main className="relative grid h-full w-full place-items-center overflow-y-auto bg-bg-base px-4 py-8 text-t-primary animate-fade-in">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,var(--glow),transparent_55%)]" />
       <div className="relative w-full max-w-[430px]">
-        <div className="mb-8 flex items-center justify-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-accent-from to-accent-to shadow-lg shadow-accent/25">
-            <MessageCircle size={21} />
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <span className="btn-glow grid h-14 w-14 place-items-center rounded-3xl bg-gradient-to-br from-accent-from to-accent-to shadow-lg">
+            <CloudLightning size={26} />
           </span>
-          <span className="text-xl font-bold tracking-tight">OurSocial</span>
+          <span className="text-2xl font-extrabold tracking-tight">Skyline</span>
         </div>
 
-        <section className="rounded-3xl border border-white/[0.08] bg-panel/90 p-8 text-center shadow-2xl backdrop-blur-xl">
+        <GlassPanel className="p-8 text-center animate-scale-in">
           {status === 'loading' && (
             <div className="flex flex-col items-center py-6">
-              <Loader2 className="h-12 w-12 animate-spin text-accent mb-4" />
-              <h1 className="text-xl font-semibold mb-2">Подтверждение в 1 клик</h1>
+              <Spinner size={44} className="mb-4" />
+              <h1 className="mb-2 text-xl font-semibold tracking-tight">Подтверждение в 1 клик</h1>
               <p className="text-sm text-t-secondary">{message}</p>
             </div>
           )}
 
           {status === 'success' && (
             <div className="flex flex-col items-center py-6">
-              <div className="h-14 w-14 rounded-2xl bg-emerald-500/20 text-emerald-400 grid place-items-center mb-4">
-                <CheckCircle2 size={32} />
-              </div>
-              <h1 className="text-xl font-semibold mb-2 text-white">Успешно!</h1>
-              <p className="text-sm text-slate-300 leading-relaxed mb-6">{message}</p>
-              <button
-                onClick={() => navigate('/')}
-                className="flex items-center justify-center gap-2 w-full h-12 bg-accent hover:bg-accent text-white font-semibold rounded-xl transition"
-              >
+              <span className="mb-4 grid h-14 w-14 place-items-center rounded-3xl bg-emerald-400/15 text-emerald-300">
+                <CheckCircle2 size={30} />
+              </span>
+              <h1 className="mb-2 text-xl font-semibold tracking-tight">Успешно!</h1>
+              <p className="mb-6 text-sm leading-relaxed text-t-secondary">{message}</p>
+              <Button onClick={() => navigate('/')}>
                 Перейти в мессенджер <ArrowRight size={16} />
-              </button>
+              </Button>
             </div>
           )}
 
           {status === 'error' && (
             <div className="flex flex-col items-center py-6">
-              <div className="h-14 w-14 rounded-2xl bg-rose-500/20 text-rose-400 grid place-items-center mb-4">
-                <AlertCircle size={32} />
-              </div>
-              <h1 className="text-xl font-semibold mb-2 text-white">Ошибка подтверждения</h1>
-              <p className="text-sm text-rose-200 leading-relaxed mb-6">{message}</p>
-              <Link
-                to="/register"
-                className="flex items-center justify-center gap-2 w-full h-12 bg-white/10 hover:bg-white/15 text-white font-semibold rounded-xl transition"
-              >
+              <span className="mb-4 grid h-14 w-14 place-items-center rounded-3xl bg-rose-400/15 text-rose-300">
+                <AlertCircle size={30} />
+              </span>
+              <h1 className="mb-2 text-xl font-semibold tracking-tight">Ошибка подтверждения</h1>
+              <p className="mb-6 text-sm leading-relaxed text-rose-200">{message}</p>
+              <Link to="/register" className="btn-glow flex h-12 w-full items-center justify-center gap-2 rounded-xl glass-panel text-sm font-semibold text-t-primary">
                 Вернуться к регистрации
               </Link>
             </div>
           )}
-        </section>
+        </GlassPanel>
       </div>
     </main>
   );
