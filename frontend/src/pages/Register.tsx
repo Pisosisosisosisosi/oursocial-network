@@ -73,21 +73,10 @@ export default function Register() {
       }));
 
       const res = await authApi.sendEmailCode(email.trim());
-      setSecondsRemaining(res.data?.expiresInSeconds || 600);
+      setSecondsRemaining(res.data.expiresInSeconds || 600);
       setVerificationError('');
-
-      if (res.data?.code) {
-        setVerificationCode(res.data.code);
-      } else {
-        setVerificationCode('');
-      }
-
-      if (res.data?.emailSent) {
-        setVerificationNotice(`Письмо со ссылкой для входа в 1 клик отправлено на ${email.trim()}.`);
-      } else {
-        setVerificationNotice('Код подтверждения готов. Нажмите кнопку ниже для подтверждения в 1 клик!');
-      }
-
+      setVerificationCode('');
+      setVerificationNotice(`Письмо со ссылкой для подтверждения отправлено на ${email.trim()}. Введите код из письма или перейдите по ссылке в нём.`);
       setVerificationOpen(true);
     } catch (sendError: unknown) {
       const data = isAxiosError(sendError)
@@ -106,15 +95,9 @@ export default function Register() {
     setVerificationLoading(true);
     try {
       const res = await authApi.sendEmailCode(email.trim());
-      setSecondsRemaining(res.data?.expiresInSeconds || 600);
-      if (res.data?.code) {
-        setVerificationCode(res.data.code);
-      }
-      setVerificationNotice(
-        res.data?.emailSent
-          ? `Новое письмо отправлено на ${email.trim()}. Нажмите кнопку в письме.`
-          : 'Новый код подтверждения готов.'
-      );
+      setSecondsRemaining(res.data.expiresInSeconds || 600);
+      setVerificationCode('');
+      setVerificationNotice(`Новое письмо отправлено на ${email.trim()}. Введите код из письма или перейдите по ссылке в нём.`);
     } catch (sendError: unknown) {
       const data = isAxiosError(sendError)
         ? sendError.response?.data as { detail?: string; error?: string } | undefined
