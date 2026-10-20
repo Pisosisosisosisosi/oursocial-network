@@ -1,7 +1,7 @@
 import { useState, type FormEvent, useRef } from 'react';
-import { getSocket } from '../api/socket';
 import { keysApi } from '../api/client';
 import { encryptMessage } from '../crypto/encrypt';
+import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 
 interface Props {

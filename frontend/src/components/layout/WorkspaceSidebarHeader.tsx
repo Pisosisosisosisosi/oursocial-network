@@ -1,8 +1,8 @@
 import { Search, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSocket } from '../api/socket';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
+import { getSocket } from '../../api/socket';
 
 interface WorkspaceSidebarHeaderProps {
   searchValue: string;
