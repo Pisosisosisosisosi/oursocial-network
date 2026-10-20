@@ -404,24 +404,21 @@ def send_email_code(payload: SendEmailCodeRequest):
     frontend_base = os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com")
     verification_link = f"{frontend_base}/#/verify-email?email={quote_plus(email)}&code={code}&token={link_token}"
 
-    email_sent = False
-    delivery_error = None
     try:
         send_email_verification_message(email, code, verification_link)
-        email_sent = True
     except (OSError, smtplib.SMTPException, RuntimeError, ValueError) as error:
-        delivery_error = f"{type(error).__name__}: {error}"
-        print(f"Email delivery note: {delivery_error}")
+        email_verifications_collection().delete_one({"email": email, "token": link_token})
+        print(f"Email delivery failed ({type(error).__name__}): {error}")
+        raise HTTPException(
+            status_code=503,
+            detail="Не удалось отправить письмо подтверждения. Попробуйте позже.",
+        ) from error
 
     return {
         "status": "ok",
-        "message": "Письмо с кнопкой подтверждения отправлено на вашу почту." if email_sent else "Код подтверждения подготовлен.",
+        "message": "Письмо со ссылкой подтверждения отправлено на вашу почту.",
         "expiresInSeconds": 600,
-        "emailSent": email_sent,
-        "code": code,
-        "token": link_token,
-        "verificationLink": verification_link,
-        "deliveryError": delivery_error if not email_sent else None,
+        "emailSent": True,
     }
 
 
