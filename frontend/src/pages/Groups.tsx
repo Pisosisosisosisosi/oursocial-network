@@ -580,7 +580,7 @@ export default function Groups() {
 
   return (
     <>
-    <main className="flex h-full min-h-0 w-full bg-bg-base text-t-primary">
+    <main className="animate-fade-in flex h-full min-h-0 w-full bg-bg-base text-t-primary">
       <aside className={`${activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-80`}>
         <WorkspaceSidebarHeader
           searchValue={groupSearch}
@@ -631,8 +631,8 @@ export default function Groups() {
               <p className="text-xs leading-relaxed text-slate-400">{groupSearch.trim() ? 'Группы не найдены.' : 'Вы пока не состоите в группах. Создайте группу и найдите участников по полному @username.'}</p>
             </div>
           ) : visibleGroups.map((group) => (
-            <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`chat-card mb-1 flex w-full items-center gap-3 rounded-xl p-3 text-left ${activeGroup?.id === group.id ? 'chat-active text-white' : 'text-slate-300'}`}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Users size={18} /></span>
+            <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`chat-card chat-list-item group mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${activeGroup?.id === group.id ? 'chat-active text-white' : 'text-slate-300'}`}>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent/20 to-indigo-400/10 text-accent transition duration-300 group-hover:rotate-[-5deg] group-hover:scale-105"><Users size={18} /></span>
               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{group.title}</span><span className="mt-1 block text-[10px] text-slate-500">{group.memberCount} участников</span></span>
             </button>
           ))}

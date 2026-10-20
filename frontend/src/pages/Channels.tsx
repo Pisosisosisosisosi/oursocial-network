@@ -413,7 +413,7 @@ export default function Channels() {
   }
 
   return (
-    <main className="flex h-full min-h-0 w-full bg-bg-base text-t-primary">
+    <main className="animate-fade-in flex h-full min-h-0 w-full bg-bg-base text-t-primary">
       <aside className={`${activeChannel ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-[340px]`}>
         <WorkspaceSidebarHeader
           searchValue={search}
@@ -444,8 +444,8 @@ export default function Channels() {
             {listMode === 'mine' && <button type="button" onClick={() => setListMode('discover')} className="mt-4 rounded-lg bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25">Найти каналы</button>}
           </div>}
           {visibleChannels.map((channel) => (
-            <button key={channel.id} type="button" onClick={() => selectChannel(channel.id)} className={`chat-card mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${activeChannelId === channel.id ? 'chat-active' : ''}`}>
-              <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent/20 to-cyan-400/10 text-accent">
+            <button key={channel.id} type="button" onClick={() => selectChannel(channel.id)} className={`chat-card chat-list-item group mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${activeChannelId === channel.id ? 'chat-active' : ''}`}>
+              <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent/20 to-cyan-400/10 text-accent transition duration-300 group-hover:rotate-[-4deg] group-hover:scale-105">
                 {channel.avatarUrl ? <img src={channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : channel.visibility === 'private' ? <LockKeyhole size={18} /> : <Radio size={19} />}
               </span>
               <span className="min-w-0 flex-1">
@@ -502,7 +502,7 @@ export default function Channels() {
                   count: post.reactions.filter((reaction) => reaction.emoji === emoji).length,
                   mine: post.reactions.some((reaction) => reaction.emoji === emoji && reaction.userId === user?.id),
                 }));
-                return <article key={post.id} className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[#111a2a]/90 shadow-[0_12px_40px_rgba(0,0,0,0.16)]">
+                return <article key={post.id} className="channel-post overflow-hidden rounded-3xl border border-white/[0.08] bg-[#111a2a]/90 shadow-[0_12px_40px_rgba(0,0,0,0.16)]">
                   {post.pinned && <div className="flex items-center gap-2 border-b border-accent/10 bg-accent/[0.06] px-5 py-2 text-[11px] font-semibold text-accent"><Pin size={13} /> Закреплённая публикация</div>}
                   <div className="flex items-center gap-3 px-5 pt-4">
                     <div className="grid h-9 w-9 place-items-center rounded-xl bg-accent/15 text-accent"><Radio size={16} /></div>

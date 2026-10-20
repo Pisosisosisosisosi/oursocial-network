@@ -1149,7 +1149,7 @@ export default function Chats() {
   const visibleUsers: (User & { nickname?: string })[] = searchQuery.trim() ? searchResults : contacts;
 
   return (
-    <div className="flex h-full w-full bg-bg-base text-t-primary font-sans absolute top-0 left-0 overflow-hidden selection:bg-accent/30">
+    <div className="animate-fade-in absolute left-0 top-0 flex h-full w-full overflow-hidden bg-bg-base font-sans text-t-primary selection:bg-accent/30">
       
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -1210,9 +1210,10 @@ export default function Chats() {
           {visibleUsers.map((user, idx) => {
             const contact = contacts.find((item) => item.id === user.id);
             return (
-            <div 
+            <button type="button"
               key={user.id} 
               onClick={() => handleSelectChat(contact ? { ...user, nickname: contact.nickname } : user)}
+              aria-label={`Открыть чат с ${contact?.nickname || user.displayName || user.username}`}
               onContextMenu={(event) => {
                 event.preventDefault();
                 setUserContextMenu({
@@ -1223,7 +1224,7 @@ export default function Chats() {
                 });
               }}
               aria-haspopup="menu"
-              className={`chat-card chat-list-item p-2.5 rounded-2xl cursor-pointer flex items-center gap-3 ${
+              className={`chat-card chat-list-item w-full p-2.5 rounded-2xl text-left cursor-pointer flex items-center gap-3 ${
                 activeChat?.id === user.id 
                   ? 'chat-active glass-active shadow-[0_0_15px_rgba(var(--accent-rgb),0.1)]' 
                   : ''
@@ -1238,18 +1239,19 @@ export default function Chats() {
                 </div>
                 <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#0f172a] ${onlineUsers.has(String(user.id)) ? 'bg-emerald-500' : 'bg-slate-600'}`}></span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex min-w-0 items-center gap-1 text-xs font-bold text-slate-200">
+              <span className="flex-1 min-w-0">
+                <span className="flex min-w-0 items-center justify-between gap-2 text-xs font-bold text-slate-200">
                   <span className="truncate">{contact?.nickname || user.nickname || user.displayName || user.username}</span>
-                </div>
-                <div className="text-[10px] text-slate-500 truncate font-mono">@{user.username}</div>
-                {((user as Contact).unreadCount ?? 0) > 0 && activeChat?.id !== user.id && (
-                  <span className="badge-pop grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
-                    {(user as Contact).unreadCount! > 99 ? '99+' : (user as Contact).unreadCount}
-                  </span>
-                )}
-              </div>
-            </div>
+                  {((user as Contact).unreadCount ?? 0) > 0 && activeChat?.id !== user.id && (
+                    <span className="badge-pop grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white">
+                      {(user as Contact).unreadCount! > 99 ? '99+' : (user as Contact).unreadCount}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">@{user.username}</span>
+                <span className="mt-1 block truncate text-[10px] text-slate-600">{user.statusText || (onlineUsers.has(String(user.id)) ? 'В сети' : 'Откройте, чтобы продолжить общение')}</span>
+              </span>
+            </button>
           );})}
         </div>
       </div>

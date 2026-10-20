@@ -14,22 +14,34 @@
   --glow: rgba(99, 102, 241, 0.3);
 }
 
-/* ---- 15 тем оформления ---- */
+/* ---- 27 тем оформления ---- */
 [data-app-theme='skyline'] { --accent:#6366f1; --accent-from:#6366f1; --accent-to:#10b981; --glow:rgba(99,102,241,.3);; --accent-rgb:99,102,241 }
-[data-app-theme='cyber']   { --accent:#22d3ee; --accent-from:#22d3ee; --accent-to:#a855f7; --glow:rgba(34,211,238,.3); }
-[data-app-theme='cosmos']  { --accent:#a78bfa; --accent-from:#7c3aed; --accent-to:#ec4899; --glow:rgba(167,139,250,.3); }
-[data-app-theme='sakura']  { --accent:#f472b6; --accent-from:#f472b6; --accent-to:#fb7185; --glow:rgba(244,114,182,.3); }
-[data-app-theme='midnight']{ --accent:#60a5fa; --accent-from:#1e3a8a; --accent-to:#60a5fa; --glow:rgba(96,165,250,.3); }
-[data-app-theme='ocean']   { --accent:#2dd4bf; --accent-from:#0e7490; --accent-to:#2dd4bf; --glow:rgba(45,212,191,.3); }
-[data-app-theme='sunset']  { --accent:#fb923c; --accent-from:#f97316; --accent-to:#e11d48; --glow:rgba(251,146,60,.3); }
-[data-app-theme='forest']  { --accent:#4ade80; --accent-from:#15803d; --accent-to:#4ade80; --glow:rgba(74,222,128,.3); }
-[data-app-theme='royal']   { --accent:#fbbf24; --accent-from:#b45309; --accent-to:#fbbf24; --glow:rgba(251,191,36,.3); }
-[data-app-theme='rose']    { --accent:#fb7185; --accent-from:#be123c; --accent-to:#fb7185; --glow:rgba(251,113,133,.3); }
-[data-app-theme='violet']  { --accent:#c084fc; --accent-from:#7e22ce; --accent-to:#c084fc; --glow:rgba(192,132,252,.3); }
-[data-app-theme='mono']    { --accent:#e2e8f0; --accent-from:#64748b; --accent-to:#e2e8f0; --glow:rgba(226,232,240,.25); }
-[data-app-theme='matrix']  { --accent:#4ade80; --accent-from:#16a34a; --accent-to:#a3e635; --glow:rgba(74,222,128,.35); }
-[data-app-theme='arctic']  { --accent:#7dd3fc; --accent-from:#0369a1; --accent-to:#a5f3fc; --glow:rgba(125,211,252,.3); }
-[data-app-theme='mocha']   { --accent:#d6a26a; --accent-from:#78350f; --accent-to:#d6a26a; --glow:rgba(214,162,106,.3); }
+[data-app-theme='cyber']   { --accent:#22d3ee; --accent-from:#22d3ee; --accent-to:#a855f7; --glow:rgba(34,211,238,.3); --accent-rgb:34,211,238; }
+[data-app-theme='cosmos']  { --accent:#a78bfa; --accent-from:#7c3aed; --accent-to:#ec4899; --glow:rgba(167,139,250,.3); --accent-rgb:167,139,250; }
+[data-app-theme='sakura']  { --accent:#f472b6; --accent-from:#f472b6; --accent-to:#fb7185; --glow:rgba(244,114,182,.3); --accent-rgb:244,114,182; }
+[data-app-theme='midnight']{ --accent:#60a5fa; --accent-from:#1e3a8a; --accent-to:#60a5fa; --glow:rgba(96,165,250,.3); --accent-rgb:96,165,250; }
+[data-app-theme='ocean']   { --accent:#2dd4bf; --accent-from:#0e7490; --accent-to:#2dd4bf; --glow:rgba(45,212,191,.3); --accent-rgb:45,212,191; }
+[data-app-theme='sunset']  { --accent:#fb923c; --accent-from:#f97316; --accent-to:#e11d48; --glow:rgba(251,146,60,.3); --accent-rgb:251,146,60; }
+[data-app-theme='forest']  { --accent:#4ade80; --accent-from:#15803d; --accent-to:#4ade80; --glow:rgba(74,222,128,.3); --accent-rgb:74,222,128; }
+[data-app-theme='royal']   { --accent:#fbbf24; --accent-from:#b45309; --accent-to:#fbbf24; --glow:rgba(251,191,36,.3); --accent-rgb:251,191,36; }
+[data-app-theme='rose']    { --accent:#fb7185; --accent-from:#be123c; --accent-to:#fb7185; --glow:rgba(251,113,133,.3); --accent-rgb:251,113,133; }
+[data-app-theme='violet']  { --accent:#c084fc; --accent-from:#7e22ce; --accent-to:#c084fc; --glow:rgba(192,132,252,.3); --accent-rgb:192,132,252; }
+[data-app-theme='mono']    { --accent:#e2e8f0; --accent-from:#64748b; --accent-to:#e2e8f0; --glow:rgba(226,232,240,.25); --accent-rgb:226,232,240; }
+[data-app-theme='matrix']  { --accent:#4ade80; --accent-from:#16a34a; --accent-to:#a3e635; --glow:rgba(74,222,128,.35); --accent-rgb:74,222,128; }
+[data-app-theme='arctic']  { --accent:#7dd3fc; --accent-from:#0369a1; --accent-to:#a5f3fc; --glow:rgba(125,211,252,.3); --accent-rgb:125,211,252; }
+[data-app-theme='mocha']   { --accent:#d6a26a; --accent-from:#78350f; --accent-to:#d6a26a; --glow:rgba(214,162,106,.3); --accent-rgb:214,162,106; }
+[data-app-theme='aurora']  { --accent:#5eead4; --accent-from:#0f766e; --accent-to:#8b5cf6; --glow:rgba(94,234,212,.32); --accent-rgb:94,234,212; }
+[data-app-theme='lagoon']  { --accent:#2dd4bf; --accent-from:#0f766e; --accent-to:#38bdf8; --glow:rgba(45,212,191,.3); --accent-rgb:45,212,191; }
+[data-app-theme='crimson'] { --accent:#fb7185; --accent-from:#9f1239; --accent-to:#ef4444; --glow:rgba(251,113,133,.32); --accent-rgb:251,113,133; }
+[data-app-theme='candy']   { --accent:#f0abfc; --accent-from:#db2777; --accent-to:#7c3aed; --glow:rgba(240,171,252,.3); --accent-rgb:240,171,252; }
+[data-app-theme='cobalt']  { --accent:#60a5fa; --accent-from:#1d4ed8; --accent-to:#06b6d4; --glow:rgba(96,165,250,.32); --accent-rgb:96,165,250; }
+[data-app-theme='copper']  { --accent:#fdba74; --accent-from:#c2410c; --accent-to:#f59e0b; --glow:rgba(253,186,116,.3); --accent-rgb:253,186,116; }
+[data-app-theme='lavender']{ --accent:#c4b5fd; --accent-from:#8b5cf6; --accent-to:#d946ef; --glow:rgba(196,181,253,.3); --accent-rgb:196,181,253; }
+[data-app-theme='glacier'] { --accent:#67e8f9; --accent-from:#0891b2; --accent-to:#6366f1; --glow:rgba(103,232,249,.3); --accent-rgb:103,232,249; }
+[data-app-theme='ember']   { --accent:#fca5a5; --accent-from:#dc2626; --accent-to:#f97316; --glow:rgba(252,165,165,.32); --accent-rgb:252,165,165; }
+[data-app-theme='jade']    { --accent:#6ee7b7; --accent-from:#047857; --accent-to:#84cc16; --glow:rgba(110,231,183,.3); --accent-rgb:110,231,183; }
+[data-app-theme='orchid']  { --accent:#e879f9; --accent-from:#a21caf; --accent-to:#ec4899; --glow:rgba(232,121,249,.3); --accent-rgb:232,121,249; }
+[data-app-theme='sand']    { --accent:#fcd34d; --accent-from:#b45309; --accent-to:#fb923c; --glow:rgba(252,211,77,.3); --accent-rgb:252,211,77; }
 
 @theme inline {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -223,6 +235,8 @@ html[data-chat-bubble-style="glass"] .chat-message-bubble { background-color: co
 html[data-chat-bubble-style="glass"] .chat-message-other { background-color: color-mix(in srgb, var(--chat-other-message-color, #1e293b) 78%, transparent); }
 html[data-chat-text-style="bold"] .chat-message-bubble { font-weight: 600; letter-spacing: .005em; }
 html[data-chat-text-style="glow"] .chat-message-bubble { text-shadow: 0 0 12px color-mix(in srgb, var(--chat-text-color, #f8fafc) 28%, transparent); }
+html[data-message-size="small"] .chat-message-bubble { font-size: .75rem; }
+html[data-message-size="large"] .chat-message-bubble { font-size: 1rem; }
 .chat-message::before {
   content: "";
   position: absolute;
@@ -236,6 +250,18 @@ html[data-chat-text-style="glow"] .chat-message-bubble { text-shadow: 0 0 12px c
 .chat-card { transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 180ms ease, box-shadow 180ms ease; }
 .chat-card:not(.chat-active):hover { transform: translateX(3px); background: rgba(255, 255, 255, 0.04); }
 .chat-card.chat-active { background: rgba(var(--accent-rgb), 0.10); box-shadow: inset 3px 0 0 var(--accent); }
+.chat-list-item { position: relative; isolation: isolate; }
+.chat-list-item::after { content:""; position:absolute; inset:0; z-index:-1; border-radius:inherit; background:linear-gradient(110deg,rgba(var(--accent-rgb),.12),transparent 65%); opacity:0; transition:opacity .22s ease; }
+.chat-list-item:hover::after,.chat-list-item.chat-active::after { opacity:1; }
+.channel-post { animation: slide-up 320ms cubic-bezier(.2,.8,.2,1) both; transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease; }
+.channel-post:hover { transform: translateY(-2px); border-color: rgba(var(--accent-rgb),.24); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
+.chat-wallpaper-surface > .chat-message-bubble { animation: slide-up 240ms cubic-bezier(.2,.8,.2,1) both; }
+.chat-wallpaper-surface > .chat-message-bubble:nth-child(2) { animation-delay: 25ms; }
+.chat-wallpaper-surface > .chat-message-bubble:nth-child(3) { animation-delay: 50ms; }
+.chat-wallpaper-surface > .chat-message-bubble:nth-child(4) { animation-delay: 75ms; }
+html[data-compact='true'] .chat-list-item { gap: .6rem !important; padding: .45rem .6rem !important; }
+html[data-compact='true'] .chat-wallpaper-surface > .chat-message-bubble { padding: .55rem .75rem !important; }
+html[data-reduce-motion='true'] .chat-card:not(.chat-active):hover,.app-aurora { transform: none; }
 
 /* --- Бейдж счётчика: упругое появление --- */
 .badge-pop { animation: badge-pop 320ms cubic-bezier(0.2, 1.6, 0.4, 1) both; }
@@ -271,4 +297,11 @@ img { transition: opacity 0.3s ease; }
   .app-aurora, body::before, .stagger > *, .btn-shine::after, .typing-dots span, .badge-pop {
     animation: none !important;
   }
+}
+
+html[data-reduce-motion='true'] *, html[data-reduce-motion='true'] *::before, html[data-reduce-motion='true'] *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+  scroll-behavior: auto !important;
 }

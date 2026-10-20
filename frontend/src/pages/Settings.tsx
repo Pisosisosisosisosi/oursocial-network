@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { ArrowLeft, Bell, Contrast, Download, Image, LogOut, MessageSquare, Shield, Smartphone, UserRound } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Bell, ChevronRight, Contrast, Download, Image, LogOut, MessageSquare, Shield, Smartphone, UserRound } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { applyAppPreferences, APP_THEMES, CHAT_STYLE_DEFAULTS, type AppTheme, type WallpaperFit } from '../preferences';
 import { api } from '../api/client';
@@ -40,6 +40,18 @@ const THEME_PREVIEW: Record<AppTheme, [string, string, string]> = {
   matrix:  ['#031007', '#16a34a', '#a3e635'],
   arctic:  ['#0a1520', '#0369a1', '#a5f3fc'],
   mocha:   ['#140f0a', '#78350f', '#d6a26a'],
+  aurora:  ['#101525', '#0f766e', '#8b5cf6'],
+  lagoon:  ['#071b21', '#0f766e', '#38bdf8'],
+  crimson: ['#1b0b14', '#9f1239', '#ef4444'],
+  candy:   ['#1b0d20', '#db2777', '#7c3aed'],
+  cobalt:  ['#09152a', '#1d4ed8', '#06b6d4'],
+  copper:  ['#1c110b', '#c2410c', '#f59e0b'],
+  lavender:['#171127', '#8b5cf6', '#d946ef'],
+  glacier: ['#081c25', '#0891b2', '#6366f1'],
+  ember:   ['#1c0c0c', '#dc2626', '#f97316'],
+  jade:    ['#081911', '#047857', '#84cc16'],
+  orchid:  ['#1c0d20', '#a21caf', '#ec4899'],
+  sand:    ['#1b140b', '#b45309', '#fb923c'],
 };
 
 const CHAT_PALETTES = [
@@ -51,10 +63,32 @@ const CHAT_PALETTES = [
   { id: 'ice', name: 'Лёд', note: 'Чистый голубой', text: '#f0f9ff', border: '#38bdf8', own: '#0284c7', other: '#0c4a6e' },
   { id: 'mono', name: 'Монохром', note: 'Сдержанная классика', text: '#f8fafc', border: '#94a3b8', own: '#475569', other: '#1e293b' },
   { id: 'berry', name: 'Ягода', note: 'Глубокий малиновый', text: '#fff1f2', border: '#c084fc', own: '#a21caf', other: '#3b0764' },
+  { id: 'peach', name: 'Персик', note: 'Тёплый пастельный', text: '#fff7ed', border: '#fdba74', own: '#ea580c', other: '#7c2d12' },
+  { id: 'sapphire', name: 'Сапфир', note: 'Синий с серебром', text: '#eff6ff', border: '#60a5fa', own: '#2563eb', other: '#172554' },
+  { id: 'plum', name: 'Слива', note: 'Плотный сливовый', text: '#faf5ff', border: '#c084fc', own: '#9333ea', other: '#3b0764' },
+  { id: 'emerald', name: 'Изумруд', note: 'Насыщенная зелень', text: '#ecfdf5', border: '#6ee7b7', own: '#047857', other: '#022c22' },
+  { id: 'graphite', name: 'Графит', note: 'Минимализм и контраст', text: '#f8fafc', border: '#64748b', own: '#334155', other: '#111827' },
+  { id: 'lemon', name: 'Лимон', note: 'Цитрусовый акцент', text: '#fefce8', border: '#facc15', own: '#a16207', other: '#422006' },
+  { id: 'orchid', name: 'Орхидея', note: 'Пурпурный с розовым', text: '#fdf4ff', border: '#e879f9', own: '#a21caf', other: '#4a044e' },
+  { id: 'copper', name: 'Медь', note: 'Мягкий бронзовый', text: '#fff7ed', border: '#d6a26a', own: '#9a3412', other: '#431407' },
 ] as const;
+
+const SETTINGS_SECTIONS = [
+  { id: 'appearance', title: 'Внешний вид', description: 'Темы, обои, палитры и стиль сообщений', icon: Contrast, color: 'from-violet-500/20 to-indigo-500/5' },
+  { id: 'chats', title: 'Чаты', description: 'Ввод, медиа и отметки прочтения', icon: MessageSquare, color: 'from-cyan-500/20 to-blue-500/5' },
+  { id: 'privacy', title: 'Приватность', description: 'Статус, прочтение и личные данные', icon: Shield, color: 'from-emerald-500/20 to-teal-500/5' },
+  { id: 'notifications', title: 'Уведомления', description: 'Оповещения и установка приложения', icon: Bell, color: 'from-amber-500/20 to-orange-500/5' },
+  { id: 'account', title: 'Аккаунт', description: 'Данные профиля и завершение сессии', icon: UserRound, color: 'from-rose-500/20 to-pink-500/5' },
+] as const;
+type SettingsSectionId = typeof SETTINGS_SECTIONS[number]['id'];
 
 export default function Settings() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSection = searchParams.get('section');
+  const activeSection = SETTINGS_SECTIONS.some((section) => section.id === requestedSection)
+    ? requestedSection as SettingsSectionId
+    : null;
   const { user, logout, updateUser } = useAuth();
   const showToast = useToast();
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('skylineTheme') === 'light' ? 'light' : 'dark');
@@ -222,7 +256,27 @@ export default function Settings() {
         {notice && <p role="status" className="mb-5 rounded-xl border border-accent/20 bg-accent/[0.08] px-4 py-3 text-sm text-t-primary animate-slide-up">{notice}</p>}
 
         <div className="space-y-5">
-          <section className={cardClass}>
+          {!activeSection ? (
+            <nav aria-label="Разделы настроек" className="grid gap-3 sm:grid-cols-2">
+              {SETTINGS_SECTIONS.map((section, index) => {
+                const Icon = section.icon;
+                return <button key={section.id} type="button" onClick={() => setSearchParams({ section: section.id })}
+                  className={`group relative flex min-h-28 items-center gap-4 overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br ${section.color} p-5 text-left transition duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-[0_16px_40px_rgba(0,0,0,.22)] animate-fade-in`}
+                  style={{ animationDelay: `${index * 45}ms` }}>
+                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-white/[0.08] bg-slate-950/35 text-accent transition duration-300 group-hover:scale-110 group-hover:rotate-[-4deg]"><Icon size={20} /></span>
+                  <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-t-primary">{section.title}</span><span className="mt-1 block text-xs leading-relaxed text-t-secondary">{section.description}</span></span>
+                  <ChevronRight size={17} className="shrink-0 text-t-secondary transition group-hover:translate-x-1 group-hover:text-accent" />
+                </button>;
+              })}
+            </nav>
+          ) : (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 animate-slide-up">
+              <div className="flex min-w-0 items-center gap-3"><button type="button" onClick={() => setSearchParams({})} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-t-secondary transition hover:bg-white/[0.07] hover:text-t-primary" aria-label="К разделам настроек"><ArrowLeft size={16} /></button><div className="min-w-0"><p className="text-sm font-semibold">{SETTINGS_SECTIONS.find((section) => section.id === activeSection)?.title}</p><p className="truncate text-[10px] text-t-secondary">Раздел настроек</p></div></div>
+              <button type="button" onClick={() => setSearchParams({})} className="shrink-0 rounded-xl px-3 py-2 text-[10px] font-semibold text-accent transition hover:bg-accent/10">Все разделы</button>
+            </div>
+          )}
+
+          {activeSection === 'appearance' && <section className={`${cardClass} animate-fade-in`}>
             <div className="mb-3 flex items-center gap-3">
               <Contrast size={18} className="text-accent" />
               <div><h2 className="text-sm font-semibold">Внешний вид</h2><p className="mt-1 text-xs text-t-secondary">Тема, стиль акцентов и плотность интерфейса.</p></div>
@@ -232,7 +286,7 @@ export default function Settings() {
 
             <fieldset className="mt-4 border-t border-white/[0.06] pt-4">
               <legend className="mb-3 text-sm font-medium">Стиль приложения</legend>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              <div className="grid max-h-[360px] grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-5">
                 {APP_THEMES.map((t) => {
                   const active = appTheme === t.id;
                   const [bg, from, to] = THEME_PREVIEW[t.id];
@@ -334,9 +388,9 @@ export default function Settings() {
               <Toggle on={compactMode} onChange={(v) => { setCompactMode(v); savePreference('skylineCompactMode', String(v)); }} label="Компактный режим" description="Уменьшить отступы и плотность списков." />
               <Toggle on={reduceMotion} onChange={(v) => { setReduceMotion(v); savePreference('skylineReduceMotion', String(v)); }} label="Уменьшить анимации" description="Отключить плавные переходы и эффекты." />
             </div>
-          </section>
+          </section>}
 
-          <section className={cardClass}>
+          {activeSection === 'chats' && <section className={`${cardClass} animate-fade-in`}>
             <div className="mb-1 flex items-center gap-3">
               <MessageSquare size={18} className="text-accent" />
               <div><h2 className="text-sm font-semibold">Чаты</h2><p className="mt-1 text-xs text-t-secondary">Поведение ввода и отображение сообщений.</p></div>
@@ -344,9 +398,9 @@ export default function Settings() {
             <Toggle on={enterToSend} onChange={(v) => { setEnterToSend(v); savePreference('skylineEnterToSend', String(v)); }} label="Enter — отправить" description="Enter отправляет сообщение, Shift+Enter переносит строку." />
             <Toggle on={showReadReceipts} onChange={(v) => { setShowReadReceipts(v); savePreference('skylineShowReadReceipts', String(v)); }} label="Показывать прочтение" description="Показывать другим отметки о прочтении ваших сообщений." />
             <Toggle on={mediaPreview} onChange={(v) => { setMediaPreview(v); savePreference('skylineMediaPreview', String(v)); }} label="Предпросмотр медиа" description="Открывать изображения во всплывающем просмотре." />
-          </section>
+          </section>}
 
-          <section className={cardClass}>
+          {activeSection === 'privacy' && <section className={`${cardClass} animate-fade-in`}>
             <div className="mb-1 flex items-center gap-3">
               <Shield size={18} className="text-accent" />
               <div><h2 className="text-sm font-semibold">Приватность</h2><p className="mt-1 text-xs text-t-secondary">Кто видит вашу активность.</p></div>
@@ -354,9 +408,9 @@ export default function Settings() {
             <Toggle on={hideOnlineStatus} onChange={(v) => void savePrivacy({ hideOnlineStatus: v })} label="Скрывать онлайн-статус" description="Другие не увидят, когда вы в сети." />
             <Toggle on={hideReadReceipts} onChange={(v) => void savePrivacy({ hideReadReceipts: v })} label="Скрывать прочтение" description="Отправители не увидят, что вы прочитали сообщение." />
             <Toggle on={hideDateOfBirth} onChange={(v) => void savePrivacy({ hideDateOfBirth: v })} label="Скрывать дату рождения" description="Дата рождения будет видна только вам." />
-          </section>
+          </section>}
 
-          <section className={cardClass}>
+          {activeSection === 'notifications' && <section className={`${cardClass} animate-fade-in`}>
             <div className="mb-1 flex items-center gap-3">
               <Bell size={18} className="text-accent" />
               <div><h2 className="text-sm font-semibold">Уведомления и приложение</h2><p className="mt-1 text-xs text-t-secondary">Push-уведомления и установка.</p></div>
@@ -370,9 +424,9 @@ export default function Settings() {
               )}
               <p className="flex items-center gap-2 text-xs text-t-secondary"><Smartphone size={14} /> {user?.email || user?.username}</p>
             </div>
-          </section>
+          </section>}
 
-          <section className={cardClass}>
+          {activeSection === 'account' && <section className={`${cardClass} animate-fade-in`}>
             <div className="mb-3 flex items-center gap-3">
               <UserRound size={18} className="text-accent" />
               <div><h2 className="text-sm font-semibold">Аккаунт</h2><p className="mt-1 text-xs text-t-secondary">Управление сессией.</p></div>
@@ -380,7 +434,7 @@ export default function Settings() {
             <button type="button" onClick={handleLogout} className="btn-glow flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-rose-500/15 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/25">
               <LogOut size={16} /> Выйти из аккаунта
             </button>
-          </section>
+          </section>}
         </div>
       </div>
     </main>

@@ -14,6 +14,18 @@ export const APP_THEMES = [
   { id: 'matrix', name: 'Матрица', desc: 'Неоновая зелень' },
   { id: 'arctic', name: 'Арктика', desc: 'Ледяной голубой' },
   { id: 'mocha', name: 'Мокко', desc: 'Тёплый кофейный' },
+  { id: 'aurora', name: 'Северное сияние', desc: 'Бирюза и небесный фиолет' },
+  { id: 'lagoon', name: 'Лагуна', desc: 'Свежий морской бриз' },
+  { id: 'crimson', name: 'Рубин', desc: 'Глубокий красный и гранат' },
+  { id: 'candy', name: 'Конфета', desc: 'Яркая фуксия и голубой' },
+  { id: 'cobalt', name: 'Кобальт', desc: 'Насыщенный синий и лёд' },
+  { id: 'copper', name: 'Медь', desc: 'Тёплая медь и песок' },
+  { id: 'lavender', name: 'Лавандовое поле', desc: 'Спокойный сиреневый' },
+  { id: 'glacier', name: 'Ледник', desc: 'Холодная бирюза и индиго' },
+  { id: 'ember', name: 'Уголь и пламя', desc: 'Контрастный огненный акцент' },
+  { id: 'jade', name: 'Нефрит', desc: 'Глубокий зелёный и мята' },
+  { id: 'orchid', name: 'Орхидея', desc: 'Пурпурный и розовый' },
+  { id: 'sand', name: 'Песчаный берег', desc: 'Мягкие янтарные оттенки' },
 ] as const;
 export type AppTheme = typeof APP_THEMES[number]['id'];
 
