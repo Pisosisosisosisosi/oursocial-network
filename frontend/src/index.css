@@ -14,6 +14,16 @@
   --glow: rgba(99, 102, 241, 0.3);
 }
 
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-base: #f2f5fa;
+  --panel: #ffffff;
+  --text-primary: #172033;
+  --text-secondary: #5b687c;
+  --border-subtle: rgba(15, 23, 42, .10);
+  --glow: rgba(var(--accent-rgb), .16);
+}
+
 /* ---- 27 тем оформления ---- */
 [data-app-theme='skyline'] { --accent:#6366f1; --accent-from:#6366f1; --accent-to:#10b981; --glow:rgba(99,102,241,.3);; --accent-rgb:99,102,241 }
 [data-app-theme='cyber']   { --accent:#22d3ee; --accent-from:#22d3ee; --accent-to:#a855f7; --glow:rgba(34,211,238,.3); --accent-rgb:34,211,238; }
@@ -298,6 +308,38 @@ img { transition: opacity 0.3s ease; }
     animation: none !important;
   }
 }
+
+/* The light theme also adapts legacy dark utility classes used by chat views. */
+html[data-theme='light'] body,
+html[data-theme='light'] .app-shell { background-color: var(--bg-base); color: var(--text-primary); }
+html[data-theme='light'] .glass-panel {
+  background: rgba(255, 255, 255, .88);
+  border-color: rgba(15, 23, 42, .10);
+  -webkit-backdrop-filter: blur(22px);
+  backdrop-filter: blur(22px);
+}
+html[data-theme='light'] [class*="bg-slate-950"] { background-color: rgba(226, 232, 240, .88) !important; }
+html[data-theme='light'] [class*="bg-slate-900"] { background-color: rgba(255, 255, 255, .78) !important; }
+html[data-theme='light'] [class~="bg-slate-800"] { background-color: #e2e8f0 !important; }
+html[data-theme='light'] [class*="bg-[#111a2a]"] { background-color: rgba(255, 255, 255, .94) !important; }
+html[data-theme='light'] [class~="bg-[#0f172a]"] { background-color: #ffffff !important; }
+html[data-theme='light'] [class~="text-slate-200"],
+html[data-theme='light'] [class~="text-slate-300"] { color: #263449 !important; }
+html[data-theme='light'] [class~="text-slate-400"] { color: #475569 !important; }
+html[data-theme='light'] [class~="text-slate-500"],
+html[data-theme='light'] [class~="text-slate-600"] { color: #64748b !important; }
+html[data-theme='light'] [class*="border-white"]:not(.chat-message-bubble) { border-color: rgba(15, 23, 42, .12) !important; }
+html[data-theme='light'] [class*="bg-white/[0."] { background-color: rgba(15, 23, 42, .035); }
+html[data-theme='light'] [class*="via-[#090d16]"] { --tw-gradient-via: #f2f5fa; }
+html[data-theme='light'] [class~="to-black"],
+html[data-theme='light'] [class~="to-[#090d16]"] { --tw-gradient-to: #f2f5fa; }
+html[data-theme='light'] .toggle:not([data-on='true']) { background-color: rgba(15, 23, 42, .16); }
+html[data-theme='light'] .chat-card.chat-active { background: rgba(var(--accent-rgb), .12); }
+html[data-theme='light'] .chat-wallpaper-surface { color: var(--text-primary); }
+html[data-theme='light'] .chat-wallpaper-surface > .chat-message-bubble { color: var(--chat-text-color, var(--text-primary)); }
+html[data-theme='light'] input::placeholder,
+html[data-theme='light'] textarea::placeholder { color: #77849a; }
+html[data-theme='light'] [class*="hover:bg-white"]:hover { background-color: rgba(15, 23, 42, .055) !important; }
 
 html[data-reduce-motion='true'] *, html[data-reduce-motion='true'] *::before, html[data-reduce-motion='true'] *::after {
   animation-duration: .01ms !important;
