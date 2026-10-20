@@ -48,19 +48,22 @@ async def call_invite(sid: str, data: dict[str, Any] | None = None) -> dict[str,
     video = data.get("video", False)
     if not _valid_call_id(call_id) or not isinstance(target_id, str) or not ObjectId.is_valid(target_id) or target_id == caller_id or not isinstance(video, bool):
         return {"status": "error", "error": "Invalid call invitation"}
-    if not users_collection().find_one({"_id": ObjectId(target_id)}, {"_id": 1}):
+    users = users_collection()
+    if not users.find_one({"_id": ObjectId(target_id)}, {"_id": 1}):
         return {"status": "error", "error": "User not found"}
     if call_id in active_calls:
         return {"status": "error", "error": "Call identifier already exists"}
     if any({caller_id, target_id} & participants for participants in active_calls.values()):
         return {"status": "error", "error": "A participant is already in a call"}
     session = await sio.get_session(sid)
+    caller = users.find_one({"_id": ObjectId(caller_id)}, {"displayName": 1, "username": 1, "avatarUrl": 1}) or {}
     active_calls[call_id] = {caller_id, target_id}
     call_invitees[call_id] = target_id
     await sio.emit("call_incoming", {
         "callId": call_id,
         "callerId": caller_id,
-        "callerName": session.get("username", "Пользователь"),
+        "callerName": caller.get("displayName") or caller.get("username") or session.get("username", "Пользователь"),
+        "callerAvatarUrl": caller.get("avatarUrl", ""),
         "video": video,
     }, to=f"user:{target_id}")
     return {"status": "ok"}

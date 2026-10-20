@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from 'lucide-react';
+import { Mic, MicOff, Minus, Phone, PhoneOff, Video, VideoOff } from 'lucide-react';
 import { getSocket } from '../api/socket';
+import Avatar from '../components/ui/Avatar';
 import { useAuth } from './AuthContext';
 import { useToast } from './useToast';
 
@@ -9,12 +10,13 @@ interface CallState {
   id: string;
   peerId: string;
   peerName: string;
+  peerAvatarUrl?: string;
   video: boolean;
   phase: CallPhase;
   initiator: boolean;
 }
 interface CallActions {
-  startCall: (peer: { id: string; name: string }, video: boolean) => void;
+  startCall: (peer: { id: string; name: string; avatarUrl?: string }, video: boolean) => void;
 }
 
 const CallContext = createContext<CallActions | null>(null);
@@ -29,6 +31,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const showToast = useToast();
   const [call, setCall] = useState<CallState | null>(null);
+  const [minimized, setMinimized] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [muted, setMuted] = useState(false);
@@ -67,6 +70,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setMuted(false);
     setCameraOff(false);
     updateCall(null);
+    setMinimized(false);
   }, [updateCall]);
 
   const sendSignal = useCallback((state: CallState, signal: Record<string, unknown>) => {
@@ -127,6 +131,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       id: crypto.randomUUID(),
       peerId: peer.id,
       peerName: peer.name,
+      peerAvatarUrl: peer.avatarUrl,
       video,
       phase: 'outgoing',
       initiator: true,
@@ -181,7 +186,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const socket = getSocket();
     if (!socket || !user?.id) return;
-    const onIncoming = (event: { callId: string; callerId: string; callerName?: string; video?: boolean }) => {
+    const onIncoming = (event: { callId: string; callerId: string; callerName?: string; callerAvatarUrl?: string; video?: boolean }) => {
       if (callRef.current) {
         socket.emit('call_decline', { callId: event.callId });
         return;
@@ -190,10 +195,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
         id: event.callId,
         peerId: event.callerId,
         peerName: event.callerName || 'Пользователь',
+        peerAvatarUrl: event.callerAvatarUrl,
         video: Boolean(event.video),
         phase: 'incoming',
         initiator: false,
       });
+      setMinimized(false);
     };
     const onAccepted = async (event: { callId: string }) => {
       const state = callRef.current;
@@ -279,10 +286,19 @@ export function CallProvider({ children }: { children: ReactNode }) {
   return (
     <CallContext.Provider value={{ startCall }}>
       {children}
-      {call && <div className="fixed inset-0 z-[220] grid place-items-center bg-black/75 p-4 backdrop-blur-sm">
+      {call && minimized && <div className="fixed bottom-4 right-4 z-[220] flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-2xl border border-white/10 bg-panel p-3 shadow-2xl">
+        <Avatar src={call.peerAvatarUrl} name={call.peerName} size={42} />
+        <button type="button" onClick={() => setMinimized(false)} className="min-w-0 text-left" aria-label="Вернуться к звонку">
+          <span className="block truncate text-sm font-semibold text-t-primary">{call.peerName}</span>
+          <span className="block text-xs text-t-secondary">{call.phase === 'active' ? 'На связи · Вернуться' : call.phase === 'incoming' ? 'Входящий вызов · Открыть' : 'Звонок · Вернуться'}</span>
+        </button>
+        <button type="button" onClick={() => endCall()} aria-label="Завершить звонок" title="Завершить звонок" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-600 text-white hover:bg-rose-500"><PhoneOff size={17} /></button>
+      </div>}
+      {call && !minimized && <div className="fixed inset-0 z-[220] grid place-items-center bg-black/75 p-4 backdrop-blur-sm">
         <section role="dialog" aria-modal="true" aria-labelledby="skyline-call-title" className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/10 bg-panel shadow-2xl">
-          <header className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div><h2 id="skyline-call-title" className="text-sm font-semibold">{call.video ? 'Видеозвонок' : 'Голосовой звонок'}</h2><p className="mt-1 text-xs text-t-secondary">{call.peerName} · {call.phase === 'incoming' ? 'Входящий вызов' : call.phase === 'outgoing' ? 'Вызов…' : call.phase === 'active' ? 'На связи' : 'Подключение…'}</p></div></header>
+          <header className="flex items-center justify-between border-b border-white/10 px-5 py-4"><div className="flex min-w-0 items-center gap-3"><Avatar src={call.peerAvatarUrl} name={call.peerName} size={44} /><div className="min-w-0"><h2 id="skyline-call-title" className="truncate text-sm font-semibold">{call.video ? 'Видеозвонок' : 'Голосовой звонок'}</h2><p className="mt-1 truncate text-xs text-t-secondary">{call.peerName} · {call.phase === 'incoming' ? 'Входящий вызов' : call.phase === 'outgoing' ? 'Вызов…' : call.phase === 'active' ? 'На связи' : 'Подключение…'}</p></div></div><button type="button" onClick={() => setMinimized(true)} aria-label="Свернуть окно звонка" title="Свернуть звонок, разговор продолжится" className="ml-3 grid h-10 w-10 shrink-0 place-items-center rounded-xl text-t-secondary hover:bg-white/10 hover:text-t-primary"><Minus size={18} /></button></header>
           {call.video && <div className="relative grid aspect-video place-items-center bg-slate-950"><video className="h-full max-h-[55vh] w-full object-contain" autoPlay playsInline ref={(element) => { if (element && remoteStream) element.srcObject = remoteStream; }} />{!remoteStream && <span className="absolute text-xs text-slate-500">Ожидаем видео…</span>}<video muted className="absolute bottom-3 right-3 aspect-video w-28 rounded-xl border border-white/20 bg-slate-900 object-cover" autoPlay playsInline ref={(element) => { if (element && localStream) element.srcObject = localStream; }} />{cameraOff && <span className="absolute bottom-3 right-3 grid aspect-video w-28 place-items-center rounded-xl bg-slate-800 text-slate-400"><VideoOff size={18} /></span>}</div>}
+          {!call.video && <div className="flex flex-col items-center gap-3 px-4 pt-7"><Avatar src={call.peerAvatarUrl} name={call.peerName} size={104} className="rounded-full ring-4 ring-white/10 [&>img]:!rounded-full [&>span]:!rounded-full" /><p className="text-sm font-medium text-t-primary">{call.peerName}</p></div>}
           {!call.video && remoteStream && <audio autoPlay ref={(element) => { if (element && remoteStream) element.srcObject = remoteStream; }} />}
           <div className="flex items-center justify-center gap-3 p-5">
             {call.phase === 'incoming' ? <><button type="button" onClick={() => void acceptCall()} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white hover:bg-emerald-500"><Phone size={17} /> Ответить</button><button type="button" onClick={() => endCall(true)} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-500"><PhoneOff size={17} /> Отклонить</button></> : <>

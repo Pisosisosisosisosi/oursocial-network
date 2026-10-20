@@ -1306,8 +1306,8 @@ export default function Chats() {
                     <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
                   </button>
                   <div className="flex shrink-0 items-center gap-1">
-                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
-                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>
+                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
+                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button type="button" title="Скачать переписку JSON" aria-label="Экспортировать историю чата в JSON" onClick={() => void handleExportChat('json')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Download size={15} /></button>
