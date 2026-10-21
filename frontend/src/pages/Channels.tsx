@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
+import UnifiedWorkspaceList from '../components/layout/UnifiedWorkspaceList';
 import { formatAppDateTime } from '../time';
 
 interface Channel {
@@ -435,33 +436,7 @@ export default function Channels() {
             <button type="button" onClick={() => setListMode('discover')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'discover' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Найти каналы</button>
           </div>
         </div>
-        <div className="stagger min-h-0 flex-1 overflow-y-auto p-2">
-          {loading && <div className="space-y-2 p-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-[70px] animate-pulse rounded-2xl bg-white/[0.04]" />)}</div>}
-          {!loading && visibleChannels.length === 0 && <div className="m-2 flex flex-col items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 text-center animate-scale-in">
-            <Radio size={26} className="mx-auto text-slate-600" />
-            <p className="mt-3 text-sm font-medium text-slate-300">{listMode === 'mine' ? 'Вы пока ни на что не подписаны' : 'Каналы не найдены'}</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">{listMode === 'mine' ? 'Откройте каталог или создайте свой канал.' : 'Попробуйте изменить запрос.'}</p>
-            {listMode === 'mine' && <button type="button" onClick={() => setListMode('discover')} className="mt-4 rounded-lg bg-accent/15 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/25">Найти каналы</button>}
-          </div>}
-          {visibleChannels.map((channel) => (
-            <button key={channel.id} type="button" onClick={() => selectChannel(channel.id)} className={`chat-card chat-list-item group mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${activeChannelId === channel.id ? 'chat-active' : ''}`}>
-              <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent/20 to-cyan-400/10 text-accent transition duration-300 group-hover:rotate-[-4deg] group-hover:scale-105">
-                {channel.avatarUrl ? <img src={channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : channel.visibility === 'private' ? <LockKeyhole size={18} /> : <Radio size={19} />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate text-sm font-semibold text-t-primary">{channel.title}</span>
-                    {channel.visibility === 'private' && <LockKeyhole size={12} className="shrink-0 text-slate-500" />}
-                  </span>
-                  {channel.lastMessageAt && <time className="shrink-0 text-[10px] text-slate-500">{formatAppDateTime(channel.lastMessageAt, { hour: '2-digit', minute: '2-digit' })}</time>}
-                </span>
-                <span className="mt-1 block truncate text-xs text-slate-500">{channel.memberCount} подписчиков · {channel.description || 'Канал Skyline'}</span>
-              </span>
-              {channel.isOwner && <span className="rounded-md bg-accent/10 px-1.5 py-1 text-[9px] font-bold uppercase tracking-wider text-accent">автор</span>}
-            </button>
-          ))}
-        </div>
+        <UnifiedWorkspaceList search={search} activeKind="channel" activeId={activeChannelId} includeDiscover={listMode === 'discover'} />
         <footer className="border-t border-white/[0.08] px-4 py-3 text-center text-[10px] text-slate-600">Публичные каналы доступны всем участникам Skyline</footer>
       </aside>
 
