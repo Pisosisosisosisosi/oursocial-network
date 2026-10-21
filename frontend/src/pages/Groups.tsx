@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, Download, FileText, Forward, Paperclip, Plus, Reply, Search, Send, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { api, type User } from '../api/client';
 import { getSocket } from '../api/socket';
@@ -126,11 +126,13 @@ function writeGroupDraft(userId: string | undefined, groupId: string | undefined
 
 export default function Groups() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedGroupId = searchParams.get('group');
   const { user, e2eeStatus } = useAuth();
   const userId = user?.id;
   const showToast = useToast();
   const [groups, setGroups] = useState<Group[]>([]);
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(requestedGroupId);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingHistory, setSearchingHistory] = useState(false);
@@ -173,11 +175,13 @@ export default function Groups() {
   }, []);
 
   useEffect(() => {
-    void loadGroups().catch((error: unknown) => {
+    void loadGroups().then((items) => {
+      if (requestedGroupId && items.some((group) => group.id === requestedGroupId)) setActiveGroupId(requestedGroupId);
+    }).catch((error: unknown) => {
       console.error('Не удалось загрузить группы:', error);
       showToast('Не удалось загрузить список групп.', 'error');
     }).finally(() => setLoading(false));
-  }, [loadGroups, showToast]);
+  }, [loadGroups, requestedGroupId, showToast]);
 
   const loadMessages = useCallback(async (groupId: string, before?: string) => {
     const response = await api.get<GroupMessage[]>(`/groups/${groupId}/messages`, {

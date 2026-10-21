@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Paperclip, Pencil, Phone, Pin, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Video, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +32,9 @@ interface ChatMessage {
   createdAt: string;
   read: boolean;
 }
+
+interface WorkspaceGroupItem { id: string; title: string; memberCount: number; }
+interface WorkspaceChannelItem { id: string; title: string; description: string; avatarUrl?: string; memberCount: number; isSubscribed: boolean; visibility: 'public' | 'private'; }
 
 const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'] as const;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
@@ -136,6 +139,8 @@ export default function Chats() {
   const { startCall } = useCallActions();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [workspaceGroups, setWorkspaceGroups] = useState<WorkspaceGroupItem[]>([]);
+  const [workspaceChannels, setWorkspaceChannels] = useState<WorkspaceChannelItem[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(() => new Set());
   const [activeChat, setActiveChat] = useState<(User & { nickname?: string }) | null>(null);
@@ -167,6 +172,7 @@ export default function Chats() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [searching, setSearching] = useState(false);
   const [panelError, setPanelError] = useState('');
+  const [loadingWorkspaceItems, setLoadingWorkspaceItems] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [messageEditDraft, setMessageEditDraft] = useState('');
@@ -233,6 +239,22 @@ export default function Chats() {
     }
     loadUsers();
   }, [currentUser?.id, showToast]);
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setLoadingWorkspaceItems(false);
+      return;
+    }
+    void Promise.allSettled([
+      api.get<WorkspaceGroupItem[]>('/groups'),
+      api.get<WorkspaceChannelItem[]>('/channels'),
+    ]).then(([groupsResult, channelsResult]) => {
+      if (groupsResult.status === 'fulfilled') setWorkspaceGroups(groupsResult.value.data);
+      else console.warn('Не удалось загрузить группы в общий список:', groupsResult.reason);
+      if (channelsResult.status === 'fulfilled') setWorkspaceChannels(channelsResult.value.data.filter((channel) => channel.isSubscribed));
+      else console.warn('Не удалось загрузить каналы в общий список:', channelsResult.reason);
+    }).finally(() => setLoadingWorkspaceItems(false));
+  }, [currentUser?.id]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -1147,7 +1169,13 @@ export default function Chats() {
     setSearching(true);
   };
 
-  const visibleUsers: (User & { nickname?: string })[] = searchQuery.trim() ? searchResults : contacts;
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+  const usernameSearch = normalizedQuery.startsWith('@');
+  const visibleUsers: (User & { nickname?: string })[] = usernameSearch
+    ? searchResults
+    : contacts.filter((contact) => !normalizedQuery || `${contact.nickname || ''} ${contact.displayName || ''} ${contact.username}`.toLocaleLowerCase().includes(normalizedQuery));
+  const visibleWorkspaceGroups = workspaceGroups.filter((group) => !normalizedQuery || group.title.toLocaleLowerCase().includes(normalizedQuery));
+  const visibleWorkspaceChannels = workspaceChannels.filter((channel) => !normalizedQuery || `${channel.title} ${channel.description}`.toLocaleLowerCase().includes(normalizedQuery));
 
   return (
     <div className="animate-fade-in absolute left-0 top-0 flex h-full w-full overflow-hidden bg-bg-base font-sans text-t-primary selection:bg-accent/30">
@@ -1171,15 +1199,12 @@ export default function Chats() {
         <WorkspaceSidebarHeader
           searchValue={searchQuery}
           onSearchChange={handleSearchChange}
-          searchPlaceholder="Найти по @username целиком..."
+          searchPlaceholder="Поиск чатов, групп, каналов или @username"
         />
-        {searchQuery.trim() && !searchQuery.trim().startsWith('@') && (
-          <p className="px-4 pt-2 text-[10px] text-slate-500">Укажите полный username вместе с @, например @darius_writer.</p>
-        )}
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex justify-between">
-            <span>{searchQuery.trim() ? `Результаты (${visibleUsers.length})` : `Чаты (${contacts.length})`}</span>
+            <span>{searchQuery.trim() ? `Результаты (${visibleUsers.length + visibleWorkspaceGroups.length + visibleWorkspaceChannels.length})` : 'Все переписки'}</span>
             <span className="text-[10px] normal-case tracking-normal text-slate-600">
               {onlineUsers.size} в сети
             </span>
@@ -1200,12 +1225,8 @@ export default function Chats() {
           )}
           {searching && <p className="text-xs text-slate-500 px-2 animate-pulse">Ищем пользователей...</p>}
           {panelError && <p role="alert" className="px-2 py-1 text-xs text-rose-300">{panelError}</p>}
-          
-          {!loading && !searching && visibleUsers.length === 0 && (
-            <p className="px-2 py-3 text-xs text-slate-500">
-              {searchQuery.trim() ? 'Точный username не найден. Проверьте @ и написание.' : 'Контактов пока нет. Найдите пользователя по полному @username.'}
-            </p>
-          )}
+
+          {visibleUsers.length > 0 && <p className="px-2 pb-1 pt-2 text-[9px] font-bold uppercase tracking-widest text-slate-500">Личные чаты</p>}
 
           {visibleUsers.map((user, idx) => {
             const contact = contacts.find((item) => item.id === user.id);
@@ -1253,6 +1274,27 @@ export default function Chats() {
               </span>
             </button>
           );})}
+
+          {(visibleWorkspaceGroups.length > 0 || !normalizedQuery) && <div className="flex items-center justify-between px-2 pb-1 pt-4"><p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Группы</p><button type="button" onClick={() => navigate('/groups')} className="text-[10px] font-semibold text-accent hover:text-t-primary">Открыть</button></div>}
+          {visibleWorkspaceGroups.map((group, idx) => (
+            <button key={`group:${group.id}`} type="button" onClick={() => navigate(`/groups?group=${encodeURIComponent(group.id)}`)} className="chat-card chat-list-item mb-1 flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition hover:bg-white/[0.04]" style={{ animationDelay: `${idx * 25}ms` }}>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-accent/15 bg-accent/10 text-accent"><Users size={18} /></span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-slate-200">{group.title}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{group.memberCount} участников</span></span>
+            </button>
+          ))}
+          {!normalizedQuery && visibleWorkspaceGroups.length === 0 && <button type="button" onClick={() => navigate('/groups')} className="mb-1 w-full rounded-xl px-2.5 py-2 text-left text-[10px] text-slate-500 transition hover:bg-white/[0.04] hover:text-t-secondary">Создать или найти группу…</button>}
+
+          {(visibleWorkspaceChannels.length > 0 || !normalizedQuery) && <div className="flex items-center justify-between px-2 pb-1 pt-4"><p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Каналы</p><button type="button" onClick={() => navigate('/channels')} className="text-[10px] font-semibold text-accent hover:text-t-primary">Открыть</button></div>}
+          {visibleWorkspaceChannels.map((channel, idx) => (
+            <button key={`channel:${channel.id}`} type="button" onClick={() => navigate(`/channels?channel=${encodeURIComponent(channel.id)}`)} className="chat-card chat-list-item mb-1 flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition hover:bg-white/[0.04]" style={{ animationDelay: `${idx * 25}ms` }}>
+              <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-accent/15 bg-accent/10 text-accent">{channel.avatarUrl ? <img src={channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={18} />}</span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-slate-200">{channel.title}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{channel.memberCount} подписчиков</span></span>
+            </button>
+          ))}
+          {!normalizedQuery && visibleWorkspaceChannels.length === 0 && <button type="button" onClick={() => navigate('/channels')} className="mb-1 w-full rounded-xl px-2.5 py-2 text-left text-[10px] text-slate-500 transition hover:bg-white/[0.04] hover:text-t-secondary">Подписаться на канал…</button>}
+          {!loading && !loadingWorkspaceItems && !searching && visibleUsers.length === 0 && visibleWorkspaceGroups.length === 0 && visibleWorkspaceChannels.length === 0 && (
+            <p className="px-2 py-3 text-xs text-slate-500">{normalizedQuery ? 'Ничего не найдено.' : 'Пока нет переписок. Найдите пользователя или создайте группу/канал.'}</p>
+          )}
         </div>
       </div>
 
