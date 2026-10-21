@@ -802,6 +802,7 @@ def get_contacts(current=Depends(get_current_user)):
     # Переписки: партнёр → непрочитанные + время последнего сообщения (Telegram-стиль)
     chat_pipeline = [
         {"$match": {"$or": [{"senderId": current_id}, {"receiverId": current_id}], "groupId": {"$exists": False}}},
+        {"$sort": {"createdAt": 1, "_id": 1}},
         {"$addFields": {
             "partner": {"$cond": [{"$eq": ["$senderId", current_id]}, "$receiverId", "$senderId"]},
             "fromPartner": {"$ne": ["$senderId", current_id]},
@@ -810,6 +811,10 @@ def get_contacts(current=Depends(get_current_user)):
             "_id": "$partner",
             "unread": {"$sum": {"$cond": [{"$and": ["$fromPartner", {"$eq": ["$read", False]}]}, 1, 0]}},
             "lastAt": {"$max": "$createdAt"},
+            "lastMessageText": {"$last": "$text"},
+            "lastMessageType": {"$last": "$type"},
+            "lastMessageFileName": {"$last": "$fileName"},
+            "lastMessageSenderId": {"$last": "$senderId"},
         }},
     ]
     chat_stats = {
@@ -852,6 +857,10 @@ def get_contacts(current=Depends(get_current_user)):
             )),
             "unreadCount": chat_stats.get(contact_id, {}).get("unread", 0),
             "lastMessageAt": chat_stats.get(contact_id, {}).get("lastAt").isoformat() if chat_stats.get(contact_id, {}).get("lastAt") else None,
+            "lastMessageText": chat_stats.get(contact_id, {}).get("lastMessageText", ""),
+            "lastMessageType": chat_stats.get(contact_id, {}).get("lastMessageType", "text"),
+            "lastMessageFileName": chat_stats.get(contact_id, {}).get("lastMessageFileName"),
+            "lastMessageSenderId": chat_stats.get(contact_id, {}).get("lastMessageSenderId"),
             "isContact": True,
         })
 
@@ -882,6 +891,10 @@ def get_contacts(current=Depends(get_current_user)):
             "chatHidden": False,
             "unreadCount": stats.get("unread", 0),
             "lastMessageAt": stats.get("lastAt").isoformat() if stats.get("lastAt") else None,
+            "lastMessageText": stats.get("lastMessageText", ""),
+            "lastMessageType": stats.get("lastMessageType", "text"),
+            "lastMessageFileName": stats.get("lastMessageFileName"),
+            "lastMessageSenderId": stats.get("lastMessageSenderId"),
             "isContact": False,
         })
 

@@ -42,6 +42,10 @@ export interface Contact extends User {
   nickname: string;
   unreadCount?: number;
   lastMessageAt?: string | null;
+  lastMessageText?: string;
+  lastMessageType?: 'text' | 'image' | 'file';
+  lastMessageFileName?: string | null;
+  lastMessageSenderId?: string | null;
   isContact?: boolean;
   chatHidden?: boolean;
 }

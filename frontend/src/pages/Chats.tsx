@@ -35,7 +35,7 @@ interface ChatMessage {
 
 interface WorkspaceGroupItem { id: string; title: string; memberCount: number; lastMessageAt?: string | null; }
 interface WorkspaceChannelItem { id: string; title: string; description: string; avatarUrl?: string; memberCount: number; isSubscribed: boolean; visibility: 'public' | 'private'; lastMessageAt?: string | null; }
-interface WorkspaceChatItem extends User { nickname?: string; unreadCount?: number; lastMessageAt?: string | null; }
+interface WorkspaceChatItem extends User { nickname?: string; unreadCount?: number; lastMessageAt?: string | null; lastMessageText?: string; lastMessageType?: 'text' | 'image' | 'file'; lastMessageFileName?: string | null; lastMessageSenderId?: string | null; }
 type WorkspaceEntry =
   | { kind: 'chat'; key: string; id: string; title: string; subtitle: string; avatarUrl?: string; time?: string | null; unreadCount?: number; online: boolean; user: WorkspaceChatItem }
   | { kind: 'group'; key: string; id: string; title: string; subtitle: string; time?: string | null }
@@ -144,6 +144,8 @@ export default function Chats() {
   const { startCall } = useCallActions();
 
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [chatPreviews, setChatPreviews] = useState<Record<string, string>>({});
+  const [listFilter, setListFilter] = useState<'all' | 'unread' | 'groups' | 'channels'>('all');
   const [workspaceGroups, setWorkspaceGroups] = useState<WorkspaceGroupItem[]>([]);
   const [workspaceChannels, setWorkspaceChannels] = useState<WorkspaceChannelItem[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
@@ -193,6 +195,27 @@ export default function Chats() {
   const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
   const [forwardSearch, setForwardSearch] = useState('');
   const [forwarding, setForwarding] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(contacts.map(async (contact) => {
+      const raw = contact.lastMessageText || '';
+      if (!raw) return [contact.id, ''] as const;
+      if ((contact as Contact & { lastMessageType?: string }).lastMessageType !== 'text') {
+        const fileName = (contact as Contact & { lastMessageFileName?: string | null }).lastMessageFileName;
+        return [contact.id, `📎 ${fileName || 'Вложение'}`] as const;
+      }
+      try {
+        const decoded = isEncryptedMessage(raw) ? await decryptMessage(raw, currentUser?.id) : raw;
+        return [contact.id, decoded === '[Зашифрованное сообщение]' ? 'Сообщение' : decoded] as const;
+      } catch {
+        return [contact.id, 'Сообщение'] as const;
+      }
+    })).then((pairs) => {
+      if (!cancelled) setChatPreviews(Object.fromEntries(pairs));
+    });
+    return () => { cancelled = true; };
+  }, [contacts, currentUser?.id]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesListRef = useRef<HTMLDivElement>(null);
@@ -1197,11 +1220,15 @@ export default function Chats() {
     : contacts.filter((contact) => !normalizedQuery || `${contact.nickname || ''} ${contact.displayName || ''} ${contact.username}`.toLocaleLowerCase().includes(normalizedQuery));
   const visibleWorkspaceGroups = workspaceGroups.filter((group) => !normalizedQuery || group.title.toLocaleLowerCase().includes(normalizedQuery));
   const visibleWorkspaceChannels = workspaceChannels.filter((channel) => !normalizedQuery || `${channel.title} ${channel.description}`.toLocaleLowerCase().includes(normalizedQuery));
-  const unifiedEntries: WorkspaceEntry[] = [
+  const allUnifiedEntries: WorkspaceEntry[] = [
     ...visibleUsers.map((user): WorkspaceEntry => ({
       kind: 'chat', key: `chat:${user.id}`, id: String(user.id), user,
       title: user.nickname || user.displayName || user.username,
-      subtitle: user.statusText || (onlineUsers.has(String(user.id)) ? 'В сети' : `@${user.username}`),
+      subtitle: (() => {
+        const preview = chatPreviews[String(user.id)];
+        const ownPrefix = user.lastMessageSenderId === currentUser?.id ? 'Вы: ' : '';
+        return preview ? `${ownPrefix}${preview}` : (user.statusText || (onlineUsers.has(String(user.id)) ? 'В сети' : `@${user.username}`));
+      })(),
       avatarUrl: user.avatarUrl, time: user.lastMessageAt,
       unreadCount: user.unreadCount, online: onlineUsers.has(String(user.id)),
     })),
@@ -1215,6 +1242,11 @@ export default function Chats() {
       time: channel.lastMessageAt,
     })),
   ].sort((first, second) => (Date.parse(second.time || '') || 0) - (Date.parse(first.time || '') || 0));
+  const unifiedEntries = allUnifiedEntries.filter((entry) => {
+    if (listFilter === 'all') return true;
+    if (listFilter === 'unread') return entry.kind === 'chat' && (entry.unreadCount || 0) > 0;
+    return entry.kind === listFilter.slice(0, -1);
+  });
 
   return (
     <div className="animate-fade-in absolute left-0 top-0 flex h-full w-full overflow-hidden bg-bg-base font-sans text-t-primary selection:bg-accent/30">
@@ -1251,6 +1283,9 @@ export default function Chats() {
           {!normalizedQuery && <div className="mb-2 flex items-center gap-1 px-2">
             <button type="button" onClick={() => navigate('/groups')} className="rounded-lg px-2 py-1 text-[9px] font-medium text-t-secondary transition hover:bg-white/[0.05] hover:text-accent">+ Группа</button>
             <button type="button" onClick={() => navigate('/channels')} className="rounded-lg px-2 py-1 text-[9px] font-medium text-t-secondary transition hover:bg-white/[0.05] hover:text-accent">+ Канал</button>
+          </div>}
+          {!normalizedQuery && <div className="mb-2 flex gap-1 overflow-x-auto px-2 pb-1">
+            {([['all', 'Все'], ['unread', 'Непрочитанные'], ['groups', 'Группы'], ['channels', 'Каналы']] as const).map(([filter, label]) => <button key={filter} type="button" onClick={() => setListFilter(filter)} aria-pressed={listFilter === filter} className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition ${listFilter === filter ? 'bg-accent/15 text-accent' : 'text-slate-500 hover:bg-white/[0.05] hover:text-slate-200'}`}>{label}</button>)}
           </div>}
           
           {loading && (
