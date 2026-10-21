@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
+import UnifiedWorkspaceList from '../components/layout/UnifiedWorkspaceList';
 import { formatAppDateTime } from '../time';
 import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
 import { decryptBytes, encryptBytes, packAttachmentPayload, unpackAttachmentPayload, type RecipientPublicKey } from '../crypto/encrypt';
@@ -639,21 +640,7 @@ export default function Groups() {
           </form>
         )}
 
-        <div className="stagger min-h-0 flex-1 overflow-y-auto p-3">
-          {loading ? (
-            <div role="status" className="space-y-2 p-2">{[0, 1, 2].map((item) => <div key={item} className="chat-skeleton h-14 rounded-xl" />)}</div>
-          ) : visibleGroups.length === 0 ? (
-            <div className="m-2 flex flex-col items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 text-center animate-scale-in">
-              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-accent/10 text-accent"><Users size={20} /></span>
-              <p className="text-xs leading-relaxed text-slate-400">{groupSearch.trim() ? 'Группы не найдены.' : 'Вы пока не состоите в группах. Создайте группу и найдите участников по полному @username.'}</p>
-            </div>
-          ) : visibleGroups.map((group) => (
-            <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`chat-card chat-list-item group mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${activeGroup?.id === group.id ? 'chat-active text-white' : 'text-slate-300'}`}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent/20 to-indigo-400/10 text-accent transition duration-300 group-hover:rotate-[-5deg] group-hover:scale-105"><Users size={18} /></span>
-              <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-medium">{group.title}</span>{group.lastMessageAt && <time className="shrink-0 text-[10px] text-slate-500">{formatAppDateTime(group.lastMessageAt, { hour: '2-digit', minute: '2-digit' })}</time>}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{group.memberCount} участников</span></span>
-            </button>
-          ))}
-        </div>
+        <UnifiedWorkspaceList search={groupSearch} activeKind="group" activeId={activeGroup?.id || null} />
       </aside>
 
       <section className={`${activeGroup ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
