@@ -775,8 +775,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
         .then((response) => {
           if (!current) return;
           const target = response.data.find((candidate) => candidate.username.toLocaleLowerCase() === requestedUsername.toLocaleLowerCase());
-          if (target) {
-            setSearchParams({}, { replace: true });
+          if (target && String(activeChat?.id) !== String(target.id)) {
             void handleSelectChat(target);
           }
         })
@@ -786,11 +785,11 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
       return () => { current = false; };
     }
     if (!requestedChatId || loading || !contacts.length) return;
+    if (String(activeChat?.id) === requestedChatId) return;
     const requestedContact = contacts.find((contact) => String(contact.id) === requestedChatId);
     if (!requestedContact) return;
-    setSearchParams({}, { replace: true });
     void handleSelectChat(requestedContact);
-  }, [searchParams, contacts, loading, setSearchParams]);
+  }, [searchParams, contacts, loading, activeChat?.id]);
 
   const handleSaveContact = async (user: User, existingNickname = '') => {
     const nickname = window.prompt(
