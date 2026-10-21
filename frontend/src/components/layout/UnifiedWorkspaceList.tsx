@@ -28,7 +28,7 @@ type Entry =
 
 interface UnifiedWorkspaceListProps {
   search: string;
-  activeKind: 'group' | 'channel';
+  activeKind: 'chat' | 'group' | 'channel';
   activeId: string | null;
   includeDiscover?: boolean;
 }
