@@ -680,20 +680,32 @@ async def update_privacy(payload: PrivacyRequest, current=Depends(get_current_us
 
 @app.get("/users/search")
 def search_users(q: str = "", current=Depends(get_current_user)):
-    username = q.strip()
-    if not username.startswith("@") or len(username) < 4:
+    query = q.strip().lstrip("@").strip()
+    if len(query) < 2 or len(query) > 64:
         return []
 
-    username = username[1:]
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,32}", username):
-        return []
-
+    # Search by a partial username or display name; escape user input so it
+    # cannot change the regular expression's meaning.
+    escaped = re.escape(query)
     users = users_collection()
-    results = users.find(
-        {"username": {"$regex": f"^{re.escape(username)}$", "$options": "i"}},
+    results = list(users.find(
+        {
+            "_id": {"$ne": ObjectId(current["userId"])} if ObjectId.is_valid(current.get("userId", "")) else {},
+            "$or": [
+                {"username": {"$regex": escaped, "$options": "i"}},
+                {"displayName": {"$regex": escaped, "$options": "i"}},
+            ],
+        },
         {"email": 0, "passwordHash": 0},
-    ).limit(20)
+    ).limit(50))
 
+    # Prefer usernames beginning with the query, then display-name matches.
+    normalized = query.casefold()
+    results.sort(key=lambda u: (
+        0 if str(u.get("username", "")).casefold().startswith(normalized) else
+        1 if str(u.get("displayName", "")).casefold().startswith(normalized) else 2,
+        str(u.get("username", "")).casefold(),
+    ))
     return [
         {
             "id": str(u["_id"]),
@@ -705,9 +717,8 @@ def search_users(q: str = "", current=Depends(get_current_user)):
             "isPremium": serialize_premium(u)["isPremium"],
             **({"lastSeen": u.get("lastSeen")} if u.get("showLastSeen", True) else {}),
         }
-        for u in results
+        for u in results[:30]
     ]
-
 
 @app.patch("/users/me/profile")
 def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_user)):
