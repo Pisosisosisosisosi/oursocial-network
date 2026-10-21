@@ -69,7 +69,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       title: contact.nickname || contact.displayName || contact.username,
       subtitle: contact.lastMessageType && contact.lastMessageType !== 'text'
         ? `📎 ${contact.lastMessageFileName || 'Вложение'}`
-        : contact.lastMessageText || contact.displayName || `@${contact.username}`,
+        : contact.lastMessageText?.startsWith('skyline-e2e:') ? 'Сообщение' : contact.lastMessageText || contact.displayName || `@${contact.username}`,
       time: contact.lastMessageAt,
       contact,
     }));
