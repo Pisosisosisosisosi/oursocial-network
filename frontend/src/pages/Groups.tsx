@@ -128,7 +128,7 @@ function writeGroupDraft(userId: string | undefined, groupId: string | undefined
   }
 }
 
-export default function Groups() {
+export default function Groups({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedGroupId = searchParams.get('group');
@@ -140,6 +140,7 @@ export default function Groups() {
   useEffect(() => {
     if (requestedGroupId && requestedGroupId !== activeGroupId) setActiveGroupId(requestedGroupId);
   }, [requestedGroupId, activeGroupId]);
+  useEffect(() => { if (searchParams.get('create') === '1') { setCreating(true); setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true }); } }, [searchParams, setSearchParams]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingHistory, setSearchingHistory] = useState(false);
@@ -164,6 +165,7 @@ export default function Groups() {
   const [forwardingMessage, setForwardingMessage] = useState<GroupMessage | null>(null);
   const [forwardSearch, setForwardSearch] = useState('');
   const [forwarding, setForwarding] = useState(false);
+  useEffect(() => { if (!requestedGroupId && !creating && groups.length) setSearchParams({ group: groups[0].id }, { replace: true }); }, [requestedGroupId, creating, groups, setSearchParams]);
   const activeGroup = activeGroupId === ''
     ? null
     : groups.find((group) => group.id === activeGroupId) || groups[0] || null;
@@ -598,7 +600,7 @@ export default function Groups() {
   return (
     <>
     <main className="animate-fade-in flex h-full min-h-0 w-full bg-bg-base text-t-primary">
-      <aside className={`${activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-80`}>
+      <aside className={`${embedded && !creating ? 'hidden' : activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-80`}>
         <WorkspaceSidebarHeader
           searchValue={groupSearch}
           onSearchChange={setGroupSearch}
@@ -642,7 +644,7 @@ export default function Groups() {
         <UnifiedWorkspaceList search={groupSearch} activeKind="group" activeId={activeGroup?.id || null} />
       </aside>
 
-      <section className={`${activeGroup ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
+      <section className={`${embedded || activeGroup ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
         {activeGroup ? (
           <>
             <EncryptionNotice />
