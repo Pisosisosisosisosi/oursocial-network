@@ -27,7 +27,7 @@ export default function WorkspaceLayout() {
         <div className="flex items-center justify-between px-4 pb-1 pt-3"><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Все переписки</span>
           <button type="button" onClick={() => navigate(showDiscover ? '/channels' : '/channels?discover=1')} className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-accent"><Radio size={12} /> {showDiscover ? 'Мои каналы' : 'Найти каналы'}</button></div>
         <UnifiedWorkspaceList search={search} activeKind={activeKind} activeId={activeId} includeDiscover={showDiscover} />
-      </aside><section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"><Outlet /></section>
+      </aside><section className={`${activeId ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}><Outlet /></section>
     </main>
   );
 }
