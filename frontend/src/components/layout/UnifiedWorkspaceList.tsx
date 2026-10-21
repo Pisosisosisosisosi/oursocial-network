@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MessageCircle, Radio, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { api, type Contact } from '../../api/client';
+import { api, type Contact, type User } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { formatAppDateTime } from '../../time';
 
@@ -39,6 +39,8 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [groups, setGroups] = useState<GroupItem[]>([]);
   const [channels, setChannels] = useState<ChannelItem[]>([]);
+  const [searchedUsers, setSearchedUsers] = useState<User[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -61,8 +63,32 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
     return () => { current = false; };
   }, [user?.id, includeDiscover]);
 
+  useEffect(() => {
+    const query = search.trim();
+    if (query.replace(/^@/, '').trim().length < 2) {
+      setSearchedUsers([]);
+      setSearchingUsers(false);
+      return;
+    }
+    let current = true;
+    const timeout = window.setTimeout(() => {
+      setSearchingUsers(true);
+      void api.get<User[]>('/users/search', { params: { q: query } })
+        .then((response) => {
+          if (current) setSearchedUsers(response.data.filter((candidate) => candidate.id !== user?.id));
+        })
+        .catch((error: unknown) => {
+          console.error('Не удалось выполнить поиск пользователей:', error);
+          if (current) setSearchedUsers([]);
+        })
+        .finally(() => { if (current) setSearchingUsers(false); });
+    }, 250);
+    return () => { current = false; window.clearTimeout(timeout); };
+  }, [search, user?.id]);
+
   const entries = useMemo<Entry[]>(() => {
     const query = search.trim().toLocaleLowerCase();
+    const contactIds = new Set(contacts.map((contact) => String(contact.id)));
     const chats: Entry[] = contacts.map((contact) => ({
       kind: 'chat',
       id: String(contact.id),
@@ -73,6 +99,18 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       time: contact.lastMessageAt,
       contact,
     }));
+    const externalUserEntries: Entry[] = searchedUsers
+      .filter((candidate) => !contactIds.has(String(candidate.id)))
+      .map((candidate) => {
+        const contact = { ...candidate, nickname: '', isContact: false } as Contact;
+        return {
+          kind: 'chat' as const,
+          id: String(candidate.id),
+          title: candidate.displayName || candidate.username,
+          subtitle: `@${candidate.username}`,
+          contact,
+        };
+      });
     const groupEntries: Entry[] = groups.map((group) => ({
       kind: 'group', id: group.id, title: group.title,
       subtitle: `${group.memberCount} участников`, time: group.lastMessageAt,
@@ -82,13 +120,21 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       subtitle: `${channel.memberCount} подписчиков · ${channel.description || 'Канал Skyline'}`,
       time: channel.lastMessageAt, channel,
     }));
-    return [...chats, ...groupEntries, ...channelEntries]
-      .filter((entry) => !query || `${entry.title} ${entry.subtitle}`.toLocaleLowerCase().includes(query))
+    return [...chats, ...externalUserEntries, ...groupEntries, ...channelEntries]
+      .filter((entry) => {
+        if (!query) return true;
+        const searchable = entry.kind === 'chat'
+          ? `${entry.title} ${entry.subtitle} ${entry.contact.username} ${entry.contact.displayName || ''}`
+          : entry.kind === 'channel'
+            ? `${entry.title} ${entry.subtitle} ${entry.channel.description}`
+            : `${entry.title} ${entry.subtitle}`;
+        return searchable.toLocaleLowerCase().includes(query.replace(/^@/, '').trim());
+      })
       .sort((a, b) => (Date.parse(b.time || '') || 0) - (Date.parse(a.time || '') || 0));
-  }, [contacts, groups, channels, search]);
+  }, [contacts, groups, channels, searchedUsers, search]);
 
   if (loading) return <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" role="status" aria-label="Загрузка переписок">{[0, 1, 2, 3].map((item) => <div key={item} className="chat-skeleton h-14 rounded-xl" />)}</div>;
-  if (!entries.length) return <div className="m-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 text-center text-xs leading-5 text-slate-500">{search.trim() ? 'Ничего не найдено.' : 'Здесь появятся ваши личные чаты, группы и каналы.'}</div>;
+  if (!entries.length) return <div className="m-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 text-center text-xs leading-5 text-slate-500">{searchingUsers ? 'Ищем людей, группы и каналы…' : search.trim() ? 'Ничего не найдено.' : 'Здесь появятся ваши личные чаты, группы и каналы.'}</div>;
 
   return (
     <div className="stagger min-h-0 flex-1 overflow-y-auto p-2" aria-label="Все переписки">
