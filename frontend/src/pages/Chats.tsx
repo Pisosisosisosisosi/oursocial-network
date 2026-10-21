@@ -1543,15 +1543,7 @@ export default function Chats() {
                             <FileText size={20} />
                             <span className="max-w-56 break-all">{m.fileName || 'Скачать файл'}</span>
                           </a>
-        ) : (
-          <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 text-center">
-            <div className="mb-4 grid h-16 w-16 place-items-center rounded-3xl border border-accent/15 bg-accent/10 text-accent">
-              <MessageCircle size={28} />
-            </div>
-            <h2 className="text-base font-semibold text-t-primary">Выберите чат</h2>
-            <p className="mt-2 max-w-xs text-sm text-t-secondary">Откройте переписку из списка слева, чтобы прочитать сообщения и ответить.</p>
-          </div>
-        )}
+                        ) : null}
                         {editingMessageId === m.id ? (
                           <div className="min-w-48 space-y-2">
                             <textarea value={messageEditDraft} onChange={(event) => setMessageEditDraft(event.target.value)} maxLength={4000} className="w-full rounded-lg border border-white/10 bg-slate-950/50 p-2 text-xs text-white outline-none focus:border-accent/50" />
