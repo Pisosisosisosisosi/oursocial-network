@@ -18,7 +18,15 @@ router = APIRouter(prefix="/channels", tags=["channels"])
 class CreateChannelRequest(BaseModel):
     title: str = Field(min_length=2, max_length=64)
     description: str = Field(default="", max_length=500)
+    avatarUrl: str = Field(default="", max_length=1_400_000)
     visibility: Literal["public", "private"] = "public"
+
+    @field_validator("avatarUrl")
+    @classmethod
+    def validate_avatar_url(cls, value: str) -> str:
+        if value and not re.fullmatch(r"data:image/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+=*", value):
+            raise ValueError("Avatar must be a supported base64 image")
+        return value
 
 
 class UpdateChannelRequest(BaseModel):
@@ -159,7 +167,7 @@ async def create_channel(payload: CreateChannelRequest, current=Depends(get_curr
         "title": title,
         "description": payload.description.strip(),
         "visibility": payload.visibility,
-        "avatarUrl": "",
+        "avatarUrl": payload.avatarUrl,
         "ownerId": current["userId"],
         "members": [{"userId": current["userId"], "role": "owner", "joinedAt": now}],
         "createdAt": now,
