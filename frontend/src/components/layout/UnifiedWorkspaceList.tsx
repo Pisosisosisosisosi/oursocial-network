@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MessageCircle, Radio, Users } from 'lucide-react';
+import { BellOff, Flag, MessageCircle, Pin, Radio, Trash2, Users, Volume2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { api, type Contact, type User } from '../../api/client';
+import { api, socialApi, type Contact, type User } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { formatAppDateTime } from '../../time';
 
@@ -44,6 +44,13 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
   const [searchedUsers, setSearchedUsers] = useState<User[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [contextMenu, setContextMenu] = useState<{ entry: Entry; x: number; y: number } | null>(null);
+  const [mutedKeys, setMutedKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('skyline:muted-workspace-items') || '[]') as string[]); } catch { return new Set(); } });
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('skyline:hidden-workspace-items') || '[]') as string[]); } catch { return new Set(); } });
+  const entryKey = (entry: Entry) => entry.kind + ':' + entry.id;
+  const toggleMute = (entry: Entry) => { const key = entryKey(entry); setMutedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); try { localStorage.setItem('skyline:muted-workspace-items', JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
+  const hideEntry = (entry: Entry) => { const key = entryKey(entry); setHiddenKeys((current) => { const next = new Set(current); next.add(key); try { localStorage.setItem('skyline:hidden-workspace-items', JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
+  const reportEntry = async (entry: Entry) => { const reason = window.prompt('Укажите причину жалобы на «' + entry.title + '»:'); if (!reason || !reason.trim()) return; try { const targetType = entry.kind === 'chat' ? 'user' : entry.kind; await socialApi.report(targetType, entry.id, reason.trim()); window.alert('Жалоба отправлена на рассмотрение.'); } catch (error) { console.error('Не удалось отправить жалобу:', error); window.alert('Не удалось отправить жалобу. Попробуйте позже.'); } finally { setContextMenu(null); } };
 
   useEffect(() => {
     let current = true;
@@ -125,6 +132,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       time: channel.lastMessageAt, channel,
     }));
     return [...chats, ...externalUserEntries, ...groupEntries, ...channelEntries]
+      .filter((entry) => !hiddenKeys.has(entryKey(entry)))
       .filter((entry) => {
         if (!query) return true;
         const searchable = entry.kind === 'chat'
@@ -135,7 +143,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
         return searchable.toLocaleLowerCase().includes(query.replace(/^@/, '').trim());
       })
       .sort((a, b) => (Date.parse(b.time || '') || 0) - (Date.parse(a.time || '') || 0));
-  }, [contacts, groups, channels, searchedUsers, search, includeDiscover]);
+  }, [contacts, groups, channels, searchedUsers, search, includeDiscover, hiddenKeys]);
 
   if (loading) return <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" role="status" aria-label="Загрузка переписок">{[0, 1, 2, 3].map((item) => <div key={item} className="chat-skeleton h-14 rounded-xl" />)}</div>;
   if (!entries.length) return <div className="m-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 text-center text-xs leading-5 text-slate-500">{searchingUsers ? 'Ищем людей, группы и каналы…' : search.trim() ? 'Ничего не найдено.' : 'Здесь появятся ваши личные чаты, группы и каналы.'}</div>;
@@ -148,6 +156,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
           <button
             key={`${entry.kind}:${entry.id}`}
             type="button"
+            onContextMenu={(event) => { event.preventDefault(); setContextMenu({ entry, x: Math.max(8, Math.min(event.clientX, window.innerWidth - 248)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - 310)) }); }}
             onClick={() => {
               if (entry.kind === 'chat') {
                 if (entry.contact.isContact === false) navigate('/chats?user=' + encodeURIComponent(entry.contact.username));
@@ -164,7 +173,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-medium">{entry.title}</span>
+                <span className="flex min-w-0 items-center gap-1 truncate text-sm font-medium">{entry.title}{mutedKeys.has(entryKey(entry)) && <BellOff size={12} className="shrink-0 text-slate-500" />}</span>
                 {entry.time && <time className="shrink-0 text-[10px] text-slate-500">{formatAppDateTime(entry.time, { hour: '2-digit', minute: '2-digit' })}</time>}{entry.kind === 'chat' && (entry.contact.unreadCount || 0) > 0 && <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">{entry.contact.unreadCount! > 99 ? '99+' : entry.contact.unreadCount}</span>}
               </span>
               <span className="mt-1 block truncate text-[11px] text-slate-500">{entry.subtitle}</span>
@@ -172,6 +181,18 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
           </button>
         );
       })}
+      {contextMenu && <>
+        <button type="button" aria-label="Закрыть меню чата" className="fixed inset-0 z-[80] cursor-default" onClick={() => setContextMenu(null)} />
+        <div role="menu" className="fixed z-[81] w-60 overflow-hidden rounded-xl border border-white/10 bg-slate-900 p-1.5 shadow-2xl shadow-black/40" style={{ left: contextMenu.x, top: contextMenu.y }} onContextMenu={(event) => event.preventDefault()}>
+          <div className="truncate px-3 py-2 text-xs font-semibold text-slate-400">{contextMenu.entry.title}</div><div className="my-1 border-t border-white/10" />
+          <button role="menuitem" type="button" onClick={() => toggleMute(contextMenu.entry)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-200 hover:bg-white/10">{mutedKeys.has(entryKey(contextMenu.entry)) ? <Volume2 size={16} /> : <BellOff size={16} />}{mutedKeys.has(entryKey(contextMenu.entry)) ? 'Включить звук' : 'Убрать звук'}</button>
+          <button role="menuitem" type="button" onClick={() => { const entry = contextMenu.entry; setContextMenu(null); if (entry.kind === 'chat') navigate('/chats?chat=' + encodeURIComponent(entry.id)); else if (entry.kind === 'group') navigate('/groups?group=' + encodeURIComponent(entry.id)); else navigate('/channels?channel=' + encodeURIComponent(entry.id)); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-200 hover:bg-white/10"><Pin size={16} />Открыть переписку</button>
+          <button role="menuitem" type="button" onClick={() => void reportEntry(contextMenu.entry)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-200 hover:bg-white/10"><Flag size={16} />Пожаловаться</button>
+          <div className="my-1 border-t border-white/10" />
+          <button role="menuitem" type="button" onClick={() => { const entry = contextMenu.entry; if (window.confirm('Убрать «' + entry.title + '» из списка на этом устройстве? История сообщений не удаляется.')) hideEntry(entry); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-rose-300 hover:bg-rose-500/10"><Trash2 size={16} />Убрать из списка</button>
+          <button type="button" onClick={() => setContextMenu(null)} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-400 hover:bg-white/10"><X size={16} />Отмена</button>
+        </div>
+      </>}
     </div>
   );
 }
