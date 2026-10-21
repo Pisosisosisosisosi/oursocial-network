@@ -600,7 +600,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   return (
     <>
     <main className="animate-fade-in flex h-full min-h-0 w-full bg-bg-base text-t-primary">
-      <aside className={`${embedded && !creating ? 'hidden' : activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-80`}>
+      <aside className={`${embedded ? 'hidden' : activeGroup ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-80`}>
         <WorkspaceSidebarHeader
           searchValue={groupSearch}
           onSearchChange={setGroupSearch}
@@ -617,29 +617,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
           </button>
         </header>
 
-        {creating && (
-          <form onSubmit={(event) => void createGroup(event)} className="space-y-3 border-b border-white/[0.08] p-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Новая группа</h2>
-              <button type="button" onClick={() => setCreating(false)} aria-label="Закрыть" className="rounded-lg p-1 text-slate-500 hover:bg-white/5"><X size={16} /></button>
-            </div>
-            <input value={groupTitle} onChange={(event) => setGroupTitle(event.target.value)} required minLength={2} maxLength={64} placeholder="Название группы" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 text-sm outline-none focus:border-accent/50" />
-            <label className="relative block">
-              <Search size={14} className="absolute left-3 top-3 text-slate-500" />
-              <input value={memberSearch} onChange={(event) => handleMemberSearchChange(event.target.value)} placeholder="Найти по полному @username" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-accent/50" />
-            </label>
-            {searching && <p className="text-[11px] text-slate-500">Ищем пользователя…</p>}
-            <div className="max-h-32 space-y-1 overflow-y-auto">
-              {addableResults.map((candidate) => (
-                <button key={candidate.id} type="button" onClick={() => toggleMember(candidate)} className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs hover:bg-white/[0.05]">
-                  <span>@{candidate.username} <span className="text-slate-500">{candidate.displayName}</span></span><UserPlus size={14} className="text-accent" />
-                </button>
-              ))}
-            </div>
-            {!!selectedMembers.length && <div className="flex flex-wrap gap-1.5">{selectedMembers.map((member) => <button key={member.id} type="button" onClick={() => toggleMember(member)} className="inline-flex items-center gap-1 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[10px] text-accent">@{member.username}<X size={11} /></button>)}</div>}
-            <button disabled={groupTitle.trim().length < 2 || !selectedMembers.length} className="btn-glow btn-shine min-h-[44px] w-full rounded-xl bg-gradient-to-r from-accent-from to-accent-to px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Создать группу</button>
-          </form>
-        )}
+
 
         <UnifiedWorkspaceList search={groupSearch} activeKind="group" activeId={activeGroup?.id || null} />
       </aside>
@@ -720,6 +698,32 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
         ) : <div className="grid flex-1 place-items-center text-center text-sm text-slate-500"><div><Users size={28} className="mx-auto mb-3 text-slate-600" />Выберите группу или создайте новую.</div></div>}
       </section>
     </main>
+    {creating && createPortal(
+      <div className="fixed inset-0 z-[120] grid place-items-center overflow-y-auto bg-black/65 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setCreating(false); }}>
+        <form onSubmit={(event) => void createGroup(event)} className="w-full max-w-lg space-y-3 rounded-3xl border border-white/10 bg-[#111a2a] p-5 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Новая группа</h2>
+              <button type="button" onClick={() => setCreating(false)} aria-label="Закрыть" className="rounded-lg p-1 text-slate-500 hover:bg-white/5"><X size={16} /></button>
+            </div>
+            <input value={groupTitle} onChange={(event) => setGroupTitle(event.target.value)} required minLength={2} maxLength={64} placeholder="Название группы" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 text-sm outline-none focus:border-accent/50" />
+            <label className="relative block">
+              <Search size={14} className="absolute left-3 top-3 text-slate-500" />
+              <input value={memberSearch} onChange={(event) => handleMemberSearchChange(event.target.value)} placeholder="Найти по полному @username" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-accent/50" />
+            </label>
+            {searching && <p className="text-[11px] text-slate-500">Ищем пользователя…</p>}
+            <div className="max-h-32 space-y-1 overflow-y-auto">
+              {addableResults.map((candidate) => (
+                <button key={candidate.id} type="button" onClick={() => toggleMember(candidate)} className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs hover:bg-white/[0.05]">
+                  <span>@{candidate.username} <span className="text-slate-500">{candidate.displayName}</span></span><UserPlus size={14} className="text-accent" />
+                </button>
+              ))}
+            </div>
+            {!!selectedMembers.length && <div className="flex flex-wrap gap-1.5">{selectedMembers.map((member) => <button key={member.id} type="button" onClick={() => toggleMember(member)} className="inline-flex items-center gap-1 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[10px] text-accent">@{member.username}<X size={11} /></button>)}</div>}
+            <button disabled={groupTitle.trim().length < 2 || !selectedMembers.length} className="btn-glow btn-shine min-h-[44px] w-full rounded-xl bg-gradient-to-r from-accent-from to-accent-to px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Создать группу</button>
+          </form>
+      </div>,
+      document.body,
+    )}
     {forwardingMessage && createPortal(
       <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" onClick={(event) => { if (event.target === event.currentTarget && !forwarding) setForwardingMessage(null); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="group-forward-dialog-title" className="w-full max-w-md rounded-3xl border border-white/10 bg-panel p-5 shadow-2xl">
