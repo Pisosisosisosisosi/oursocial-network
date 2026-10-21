@@ -1,6 +1,4 @@
 from datetime import datetime, timezone
-import secrets
-
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
