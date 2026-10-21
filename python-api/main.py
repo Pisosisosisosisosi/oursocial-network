@@ -1529,8 +1529,6 @@ def list_groups(current=Depends(get_current_user)):
 @app.post("/groups")
 async def create_group(payload: CreateGroupRequest, current=Depends(get_current_user)):
     member_ids = list(dict.fromkeys([current["userId"], *payload.memberIds]))
-    if len(member_ids) < 2:
-        raise HTTPException(status_code=422, detail="A shared group must have at least one other member")
     if len(member_ids) > 100:
         raise HTTPException(status_code=422, detail="A group can have up to 100 members")
     if any(not ObjectId.is_valid(value) for value in member_ids):
