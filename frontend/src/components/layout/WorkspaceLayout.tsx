@@ -12,7 +12,7 @@ export default function WorkspaceLayout() {
   const isGroup = location.pathname.startsWith('/groups');
   const isChannel = location.pathname.startsWith('/channels');
   const activeKind = isGroup ? 'group' : isChannel ? 'channel' : 'chat';
-  const activeId = isGroup ? params.get('group') : isChannel ? params.get('channel') : params.get('chat');
+  const activeId = isGroup ? params.get('group') : isChannel ? params.get('channel') : params.get('chat') || params.get('user');
   const showDiscover = params.get('discover') === '1';
   return (
     <main className="flex h-full min-h-0 w-full overflow-hidden bg-bg-base text-t-primary">
