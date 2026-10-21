@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Send, Settings, Share2, Settings, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { getSocket } from '../api/socket';
@@ -469,7 +469,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
             </div>
             {activeChannel.isOwner ? <>
               {activeChannel.visibility === 'private' && <button type="button" onClick={() => void copyInvite()} title="Скопировать ссылку-приглашение" aria-label="Ссылка-приглашение" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-accent"><Share2 size={17} /></button>}
-              <button type="button" onClick={() => { setVisibility(activeChannel.visibility); setEditing(true); }} title="Настройки канала" aria-label="Настройки канала" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-white"><Settings2 size={17} /></button>
+              <button type="button" onClick={() => { setVisibility(activeChannel.visibility); setEditing(true); }} title="Настройки канала" aria-label="Настройки канала" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-white"><Settings size={17} /></button>
             </> : activeChannel.isSubscribed ? <button disabled={busy} type="button" onClick={() => void unsubscribe(activeChannel)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-50">Отписаться</button> : <button disabled={busy} type="button" onClick={() => void subscribe(activeChannel)} className="rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent disabled:opacity-50">Подписаться</button>}
           </header>
           {activeChannel.description && <div className="border-b border-white/[0.06] px-5 py-3 text-sm leading-6 text-t-secondary md:px-8">{activeChannel.description}</div>}
