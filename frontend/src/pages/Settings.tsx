@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { ArrowLeft, Bell, ChevronRight, Clock3, Contrast, Download, Image, LogOut, MessageSquare, Shield, Smartphone, UserRound } from 'lucide-react';
+import { ArrowLeft, Bell, ChevronRight, Clock3, Contrast, Download, Image, Languages, LogOut, MessageSquare, Shield, Smartphone, UserRound } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { applyAppPreferences, APP_THEMES, CHAT_STYLE_DEFAULTS, getStoredChatWallpaperUrl, storeChatWallpaper, type AppTheme, type WallpaperFit } from '../preferences';
@@ -72,6 +72,7 @@ const CHAT_PALETTES = [
 
 const SETTINGS_SECTIONS = [
   { id: 'appearance', title: 'Внешний вид', description: 'Темы, обои, палитры и стиль сообщений', icon: Contrast, color: 'from-violet-500/20 to-indigo-500/5' },
+  { id: 'language', title: 'Язык интерфейса', description: 'Выбор языка приложения', icon: Languages, color: 'from-fuchsia-500/20 to-purple-500/5' },
   { id: 'chats', title: 'Чаты', description: 'Ввод, медиа и отметки прочтения', icon: MessageSquare, color: 'from-cyan-500/20 to-blue-500/5' },
   { id: 'time', title: 'Время и часовой пояс', description: 'Синхронизация с компьютером и формат времени', icon: Clock3, color: 'from-sky-500/20 to-cyan-500/5' },
   { id: 'privacy', title: 'Приватность', description: 'Статус, прочтение и личные данные', icon: Shield, color: 'from-emerald-500/20 to-teal-500/5' },
@@ -285,13 +286,6 @@ export default function Settings() {
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Skyline</p>
           <h1 className="text-3xl font-semibold tracking-tight">Настройки</h1>
           <p className="mt-2 text-sm text-t-secondary">Персонализируйте внешний вид, поведение чатов и уведомления.</p>
-          <div className="mt-5 max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
-            <label htmlFor="skyline-language" className="block text-sm font-semibold text-t-primary">Язык интерфейса</label>
-            <p className="mt-1 text-xs text-t-secondary">Выберите язык приложения. Изменение применяется сразу.</p>
-            <select id="skyline-language" value={language} onChange={(event) => { const next = event.target.value as AppLanguage; setLanguage(next); setAppLanguage(next); }} className="mt-3 h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-t-primary outline-none focus:border-accent/50">
-              {LANGUAGES.map((item) => <option key={item.code} value={item.code}>{item.nativeName}</option>)}
-            </select>
-          </div>
         </header>
 
         {notice && <p role="status" className="mb-5 rounded-xl border border-accent/20 bg-accent/[0.08] px-4 py-3 text-sm text-t-primary animate-slide-up">{notice}</p>}
@@ -316,6 +310,18 @@ export default function Settings() {
               <button type="button" onClick={() => setSearchParams({})} className="shrink-0 rounded-xl px-3 py-2 text-[10px] font-semibold text-accent transition hover:bg-accent/10">Все разделы</button>
             </div>
           )}
+
+          {activeSection === 'language' && <section className={`${cardClass} animate-fade-in`}>
+            <div className="mb-4 flex items-center gap-3">
+              <Languages size={18} className="text-accent" />
+              <div><h2 className="text-sm font-semibold">Язык интерфейса</h2><p className="mt-1 text-xs text-t-secondary">Выберите язык приложения. Изменение применяется сразу.</p></div>
+            </div>
+            <label htmlFor="skyline-language" className="block text-xs font-medium text-t-secondary">Язык приложения</label>
+            <select id="skyline-language" value={language} onChange={(event) => { const next = event.target.value as AppLanguage; setLanguage(next); setAppLanguage(next); }} className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-t-primary outline-none focus:border-accent/50">
+              {LANGUAGES.map((item) => <option key={item.code} value={item.code}>{item.nativeName}</option>)}
+            </select>
+            <p className="mt-3 text-[11px] leading-relaxed text-t-secondary">Выбор сохраняется на этом устройстве. Перезапуск приложения не требуется.</p>
+          </section>}
 
           {activeSection === 'appearance' && <section className={`${cardClass} animate-fade-in`}>
             <div className="mb-3 flex items-center gap-3">
