@@ -469,6 +469,10 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     }
   };
 
+  useEffect(() => {
+    if (searchParams.get('discover') === '1') void loadPublicGroups();
+  }, [searchParams]);
+
   const joinPublicGroup = async (groupId: string) => {
     setJoiningPublicGroup(groupId);
     try {
@@ -856,7 +860,15 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
               <button type="submit" disabled={!draft.trim() || sending} aria-label="Отправить сообщение" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">{sending ? <span className="text-xs">…</span> : <Send size={17} />}</button>
             </form>
           </>
-        ) : !embedded ? <div className="grid flex-1 place-items-center text-center text-sm text-slate-500"><div><Users size={28} className="mx-auto mb-3 text-slate-600" />Выберите группу или создайте новую.</div></div> : null}
+        ) : discoverOpen ? <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="mx-auto max-w-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Публичные группы</h2><p className="mt-1 text-xs text-slate-500">Вступайте в открытые группы без ссылки-приглашения.</p></div><button type="button" onClick={() => { setDiscoverOpen(false); navigate('/groups'); }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-t-secondary hover:bg-white/5">Закрыть</button></div>
+            <div className="space-y-2">
+              {publicGroups.map((group) => <div key={group.id} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-panel p-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-accent/10 text-accent"><Users size={17} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{group.title}</p><p className="mt-1 text-[11px] text-slate-500">{group.memberCount} участников · владелец @{group.ownerUsername}</p></div><button type="button" disabled={joiningPublicGroup === group.id} onClick={() => void joinPublicGroup(group.id)} className="rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{joiningPublicGroup === group.id ? 'Вступаем…' : 'Вступить'}</button></div>)}
+              {!publicGroups.length && <p className="rounded-2xl border border-white/[0.06] py-12 text-center text-xs text-slate-500">Пока нет доступных публичных групп.</p>}
+            </div>
+          </div>
+        </div> : !embedded ? <div className="grid flex-1 place-items-center text-center text-sm text-slate-500"><div><Users size={28} className="mx-auto mb-3 text-slate-600" />Выберите группу или создайте новую.</div></div> : null}
       </section>
     </main>
     {creating && createPortal(
