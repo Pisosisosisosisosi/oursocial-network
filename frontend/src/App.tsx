@@ -129,7 +129,7 @@ function AppRoutes() {
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route element={user ? <WorkspaceLayout /> : <Navigate to="/login" replace />}>
-        <Route index element={<Chats embedded />} />
+        <Route index element={<Navigate to="/chats" replace />} />
         <Route path="chats" element={<Chats embedded />} />
         <Route path="groups" element={<Groups embedded />} />
         <Route path="channels" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем каналы…</div>}><Channels embedded /></Suspense>} />
