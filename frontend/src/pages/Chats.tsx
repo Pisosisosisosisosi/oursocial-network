@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, MessageCircle, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -1266,7 +1266,7 @@ export default function Chats() {
       `}</style>
 
       {/* 1. ЛЕВАЯ КОЛОНКА */}
-      <div className={`${activeChat ? 'hidden md:flex md:w-[340px]' : 'flex w-full'} relative z-10 flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-slate-800/60 glass-panel`}>
+      <div className={`${activeChat ? 'hidden md:flex' : 'flex'} relative z-10 h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-r border-slate-800/60 glass-panel md:flex md:w-[340px]`}>
         <WorkspaceSidebarHeader
           searchValue={searchQuery}
           onSearchChange={handleSearchChange}
@@ -1365,7 +1365,7 @@ export default function Chats() {
       </div>
 
       {/* 2. ЦЕНТРАЛЬНАЯ КОЛОНКА */}
-      <div className={`${activeChat ? 'flex' : 'hidden'} min-w-0 min-h-0 flex-1 flex-col bg-bg-base h-full relative z-0`}>
+      <div className={`${activeChat ? 'flex' : 'hidden md:flex'} relative z-0 h-full min-h-0 min-w-0 flex-1 flex-col bg-bg-base`}>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-accent/10 via-[#090d16] to-black pointer-events-none"></div>
 
         {activeChat ? (
@@ -1542,7 +1542,15 @@ export default function Chats() {
                             <FileText size={20} />
                             <span className="max-w-56 break-all">{m.fileName || 'Скачать файл'}</span>
                           </a>
-                        ) : null}
+        ) : (
+          <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 text-center">
+            <div className="mb-4 grid h-16 w-16 place-items-center rounded-3xl border border-accent/15 bg-accent/10 text-accent">
+              <MessageCircle size={28} />
+            </div>
+            <h2 className="text-base font-semibold text-t-primary">Выберите чат</h2>
+            <p className="mt-2 max-w-xs text-sm text-t-secondary">Откройте переписку из списка слева, чтобы прочитать сообщения и ответить.</p>
+          </div>
+        )}
                         {editingMessageId === m.id ? (
                           <div className="min-w-48 space-y-2">
                             <textarea value={messageEditDraft} onChange={(event) => setMessageEditDraft(event.target.value)} maxLength={4000} className="w-full rounded-lg border border-white/10 bg-slate-950/50 p-2 text-xs text-white outline-none focus:border-accent/50" />
