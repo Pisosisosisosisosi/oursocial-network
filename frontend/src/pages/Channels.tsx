@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Send, Settings2, Share2, Trash2, Users, X } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -80,10 +80,6 @@ export default function Channels() {
   const invitePreview = inviteCode && invitePreviewState?.code === inviteCode
     ? invitePreviewState.preview
     : null;
-  const visibleChannels = useMemo(() => channels.filter((channel) => {
-    const matchesSearch = `${channel.title} ${channel.description}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
-    return matchesSearch && (listMode === 'mine' ? channel.isSubscribed : channel.visibility === 'public');
-  }), [channels, listMode, search]);
 
   const loadChannels = useCallback(async () => {
     const response = await api.get<Channel[]>('/channels');
@@ -419,7 +415,7 @@ export default function Channels() {
         <WorkspaceSidebarHeader
           searchValue={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Поиск каналов"
+          searchPlaceholder="Поиск переписок"
         />
         <div className="border-b border-white/[0.06] px-3 py-2"><WorkspaceTabs /></div>
         <header className="flex items-center gap-3 border-b border-white/[0.08] px-4 py-4">
