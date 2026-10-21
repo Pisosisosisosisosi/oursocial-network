@@ -107,12 +107,12 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
             className={`chat-card chat-list-item group mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${active ? 'chat-active text-white' : 'text-slate-300'}`}
           >
             <span className={`grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl ${entry.kind === 'chat' ? 'bg-emerald-400/10 text-emerald-300' : entry.kind === 'group' ? 'bg-accent/15 text-accent' : 'bg-cyan-400/10 text-cyan-300'}`}>
-              {entry.kind === 'chat' ? <MessageCircle size={18} /> : entry.kind === 'group' ? <Users size={18} /> : entry.channel.avatarUrl ? <img src={entry.channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={18} />}
+              {entry.kind === 'chat' ? entry.contact.avatarUrl ? <img src={entry.contact.avatarUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-sm font-semibold">{entry.contact.username?.[0]?.toUpperCase() || <MessageCircle size={18} />}</span> : entry.kind === 'group' ? <Users size={18} /> : entry.channel.avatarUrl ? <img src={entry.channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={18} />}
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center justify-between gap-2">
                 <span className="truncate text-sm font-medium">{entry.title}</span>
-                {entry.time && <time className="shrink-0 text-[10px] text-slate-500">{formatAppDateTime(entry.time, { hour: '2-digit', minute: '2-digit' })}</time>}
+                {entry.time && <time className="shrink-0 text-[10px] text-slate-500">{formatAppDateTime(entry.time, { hour: '2-digit', minute: '2-digit' })}</time>}{entry.kind === 'chat' && (entry.contact.unreadCount || 0) > 0 && <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">{entry.contact.unreadCount! > 99 ? '99+' : entry.contact.unreadCount}</span>}
               </span>
               <span className="mt-1 block truncate text-[11px] text-slate-500">{entry.subtitle}</span>
             </span>
