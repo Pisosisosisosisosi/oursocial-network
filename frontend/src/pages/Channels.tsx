@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Send, Settings2, Share2, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Send, Settings, Share2, Settings, Trash2, Users, X } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { getSocket } from '../api/socket';
