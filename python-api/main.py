@@ -43,6 +43,7 @@ from realtime import sio
 import socketio as socketio_server
 from channels import router as channels_router, channel_by_id, get_member, require_read_access
 from premium import router as premium_router, serialize_premium
+from group_management import router as group_management_router
 
 app = FastAPI(title="Our Social Network API")
 MESSAGE_RATE_LIMIT = 5
@@ -71,6 +72,7 @@ app.add_middleware(
 )
 app.include_router(channels_router)
 app.include_router(premium_router)
+app.include_router(group_management_router)
 
 
 # ---------- Модели ----------
@@ -1495,6 +1497,10 @@ def list_groups(current=Depends(get_current_user)):
             "updatedAt": group.get("updatedAt", group["createdAt"]).isoformat(),
             "lastMessageAt": last_message_by_group[str(group["_id"])].isoformat() if last_message_by_group.get(str(group["_id"])) else None,
             "memberCount": len(group.get("members", [])),
+            "ownerId": group.get("createdBy") or next((member["userId"] for member in group.get("members", []) if member.get("role") == "owner"), ""),
+            "isPublic": bool(group.get("isPublic", False)),
+            "inviteCode": group.get("inviteCode", ""),
+            "currentUserRole": next((member.get("role", "member") for member in group.get("members", []) if member.get("userId") == user_id), "member"),
             "members": [
                 {
                     "userId": member["userId"],
@@ -1503,6 +1509,7 @@ def list_groups(current=Depends(get_current_user)):
                     "avatarUrl": profile_by_id.get(member["userId"], {}).get("avatarUrl", ""),
                     "publicKey": public_keys.get(member["userId"], ""),
                     "joinedAt": member["joinedAt"].isoformat(),
+                    "role": "owner" if member.get("role") == "owner" or group.get("createdBy") == member.get("userId") else member.get("role", "member"),
                 }
                 for member in group.get("members", [])
             ],
@@ -1531,6 +1538,8 @@ async def create_group(payload: CreateGroupRequest, current=Depends(get_current_
     group = {
         "title": payload.title.strip(),
         "createdBy": current["userId"],
+        "isPublic": False,
+        "inviteCode": secrets.token_urlsafe(24),
         "createdAt": now,
         "updatedAt": now,
         "members": [
