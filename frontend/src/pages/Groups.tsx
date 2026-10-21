@@ -751,9 +751,19 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
               <button type="button" onClick={() => void exportGroup('json')} title="Экспорт JSON" aria-label="Экспортировать группу в JSON" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-accent"><Download size={15} /></button>
               <button type="button" onClick={() => void exportGroup('html')} title="Экспорт HTML" aria-label="Экспортировать группу в HTML" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-accent"><FileText size={15} /></button>
               <button type="button" onClick={() => { setAddingMembers(true); setCreating(false); setSelectedMembers([]); setMemberSearch(''); }} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.05]"><UserPlus size={15} /><span className="hidden sm:inline">Добавить</span></button>
+              <button type="button" onClick={() => void loadPublicGroups()} title="Найти публичные группы" aria-label="Найти публичные группы" className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/[0.05] hover:text-accent"><Globe size={16} /></button>
               <button type="button" onClick={() => setSettingsOpen((value) => !value)} title="Участники и настройки" aria-label="Участники и настройки группы" className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/[0.05] hover:text-accent"><Settings size={16} /></button>
             </header>
 
+            {discoverOpen && (
+              <section className="max-h-[35vh] overflow-y-auto border-b border-white/[0.08] bg-panel p-4 sm:px-5">
+                <div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-semibold">Публичные группы</h3><p className="mt-1 text-[11px] text-slate-500">Вступайте без приглашения.</p></div><button type="button" onClick={() => setDiscoverOpen(false)} aria-label="Закрыть публичные группы" className="rounded-lg p-2 text-t-secondary hover:bg-white/5"><X size={15} /></button></div>
+                <div className="space-y-1.5">
+                  {publicGroups.map((group) => <div key={group.id} className="flex items-center gap-3 rounded-xl border border-white/[0.06] px-3 py-2"><div className="grid h-8 w-8 place-items-center rounded-xl bg-accent/10 text-accent"><Users size={15} /></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{group.title}</p><p className="text-[10px] text-slate-500">{group.memberCount} участников · владелец @{group.ownerUsername}</p></div><button type="button" disabled={joiningPublicGroup === group.id} onClick={() => void joinPublicGroup(group.id)} className="rounded-lg bg-accent px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-50">{joiningPublicGroup === group.id ? 'Вступаем…' : 'Вступить'}</button></div>)}
+                  {!publicGroups.length && <p className="py-5 text-center text-xs text-slate-500">Пока нет доступных публичных групп.</p>}
+                </div>
+              </section>
+            )}
             {settingsOpen && (
               <section className="max-h-[45vh] overflow-y-auto border-b border-white/[0.08] bg-panel p-4 sm:px-5">
                 <div className="mb-3 flex items-center justify-between gap-3">
