@@ -360,7 +360,6 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
 
   const createGroup = async (event: FormEvent) => {
     event.preventDefault();
-    if (selectedMembers.length < 1) return;
     try {
       const response = await api.post<{ id: string }>('/groups', {
         title: groupTitle.trim(),
