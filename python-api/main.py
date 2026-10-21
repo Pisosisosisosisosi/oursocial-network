@@ -171,7 +171,16 @@ class GroupMessageRequest(BaseModel):
 
 class CreateGroupRequest(BaseModel):
     title: str = Field(min_length=2, max_length=64)
+    description: str = Field(default="", max_length=500)
+    avatarUrl: str = Field(default="", max_length=1_400_000)
     memberIds: list[str] = Field(default_factory=list, max_length=99)
+
+    @field_validator("avatarUrl")
+    @classmethod
+    def validate_avatar_url(cls, value: str) -> str:
+        if value and not re.fullmatch(r"data:image/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+=*", value):
+            raise ValueError("Avatar must be a supported base64 image")
+        return value
 
 
 class AddGroupMembersRequest(BaseModel):
@@ -1501,6 +1510,8 @@ def list_groups(current=Depends(get_current_user)):
         {
             "id": str(group["_id"]),
             "title": group["title"],
+            "description": group.get("description", ""),
+            "avatarUrl": group.get("avatarUrl", ""),
             "createdAt": group["createdAt"].isoformat(),
             "updatedAt": group.get("updatedAt", group["createdAt"]).isoformat(),
             "lastMessageAt": last_message_by_group[str(group["_id"])].isoformat() if last_message_by_group.get(str(group["_id"])) else None,
@@ -1543,6 +1554,8 @@ async def create_group(payload: CreateGroupRequest, current=Depends(get_current_
     now = datetime.now(timezone.utc)
     group = {
         "title": payload.title.strip(),
+        "description": payload.description.strip(),
+        "avatarUrl": payload.avatarUrl,
         "createdBy": current["userId"],
         "isPublic": False,
         "inviteCode": secrets.token_urlsafe(24),
