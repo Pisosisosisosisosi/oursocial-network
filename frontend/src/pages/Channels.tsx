@@ -449,9 +449,12 @@ export default function Channels() {
                 {channel.avatarUrl ? <img src={channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : channel.visibility === 'private' ? <LockKeyhole size={18} /> : <Radio size={19} />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="truncate text-sm font-semibold text-t-primary">{channel.title}</span>
-                  {channel.visibility === 'private' && <LockKeyhole size={12} className="shrink-0 text-slate-500" />}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-sm font-semibold text-t-primary">{channel.title}</span>
+                    {channel.visibility === 'private' && <LockKeyhole size={12} className="shrink-0 text-slate-500" />}
+                  </span>
+                  {channel.lastMessageAt && <time className="shrink-0 text-[10px] text-slate-500">{formatAppDateTime(channel.lastMessageAt, { hour: '2-digit', minute: '2-digit' })}</time>}
                 </span>
                 <span className="mt-1 block truncate text-xs text-slate-500">{channel.memberCount} подписчиков · {channel.description || 'Канал Skyline'}</span>
               </span>
