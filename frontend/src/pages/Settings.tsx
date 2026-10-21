@@ -8,6 +8,7 @@ import { useToast } from '../context/useToast';
 //import GlassPanel from '../components/ui/GlassPanel';
 import Toggle from '../components/ui/Toggle';
 import { formatAppTime, formatTimeZoneOffset, getAppTimeZone, getStoredTimeZone, SYSTEM_TIME_ZONE } from '../time';
+import { getAppLanguage, LANGUAGES, setAppLanguage, type AppLanguage } from '../i18n';
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -103,6 +104,7 @@ export default function Settings() {
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [notice, setNotice] = useState('');
   const [timeZone, setTimeZone] = useState(getStoredTimeZone);
+  const [language, setLanguage] = useState<AppLanguage>(getAppLanguage);
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const shownTimeZone = timeZone === 'system' ? SYSTEM_TIME_ZONE : timeZone;
   const availableTimeZones = ['Europe/Chisinau', 'Europe/Bucharest', 'Europe/Kyiv', 'Europe/Moscow', 'Europe/Istanbul', 'Europe/London', 'Europe/Berlin', 'Europe/Paris', 'America/New_York', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Tashkent', 'Asia/Almaty', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'UTC'];
@@ -283,6 +285,13 @@ export default function Settings() {
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-accent">Skyline</p>
           <h1 className="text-3xl font-semibold tracking-tight">Настройки</h1>
           <p className="mt-2 text-sm text-t-secondary">Персонализируйте внешний вид, поведение чатов и уведомления.</p>
+          <div className="mt-5 max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
+            <label htmlFor="skyline-language" className="block text-sm font-semibold text-t-primary">Язык интерфейса</label>
+            <p className="mt-1 text-xs text-t-secondary">Выберите язык приложения. Изменение применяется сразу.</p>
+            <select id="skyline-language" value={language} onChange={(event) => { const next = event.target.value as AppLanguage; setLanguage(next); setAppLanguage(next); }} className="mt-3 h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-t-primary outline-none focus:border-accent/50">
+              {LANGUAGES.map((item) => <option key={item.code} value={item.code}>{item.nativeName}</option>)}
+            </select>
+          </div>
         </header>
 
         {notice && <p role="status" className="mb-5 rounded-xl border border-accent/20 bg-accent/[0.08] px-4 py-3 text-sm text-t-primary animate-slide-up">{notice}</p>}
