@@ -164,10 +164,6 @@ export default function Groups() {
   const activeGroup = activeGroupId === ''
     ? null
     : groups.find((group) => group.id === activeGroupId) || groups[0] || null;
-  const visibleGroups = useMemo(() => {
-    const query = groupSearch.trim().toLocaleLowerCase();
-    return query ? groups.filter((group) => group.title.toLocaleLowerCase().includes(query)) : groups;
-  }, [groupSearch, groups]);
   const loadingMessages = Boolean(activeGroup && activeGroup.id !== loadedGroupId);
   const activeGroupKey = activeGroup?.id;
   const activeGroupKeyRef = useRef<string | undefined>(activeGroupKey);
@@ -603,7 +599,7 @@ export default function Groups() {
         <WorkspaceSidebarHeader
           searchValue={groupSearch}
           onSearchChange={setGroupSearch}
-          searchPlaceholder="Поиск групп"
+          searchPlaceholder="Поиск переписок"
         />
         <div className="border-b border-white/[0.06] px-3 py-2"><WorkspaceTabs /></div>
         <header className="flex items-center justify-between border-b border-white/[0.08] p-4">
