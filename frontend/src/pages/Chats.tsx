@@ -33,8 +33,13 @@ interface ChatMessage {
   read: boolean;
 }
 
-interface WorkspaceGroupItem { id: string; title: string; memberCount: number; }
-interface WorkspaceChannelItem { id: string; title: string; description: string; avatarUrl?: string; memberCount: number; isSubscribed: boolean; visibility: 'public' | 'private'; }
+interface WorkspaceGroupItem { id: string; title: string; memberCount: number; lastMessageAt?: string | null; }
+interface WorkspaceChannelItem { id: string; title: string; description: string; avatarUrl?: string; memberCount: number; isSubscribed: boolean; visibility: 'public' | 'private'; lastMessageAt?: string | null; }
+interface WorkspaceChatItem extends User { nickname?: string; unreadCount?: number; lastMessageAt?: string | null; }
+type WorkspaceEntry =
+  | { kind: 'chat'; key: string; id: string; title: string; subtitle: string; avatarUrl?: string; time?: string | null; unreadCount?: number; online: boolean; user: WorkspaceChatItem }
+  | { kind: 'group'; key: string; id: string; title: string; subtitle: string; time?: string | null }
+  | { kind: 'channel'; key: string; id: string; title: string; subtitle: string; avatarUrl?: string; time?: string | null };
 
 const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'] as const;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
@@ -260,10 +265,16 @@ export default function Chats() {
     const socket = getSocket();
     if (!socket || !currentUser?.id) return;
 
-    const handleNewMessage = (event: { action: string; senderId?: string }) => {
+    const handleNewMessage = (event: { action: string; senderId?: string; groupId?: string }) => {
       if (event.action !== 'created') return;
       if (event.senderId && event.senderId !== currentUser.id && event.senderId !== activeChatIdRef.current) {
         showToast('Новое сообщение в другом чате.', 'info');
+      }
+      if (event.groupId) {
+        void api.get<WorkspaceGroupItem[]>('/groups').then((response) => setWorkspaceGroups(response.data)).catch((error: unknown) => {
+          console.error('Не удалось обновить порядок групп после нового сообщения:', error);
+        });
+        return;
       }
       void api.get<Contact[]>('/contacts').then((response) => {
         setContacts(response.data.filter((contact) => contact.id !== currentUser.id && !contact.chatHidden));
@@ -272,9 +283,19 @@ export default function Chats() {
       });
     };
 
+    const handleChannelChange = () => {
+      void api.get<WorkspaceChannelItem[]>('/channels').then((response) => {
+        setWorkspaceChannels(response.data.filter((channel) => channel.isSubscribed));
+      }).catch((error: unknown) => {
+        console.error('Не удалось обновить порядок каналов после новой публикации:', error);
+      });
+    };
+
     socket.on('message_changed', handleNewMessage);
+    socket.on('channel_changed', handleChannelChange);
     return () => {
       socket.off('message_changed', handleNewMessage);
+      socket.off('channel_changed', handleChannelChange);
     };
   }, [currentUser?.id, showToast]);
 
@@ -1171,11 +1192,29 @@ export default function Chats() {
 
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
   const usernameSearch = normalizedQuery.startsWith('@');
-  const visibleUsers: (User & { nickname?: string })[] = usernameSearch
+  const visibleUsers: WorkspaceChatItem[] = usernameSearch
     ? searchResults
     : contacts.filter((contact) => !normalizedQuery || `${contact.nickname || ''} ${contact.displayName || ''} ${contact.username}`.toLocaleLowerCase().includes(normalizedQuery));
   const visibleWorkspaceGroups = workspaceGroups.filter((group) => !normalizedQuery || group.title.toLocaleLowerCase().includes(normalizedQuery));
   const visibleWorkspaceChannels = workspaceChannels.filter((channel) => !normalizedQuery || `${channel.title} ${channel.description}`.toLocaleLowerCase().includes(normalizedQuery));
+  const unifiedEntries: WorkspaceEntry[] = [
+    ...visibleUsers.map((user): WorkspaceEntry => ({
+      kind: 'chat', key: `chat:${user.id}`, id: String(user.id), user,
+      title: user.nickname || user.displayName || user.username,
+      subtitle: user.statusText || (onlineUsers.has(String(user.id)) ? 'В сети' : `@${user.username}`),
+      avatarUrl: user.avatarUrl, time: user.lastMessageAt,
+      unreadCount: user.unreadCount, online: onlineUsers.has(String(user.id)),
+    })),
+    ...visibleWorkspaceGroups.map((group): WorkspaceEntry => ({
+      kind: 'group', key: `group:${group.id}`, id: group.id, title: group.title,
+      subtitle: `${group.memberCount} участников`, time: group.lastMessageAt,
+    })),
+    ...visibleWorkspaceChannels.map((channel): WorkspaceEntry => ({
+      kind: 'channel', key: `channel:${channel.id}`, id: channel.id, title: channel.title,
+      subtitle: `${channel.memberCount} подписчиков`, avatarUrl: channel.avatarUrl,
+      time: channel.lastMessageAt,
+    })),
+  ].sort((first, second) => (Date.parse(second.time || '') || 0) - (Date.parse(first.time || '') || 0));
 
   return (
     <div className="animate-fade-in absolute left-0 top-0 flex h-full w-full overflow-hidden bg-bg-base font-sans text-t-primary selection:bg-accent/30">
@@ -1204,11 +1243,15 @@ export default function Chats() {
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex justify-between">
-            <span>{searchQuery.trim() ? `Результаты (${visibleUsers.length + visibleWorkspaceGroups.length + visibleWorkspaceChannels.length})` : 'Все переписки'}</span>
+            <span>{searchQuery.trim() ? `Результаты (${unifiedEntries.length})` : `Все переписки (${unifiedEntries.length})`}</span>
             <span className="text-[10px] normal-case tracking-normal text-slate-600">
               {onlineUsers.size} в сети
             </span>
           </h3>
+          {!normalizedQuery && <div className="mb-2 flex items-center gap-1 px-2">
+            <button type="button" onClick={() => navigate('/groups')} className="rounded-lg px-2 py-1 text-[9px] font-medium text-t-secondary transition hover:bg-white/[0.05] hover:text-accent">+ Группа</button>
+            <button type="button" onClick={() => navigate('/channels')} className="rounded-lg px-2 py-1 text-[9px] font-medium text-t-secondary transition hover:bg-white/[0.05] hover:text-accent">+ Канал</button>
+          </div>}
           
           {loading && (
             <div role="status" aria-label="Загрузка контактов" className="space-y-2 px-1">
@@ -1226,13 +1269,19 @@ export default function Chats() {
           {searching && <p className="text-xs text-slate-500 px-2 animate-pulse">Ищем пользователей...</p>}
           {panelError && <p role="alert" className="px-2 py-1 text-xs text-rose-300">{panelError}</p>}
 
-          {visibleUsers.length > 0 && <p className="px-2 pb-1 pt-2 text-[9px] font-bold uppercase tracking-widest text-slate-500">Личные чаты</p>}
-
-          {visibleUsers.map((user, idx) => {
+          {unifiedEntries.map((entry, idx) => {
+            if (entry.kind === 'group' || entry.kind === 'channel') {
+              const isGroup = entry.kind === 'group';
+              return <button key={entry.key} type="button" onClick={() => navigate(isGroup ? `/groups?group=${encodeURIComponent(entry.id)}` : `/channels?channel=${encodeURIComponent(entry.id)}`)} className="chat-card chat-list-item mb-1 flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition hover:bg-white/[0.04]" style={{ animationDelay: `${idx * 20}ms` }}>
+                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-accent/15 bg-accent/10 text-accent">{!isGroup && entry.avatarUrl ? <img src={entry.avatarUrl} alt="" className="h-full w-full object-cover" /> : isGroup ? <Users size={18} /> : <Radio size={18} />}</span>
+                <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-xs font-bold text-slate-200">{entry.title}</span>{entry.time && <time className="shrink-0 font-mono text-[9px] text-slate-500">{formatAppTime(entry.time)}</time>}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{entry.subtitle}</span></span>
+              </button>;
+            }
+            const user = entry.user;
             const contact = contacts.find((item) => item.id === user.id);
             return (
             <button type="button"
-              key={user.id} 
+              key={entry.key}
               onClick={() => handleSelectChat(contact ? { ...user, nickname: contact.nickname } : user)}
               aria-label={`Открыть чат с ${contact?.nickname || user.displayName || user.username}`}
               onContextMenu={(event) => {
@@ -1262,37 +1311,19 @@ export default function Chats() {
               </div>
               <span className="flex-1 min-w-0">
                 <span className="flex min-w-0 items-center justify-between gap-2 text-xs font-bold text-slate-200">
-                  <span className="truncate">{contact?.nickname || user.nickname || user.displayName || user.username}</span>
+                  <span className="truncate">{entry.title}</span>
+                  {entry.time && <time className="shrink-0 font-mono text-[9px] font-normal text-slate-500">{formatAppTime(entry.time)}</time>}
                   {((user as Contact).unreadCount ?? 0) > 0 && activeChat?.id !== user.id && (
                     <span className="badge-pop grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white">
                       {(user as Contact).unreadCount! > 99 ? '99+' : (user as Contact).unreadCount}
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">@{user.username}</span>
-                <span className="mt-1 block truncate text-[10px] text-slate-600">{user.statusText || (onlineUsers.has(String(user.id)) ? 'В сети' : 'Откройте, чтобы продолжить общение')}</span>
+                <span className="mt-1 block truncate text-[10px] text-slate-600">{entry.subtitle}</span>
               </span>
             </button>
           );})}
-
-          {(visibleWorkspaceGroups.length > 0 || !normalizedQuery) && <div className="flex items-center justify-between px-2 pb-1 pt-4"><p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Группы</p><button type="button" onClick={() => navigate('/groups')} className="text-[10px] font-semibold text-accent hover:text-t-primary">Открыть</button></div>}
-          {visibleWorkspaceGroups.map((group, idx) => (
-            <button key={`group:${group.id}`} type="button" onClick={() => navigate(`/groups?group=${encodeURIComponent(group.id)}`)} className="chat-card chat-list-item mb-1 flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition hover:bg-white/[0.04]" style={{ animationDelay: `${idx * 25}ms` }}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-accent/15 bg-accent/10 text-accent"><Users size={18} /></span>
-              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-slate-200">{group.title}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{group.memberCount} участников</span></span>
-            </button>
-          ))}
-          {!normalizedQuery && visibleWorkspaceGroups.length === 0 && <button type="button" onClick={() => navigate('/groups')} className="mb-1 w-full rounded-xl px-2.5 py-2 text-left text-[10px] text-slate-500 transition hover:bg-white/[0.04] hover:text-t-secondary">Создать или найти группу…</button>}
-
-          {(visibleWorkspaceChannels.length > 0 || !normalizedQuery) && <div className="flex items-center justify-between px-2 pb-1 pt-4"><p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Каналы</p><button type="button" onClick={() => navigate('/channels')} className="text-[10px] font-semibold text-accent hover:text-t-primary">Открыть</button></div>}
-          {visibleWorkspaceChannels.map((channel, idx) => (
-            <button key={`channel:${channel.id}`} type="button" onClick={() => navigate(`/channels?channel=${encodeURIComponent(channel.id)}`)} className="chat-card chat-list-item mb-1 flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition hover:bg-white/[0.04]" style={{ animationDelay: `${idx * 25}ms` }}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-accent/15 bg-accent/10 text-accent">{channel.avatarUrl ? <img src={channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={18} />}</span>
-              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-slate-200">{channel.title}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{channel.memberCount} подписчиков</span></span>
-            </button>
-          ))}
-          {!normalizedQuery && visibleWorkspaceChannels.length === 0 && <button type="button" onClick={() => navigate('/channels')} className="mb-1 w-full rounded-xl px-2.5 py-2 text-left text-[10px] text-slate-500 transition hover:bg-white/[0.04] hover:text-t-secondary">Подписаться на канал…</button>}
-          {!loading && !loadingWorkspaceItems && !searching && visibleUsers.length === 0 && visibleWorkspaceGroups.length === 0 && visibleWorkspaceChannels.length === 0 && (
+          {!loading && !loadingWorkspaceItems && !searching && unifiedEntries.length === 0 && (
             <p className="px-2 py-3 text-xs text-slate-500">{normalizedQuery ? 'Ничего не найдено.' : 'Пока нет переписок. Найдите пользователя или создайте группу/канал.'}</p>
           )}
         </div>

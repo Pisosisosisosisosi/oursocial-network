@@ -851,6 +851,7 @@ def get_contacts(current=Depends(get_current_user)):
                 not latest_message or latest_message["createdAt"] <= hidden_at
             )),
             "unreadCount": chat_stats.get(contact_id, {}).get("unread", 0),
+            "lastMessageAt": chat_stats.get(contact_id, {}).get("lastAt").isoformat() if chat_stats.get(contact_id, {}).get("lastAt") else None,
             "isContact": True,
         })
 
@@ -880,6 +881,7 @@ def get_contacts(current=Depends(get_current_user)):
             **({"lastSeen": profile.get("lastSeen")} if profile.get("showLastSeen", True) else {}),
             "chatHidden": False,
             "unreadCount": stats.get("unread", 0),
+            "lastMessageAt": stats.get("lastAt").isoformat() if stats.get("lastAt") else None,
             "isContact": False,
         })
 
@@ -1430,6 +1432,14 @@ async def edit_message(
 def list_groups(current=Depends(get_current_user)):
     user_id = current["userId"]
     groups = list(groups_collection().find({"members.userId": user_id}).sort("updatedAt", -1))
+    group_ids = [str(group["_id"]) for group in groups]
+    last_message_by_group = {
+        row["_id"]: row.get("lastMessageAt")
+        for row in messages_collection().aggregate([
+            {"$match": {"groupId": {"$in": group_ids}}},
+            {"$group": {"_id": "$groupId", "lastMessageAt": {"$max": "$createdAt"}}},
+        ])
+    } if group_ids else {}
     user_ids = {
         member["userId"]
         for group in groups
@@ -1454,6 +1464,8 @@ def list_groups(current=Depends(get_current_user)):
             "id": str(group["_id"]),
             "title": group["title"],
             "createdAt": group["createdAt"].isoformat(),
+            "updatedAt": group.get("updatedAt", group["createdAt"]).isoformat(),
+            "lastMessageAt": last_message_by_group[str(group["_id"])].isoformat() if last_message_by_group.get(str(group["_id"])) else None,
             "memberCount": len(group.get("members", [])),
             "members": [
                 {

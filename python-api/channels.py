@@ -128,7 +128,21 @@ def list_channels(current=Depends(get_current_user)):
             {"members.userId": user_id},
         ]
     }).sort("updatedAt", -1).limit(100))
-    return [serialize_channel(channel, user_id) for channel in channels]
+    channel_ids = [str(channel["_id"]) for channel in channels]
+    last_post_by_channel = {
+        row["_id"]: row.get("lastMessageAt")
+        for row in channel_posts_collection().aggregate([
+            {"$match": {"channelId": {"$in": channel_ids}}},
+            {"$group": {"_id": "$channelId", "lastMessageAt": {"$max": "$createdAt"}}},
+        ])
+    } if channel_ids else {}
+    return [
+        {
+            **serialize_channel(channel, user_id),
+            "lastMessageAt": last_post_by_channel[str(channel["_id"])].isoformat() if last_post_by_channel.get(str(channel["_id"])) else None,
+        }
+        for channel in channels
+    ]
 
 
 @router.post("")

@@ -41,6 +41,7 @@ export interface User {
 export interface Contact extends User {
   nickname: string;
   unreadCount?: number;
+  lastMessageAt?: string | null;
   isContact?: boolean;
   chatHidden?: boolean;
 }
