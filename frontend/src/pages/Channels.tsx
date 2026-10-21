@@ -51,7 +51,7 @@ const REACTIONS = ['❤️', '👍', '😂'];
 
 function formatDate(value: string) { return formatAppDateTime(value); }
 
-export default function Channels() {
+export default function Channels({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const { inviteCode } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -75,6 +75,8 @@ export default function Channels() {
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
 
+  useEffect(() => { if (searchParams.get('create') === '1') { setVisibility('public'); setCreating(true); setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true }); } if (searchParams.get('discover') === '1') setListMode('discover'); }, [searchParams, setSearchParams]);
+
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) || null;
   const activePosts = loadedPostChannelId === activeChannel?.id ? posts : [];
   const invitePreview = inviteCode && invitePreviewState?.code === inviteCode
@@ -96,17 +98,19 @@ export default function Channels() {
     try {
       const items = await loadChannels();
       const requested = searchParams.get('channel');
+      const discovering = searchParams.get('discover') === '1';
       const initial = requested && items.some((channel) => channel.id === requested)
         ? requested
-        : items.find((channel) => channel.isSubscribed)?.id || items[0]?.id || null;
-      if (initial) setActiveChannelId(initial);
+        : discovering ? null : items.find((channel) => channel.isSubscribed)?.id || items[0]?.id || null;
+      setActiveChannelId(initial);
+      if (initial && !requested && !discovering) setSearchParams({ channel: initial }, { replace: true });
     } catch (error) {
       console.error('Не удалось загрузить каналы:', error);
       showToast('Не удалось загрузить каналы.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [loadChannels, searchParams, showToast]);
+  }, [loadChannels, searchParams, setSearchParams, showToast]);
 
   const loadInvitePreview = useCallback(async (code: string, signal: AbortSignal) => {
     try {
@@ -411,7 +415,7 @@ export default function Channels() {
 
   return (
     <main className="animate-fade-in flex h-full min-h-0 w-full bg-bg-base text-t-primary">
-      <aside className={`${activeChannel ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-[340px]`}>
+      <aside className={`${embedded ? 'hidden' : activeChannel ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-[340px]`}>
         <WorkspaceSidebarHeader
           searchValue={search}
           onSearchChange={setSearch}
@@ -436,7 +440,7 @@ export default function Channels() {
         <footer className="border-t border-white/[0.08] px-4 py-3 text-center text-[10px] text-slate-600">Публичные каналы доступны всем участникам Skyline</footer>
       </aside>
 
-      <section className={`${activeChannel ? 'flex' : 'hidden md:flex'} min-w-0 flex-1 flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-accent/20 via-[#090d16] to-[#090d16]`}>
+      <section className={`${embedded || activeChannel ? 'flex' : 'hidden md:flex'} min-w-0 flex-1 flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-accent/20 via-[#090d16] to-[#090d16]`}>
         {!activeChannel ? (
           <div className="m-auto max-w-sm px-6 text-center">
             <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-accent/10 text-accent"><Radio size={29} /></div>
