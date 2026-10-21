@@ -461,7 +461,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
             <button type="button" onClick={() => { setVisibility('public'); setCreating(true); }} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent"><Plus size={16} /> Создать канал</button>
           </div>
         ) : <>
-          <header className="flex items-center gap-3 border-b border-white/[0.08] bg-panel/80 px-4 py-3 backdrop-blur-xl md:px-7">
+          <header className="relative z-10 flex items-center gap-3 border-b border-slate-800/60 p-2.5 glass-panel sm:p-4">
             <button type="button" onClick={() => { setActiveChannelId(null); setSearchParams({}); }} aria-label="Назад к каналам" className="rounded-xl p-2 text-t-secondary hover:bg-white/5 md:hidden"><ArrowLeft size={18} /></button>
             <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-accent/15 text-accent">
               {activeChannel.avatarUrl ? <img src={activeChannel.avatarUrl} alt="" className="h-full w-full object-cover" /> : activeChannel.visibility === 'private' ? <LockKeyhole size={18} /> : <Radio size={19} />}
@@ -478,21 +478,21 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           {activeChannel.description && <div className="border-b border-white/[0.06] px-5 py-3 text-sm leading-6 text-t-secondary md:px-8">{activeChannel.description}</div>}
           {inviteLink && <button type="button" onClick={() => void navigator.clipboard.writeText(inviteLink).then(() => showToast('Ссылка скопирована.', 'success')).catch((error: unknown) => { console.error('Не удалось скопировать ссылку:', error); showToast('Не удалось скопировать ссылку.', 'error'); })} className="flex items-center gap-2 border-b border-accent/10 bg-accent/[0.06] px-5 py-2.5 text-left text-xs text-accent md:px-8"><Copy size={13} /> Ссылка-приглашение создана. Нажмите, чтобы скопировать</button>}
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-8">
+          <div className="chat-wallpaper-surface custom-scrollbar relative z-10 min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6">
             {loadingPosts && <div className="mx-auto max-w-2xl space-y-3">{[0, 1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-3xl bg-white/[0.04]" />)}</div>}
             {!loadingPosts && activePosts.length === 0 && <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-2.5 rounded-3xl border border-white/[0.06] bg-white/[0.02] p-8 text-center animate-scale-in">
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.04] text-slate-500"><Hash size={22} /></div>
               <p className="mt-4 text-sm font-semibold">Пока нет публикаций</p>
               <p className="mt-1 text-xs text-slate-500">{activeChannel.isOwner ? 'Напишите первый пост для подписчиков.' : 'Здесь появятся новые публикации канала.'}</p>
             </div>}
-            <div className="mx-auto max-w-2xl space-y-4">
+            <div className="mx-auto max-w-2xl space-y-3">
               {activePosts.map((post) => {
                 const counts = REACTIONS.map((emoji) => ({
                   emoji,
                   count: post.reactions.filter((reaction) => reaction.emoji === emoji).length,
                   mine: post.reactions.some((reaction) => reaction.emoji === emoji && reaction.userId === user?.id),
                 }));
-                return <article key={post.id} className="channel-post overflow-hidden rounded-3xl border border-white/[0.08] bg-[#111a2a]/90 shadow-[0_12px_40px_rgba(0,0,0,0.16)]">
+                return <article key={post.id} className="channel-post chat-message-bubble overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111a2a]/90 shadow-lg">
                   {post.pinned && <div className="flex items-center gap-2 border-b border-accent/10 bg-accent/[0.06] px-5 py-2 text-[11px] font-semibold text-accent"><Pin size={13} /> Закреплённая публикация</div>}
                   <div className="flex items-center gap-3 px-5 pt-4">
                     <div className="grid h-9 w-9 place-items-center rounded-xl bg-accent/15 text-accent"><Radio size={16} /></div>
@@ -512,8 +512,8 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
             </div>
           </div>
 
-          {activeChannel.isOwner && <form onSubmit={(event) => void publishPost(event)} className="border-t border-white/[0.08] bg-panel/80 p-3 backdrop-blur-xl md:px-8 md:py-4">
-            <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-white/10 bg-slate-950/50 p-2 focus-within:border-accent/30">
+          {activeChannel.isOwner && <form onSubmit={(event) => void publishPost(event)} className="glass-panel relative z-10 mx-3 mb-3 mt-2 rounded-2xl p-1.5 shadow-2xl transition-all focus-within:ring-2 focus-within:ring-accent/30 sm:mx-5 sm:p-2">
+            <div className="mx-auto flex max-w-2xl items-end gap-2">
               <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10_000} rows={1} placeholder="Опубликовать сообщение для подписчиков…" className="max-h-36 min-h-10 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-600" />
               <button type="submit" disabled={busy || !draft.trim()} aria-label="Опубликовать" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"><Send size={16} /></button>
             </div>
