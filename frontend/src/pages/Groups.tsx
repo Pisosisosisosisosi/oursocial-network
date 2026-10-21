@@ -6,7 +6,6 @@ import { api, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
-import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import { formatAppDateTime } from '../time';
 import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
@@ -588,7 +587,6 @@ export default function Groups() {
           onSearchChange={setGroupSearch}
           searchPlaceholder="Поиск групп"
         />
-        <WorkspaceTabs />
         <header className="flex items-center justify-between border-b border-white/[0.08] p-4">
           <button type="button" onClick={() => navigate('/')} className="rounded-xl p-2 text-t-secondary transition hover:bg-white/[0.06] hover:text-white" aria-label="Назад к чатам">
             <ArrowLeft size={18} />

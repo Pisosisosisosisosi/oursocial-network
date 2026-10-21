@@ -8,7 +8,6 @@ import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import { decryptBytes, decryptMessage, encryptBytes, encryptMessage, isEncryptedMessage, packAttachmentPayload, unpackAttachmentPayload } from '../crypto/encrypt';
-import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import EmojiPicker from '../components/chat/EmojiPicker';
 import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
@@ -1168,20 +1167,19 @@ export default function Chats() {
       `}</style>
 
       {/* 1. ЛЕВАЯ КОЛОНКА */}
-      <div className={`${activeChat ? 'hidden md:flex' : 'flex'} w-full md:w-[340px] shrink-0 flex-col glass-panel border-r border-slate-800/60 h-full z-10 relative`}>
+      <div className={`${activeChat ? 'hidden md:flex md:w-[340px]' : 'flex w-full'} shrink-0 flex-col glass-panel border-r border-slate-800/60 h-full z-10 relative`}>
         <WorkspaceSidebarHeader
           searchValue={searchQuery}
           onSearchChange={handleSearchChange}
           searchPlaceholder="Найти по @username целиком..."
         />
-        <WorkspaceTabs />
         {searchQuery.trim() && !searchQuery.trim().startsWith('@') && (
           <p className="px-4 pt-2 text-[10px] text-slate-500">Укажите полный username вместе с @, например @darius_writer.</p>
         )}
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex justify-between">
-            <span>{searchQuery.trim() ? `Результаты (${visibleUsers.length})` : `Контакты (${contacts.length})`}</span>
+            <span>{searchQuery.trim() ? `Результаты (${visibleUsers.length})` : `Чаты (${contacts.length})`}</span>
             <span className="text-[10px] normal-case tracking-normal text-slate-600">
               {onlineUsers.size} в сети
             </span>
@@ -1259,7 +1257,7 @@ export default function Chats() {
       </div>
 
       {/* 2. ЦЕНТРАЛЬНАЯ КОЛОНКА */}
-      <div className={`${activeChat ? 'flex' : 'hidden md:flex'} min-w-0 min-h-0 flex-1 flex-col bg-bg-base h-full relative z-0`}>
+      <div className={`${activeChat ? 'flex' : 'hidden'} min-w-0 min-h-0 flex-1 flex-col bg-bg-base h-full relative z-0`}>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-accent/10 via-[#090d16] to-black pointer-events-none"></div>
 
         {activeChat ? (

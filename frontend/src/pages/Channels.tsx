@@ -5,7 +5,6 @@ import { api } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
-import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import { formatAppDateTime } from '../time';
 
@@ -413,7 +412,6 @@ export default function Channels() {
           onSearchChange={setSearch}
           searchPlaceholder="Поиск каналов"
         />
-        <WorkspaceTabs />
         <header className="flex items-center gap-3 border-b border-white/[0.08] px-4 py-4">
           <button type="button" onClick={() => navigate('/')} aria-label="Назад к чатам" className="rounded-xl p-2 text-t-secondary transition hover:bg-white/[0.06] hover:text-white"><ArrowLeft size={18} /></button>
           <div className="min-w-0 flex-1">
