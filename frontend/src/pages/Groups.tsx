@@ -774,6 +774,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div><h3 className="text-sm font-semibold">Участники группы</h3><p className="mt-1 text-[11px] text-slate-500">{activeGroup.members.length} участников · владелец и администраторы отмечены отдельно</p></div>
                   <button type="button" onClick={() => void copyInviteLink()} className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2 text-xs text-accent hover:bg-accent/15"><Copy size={14} /> Скопировать приглашение</button>
+                  <button type="button" onClick={() => setSettingsOpen(false)} aria-label="Закрыть настройки группы" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-t-secondary hover:bg-white/5 hover:text-white"><X size={16} /></button>
                 </div>
                 <div className="space-y-1.5">
                   {activeGroup.members.map((member) => {
