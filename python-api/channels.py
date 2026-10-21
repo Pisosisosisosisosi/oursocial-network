@@ -136,6 +136,10 @@ def list_channels(current=Depends(get_current_user)):
             {"$group": {"_id": "$channelId", "lastMessageAt": {"$max": "$createdAt"}}},
         ])
     } if channel_ids else {}
+    channels.sort(
+        key=lambda channel: last_post_by_channel.get(str(channel["_id"])) or channel.get("updatedAt") or channel.get("createdAt"),
+        reverse=True,
+    )
     return [
         {
             **serialize_channel(channel, user_id),
