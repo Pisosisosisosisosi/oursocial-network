@@ -768,6 +768,23 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
 
   useEffect(() => {
     const requestedChatId = searchParams.get('chat');
+    const requestedUsername = searchParams.get('user');
+    if (requestedUsername && !loading) {
+      let current = true;
+      void api.get<User[]>('/users/search', { params: { q: requestedUsername } })
+        .then((response) => {
+          if (!current) return;
+          const target = response.data.find((candidate) => candidate.username.toLocaleLowerCase() === requestedUsername.toLocaleLowerCase());
+          if (target) {
+            setSearchParams({}, { replace: true });
+            void handleSelectChat(target);
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('Не удалось открыть пользователя:', error);
+        });
+      return () => { current = false; };
+    }
     if (!requestedChatId || loading || !contacts.length) return;
     const requestedContact = contacts.find((contact) => String(contact.id) === requestedChatId);
     if (!requestedContact) return;
