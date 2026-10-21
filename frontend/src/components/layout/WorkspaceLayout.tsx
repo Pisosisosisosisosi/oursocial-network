@@ -63,6 +63,20 @@ export default function WorkspaceLayout() {
               <div className="space-y-1">
                 <button
                   type="button"
+                  onClick={() => navigate('/chats?create=1')}
+                  className="group/item flex w-full items-center gap-3 rounded-xl border border-transparent p-2.5 text-left transition duration-150 hover:border-emerald-300/20 hover:bg-emerald-300/[0.07] focus-visible:border-emerald-300/30 focus-visible:bg-emerald-300/[0.07] focus-visible:outline-none"
+                >
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-300/10 text-emerald-300 transition group-hover/item:bg-emerald-300/15">
+                    <MessageSquarePlus size={19} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-semibold text-slate-100">Новый чат</span>
+                    <span className="mt-0.5 block text-[11px] leading-4 text-slate-400">Найдите человека и начните переписку</span>
+                  </span>
+                  <ArrowUpRight size={15} className="shrink-0 text-slate-500 transition group-hover/item:-translate-y-0.5 group-hover/item:translate-x-0.5 group-hover/item:text-emerald-300" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => navigate('/groups?create=1')}
                   className="group/item flex w-full items-center gap-3 rounded-xl border border-transparent p-2.5 text-left transition duration-150 hover:border-accent/20 hover:bg-accent/[0.09] focus-visible:border-accent/30 focus-visible:bg-accent/[0.09] focus-visible:outline-none"
                 >
