@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, typ
 import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, MessageCircle, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, keysApi, type Contact, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
@@ -140,6 +140,7 @@ async function decryptChatMessage(message: ChatMessage, userId?: string): Promis
 
 export default function Chats() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser, e2eeStatus } = useAuth();
   const showToast = useToast();
   const { startCall } = useCallActions();
@@ -764,6 +765,15 @@ export default function Chats() {
       setLoadingMessages(false);
     }
   };
+
+  useEffect(() => {
+    const requestedChatId = searchParams.get('chat');
+    if (!requestedChatId || loading || !contacts.length) return;
+    const requestedContact = contacts.find((contact) => String(contact.id) === requestedChatId);
+    if (!requestedContact) return;
+    setSearchParams({}, { replace: true });
+    void handleSelectChat(requestedContact);
+  }, [searchParams, contacts, loading, setSearchParams]);
 
   const handleSaveContact = async (user: User, existingNickname = '') => {
     const nickname = window.prompt(
