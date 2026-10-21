@@ -57,7 +57,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       }
       if (groupsResult.status === 'fulfilled') setGroups(groupsResult.value.data);
       if (channelsResult.status === 'fulfilled') {
-        setChannels(channelsResult.value.data.filter((channel) => channel.isSubscribed || (includeDiscover && channel.visibility === 'public')));
+        setChannels(channelsResult.value.data);
       }
     }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
@@ -115,7 +115,9 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       kind: 'group', id: group.id, title: group.title,
       subtitle: `${group.memberCount} участников`, time: group.lastMessageAt,
     }));
-    const channelEntries: Entry[] = channels.map((channel) => ({
+    const channelEntries: Entry[] = channels
+      .filter((channel) => channel.isSubscribed || includeDiscover || (query.length > 0 && channel.visibility === 'public'))
+      .map((channel) => ({
       kind: 'channel', id: channel.id, title: channel.title,
       subtitle: `${channel.memberCount} подписчиков · ${channel.description || 'Канал Skyline'}`,
       time: channel.lastMessageAt, channel,
@@ -131,7 +133,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
         return searchable.toLocaleLowerCase().includes(query.replace(/^@/, '').trim());
       })
       .sort((a, b) => (Date.parse(b.time || '') || 0) - (Date.parse(a.time || '') || 0));
-  }, [contacts, groups, channels, searchedUsers, search]);
+  }, [contacts, groups, channels, searchedUsers, search, includeDiscover]);
 
   if (loading) return <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" role="status" aria-label="Загрузка переписок">{[0, 1, 2, 3].map((item) => <div key={item} className="chat-skeleton h-14 rounded-xl" />)}</div>;
   if (!entries.length) return <div className="m-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 text-center text-xs leading-5 text-slate-500">{searchingUsers ? 'Ищем людей, группы и каналы…' : search.trim() ? 'Ничего не найдено.' : 'Здесь появятся ваши личные чаты, группы и каналы.'}</div>;
