@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import { decryptBytes, decryptMessage, encryptBytes, encryptMessage, isEncryptedMessage, packAttachmentPayload, unpackAttachmentPayload } from '../crypto/encrypt';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
+import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import EmojiPicker from '../components/chat/EmojiPicker';
 import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
 import { useCallActions } from '../context/CallContext';
@@ -145,7 +146,7 @@ export default function Chats() {
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [chatPreviews, setChatPreviews] = useState<Record<string, string>>({});
-  const [listFilter, setListFilter] = useState<'all' | 'unread' | 'groups' | 'channels'>('all');
+  const [listFilter, setListFilter] = useState<'all' | 'unread'>('all');
   const [workspaceGroups, setWorkspaceGroups] = useState<WorkspaceGroupItem[]>([]);
   const [workspaceChannels, setWorkspaceChannels] = useState<WorkspaceChannelItem[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
@@ -1243,9 +1244,8 @@ export default function Chats() {
     })),
   ].sort((first, second) => (Date.parse(second.time || '') || 0) - (Date.parse(first.time || '') || 0));
   const unifiedEntries = allUnifiedEntries.filter((entry) => {
-    if (listFilter === 'all') return true;
     if (listFilter === 'unread') return entry.kind === 'chat' && (entry.unreadCount || 0) > 0;
-    return entry.kind === listFilter.slice(0, -1);
+    return true;
   });
 
   return (
@@ -1272,6 +1272,7 @@ export default function Chats() {
           onSearchChange={handleSearchChange}
           searchPlaceholder="Поиск чатов, групп, каналов или @username"
         />
+        <div className="border-b border-white/[0.06] px-3 py-2"><WorkspaceTabs /></div>
 
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain custom-scrollbar p-3">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex justify-between">
@@ -1285,7 +1286,7 @@ export default function Chats() {
             <button type="button" onClick={() => navigate('/channels')} className="rounded-lg px-2 py-1 text-[9px] font-medium text-t-secondary transition hover:bg-white/[0.05] hover:text-accent">+ Канал</button>
           </div>}
           {!normalizedQuery && <div className="mb-2 flex gap-1 overflow-x-auto px-2 pb-1">
-            {([['all', 'Все'], ['unread', 'Непрочитанные'], ['groups', 'Группы'], ['channels', 'Каналы']] as const).map(([filter, label]) => <button key={filter} type="button" onClick={() => setListFilter(filter)} aria-pressed={listFilter === filter} className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition ${listFilter === filter ? 'bg-accent/15 text-accent' : 'text-slate-500 hover:bg-white/[0.05] hover:text-slate-200'}`}>{label}</button>)}
+            {([['all', 'Все'], ['unread', 'Непрочитанные']] as const).map(([filter, label]) => <button key={filter} type="button" onClick={() => setListFilter(filter)} aria-pressed={listFilter === filter} className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition ${listFilter === filter ? 'bg-accent/15 text-accent' : 'text-slate-500 hover:bg-white/[0.05] hover:text-slate-200'}`}>{label}</button>)}
           </div>}
           
           {loading && (
