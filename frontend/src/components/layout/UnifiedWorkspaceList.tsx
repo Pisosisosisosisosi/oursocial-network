@@ -147,7 +147,10 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
             key={`${entry.kind}:${entry.id}`}
             type="button"
             onClick={() => {
-              if (entry.kind === 'chat') navigate('/chats?chat=' + encodeURIComponent(entry.id));
+              if (entry.kind === 'chat') {
+                if (entry.contact.isContact === false) navigate('/chats?user=' + encodeURIComponent(entry.contact.username));
+                else navigate('/chats?chat=' + encodeURIComponent(entry.id));
+              }
               else if (entry.kind === 'group') navigate('/groups?group=' + encodeURIComponent(entry.id));
               else navigate('/channels?channel=' + encodeURIComponent(entry.id) + (includeDiscover ? '&discover=1' : ''));
             }}
