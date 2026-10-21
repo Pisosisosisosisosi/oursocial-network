@@ -132,14 +132,14 @@ export default function Groups() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedGroupId = searchParams.get('group');
-  useEffect(() => {
-    if (requestedGroupId && requestedGroupId !== activeGroupId) setActiveGroupId(requestedGroupId);
-  }, [requestedGroupId, activeGroupId]);
   const { user, e2eeStatus } = useAuth();
   const userId = user?.id;
   const showToast = useToast();
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(requestedGroupId);
+  useEffect(() => {
+    if (requestedGroupId && requestedGroupId !== activeGroupId) setActiveGroupId(requestedGroupId);
+  }, [requestedGroupId, activeGroupId]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingHistory, setSearchingHistory] = useState(false);
