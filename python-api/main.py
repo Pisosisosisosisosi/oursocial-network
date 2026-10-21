@@ -1453,6 +1453,10 @@ def list_groups(current=Depends(get_current_user)):
             {"$group": {"_id": "$groupId", "lastMessageAt": {"$max": "$createdAt"}}},
         ])
     } if group_ids else {}
+    groups.sort(
+        key=lambda group: last_message_by_group.get(str(group["_id"])) or group.get("updatedAt") or group.get("createdAt"),
+        reverse=True,
+    )
     user_ids = {
         member["userId"]
         for group in groups
