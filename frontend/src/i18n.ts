@@ -60,7 +60,11 @@ export function setAppLanguage(language: AppLanguage) {
 
 function translateDocument(language: AppLanguage) {
   const dictionary = translations[language] || {};
-  const reverseValues = new Set(Object.values(translations).flatMap((entries) => Object.values(entries || {})));
+  const reverse = new Map<string, string>();
+  Object.entries(translations).forEach(([code, entries]) => {
+    if (code === 'ru') return;
+    Object.entries(entries || {}).forEach(([source, translated]) => { if (!reverse.has(translated)) reverse.set(translated, source); });
+  });
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let node: Node | null;
   while ((node = walker.nextNode())) {
@@ -68,9 +72,9 @@ function translateDocument(language: AppLanguage) {
     const raw = textNode.data;
     const trimmed = raw.trim();
     if (!trimmed) continue;
-    const translatedAlready = reverseValues.has(trimmed);
-    const replacement = dictionary[trimmed] || (translatedAlready ? trimmed : undefined);
-    if (replacement && replacement !== trimmed) {
+    const source = reverse.get(trimmed) || trimmed;
+    const replacement = dictionary[source] || source;
+    if (replacement !== trimmed) {
       const start = raw.indexOf(trimmed);
       textNode.data = raw.slice(0, start) + replacement + raw.slice(start + trimmed.length);
     }
