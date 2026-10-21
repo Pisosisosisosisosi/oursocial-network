@@ -116,7 +116,7 @@ export default function Settings() {
   const [chatBorderColor, setChatBorderColor] = useState(() => readChatColorPreference('skylineChatBorderColor', CHAT_STYLE_DEFAULTS.border));
   const [ownMessageColor, setOwnMessageColor] = useState(() => readChatColorPreference('skylineChatOwnMessageColor', CHAT_STYLE_DEFAULTS.ownMessage));
   const [otherMessageColor, setOtherMessageColor] = useState(() => readChatColorPreference('skylineChatOtherMessageColor', CHAT_STYLE_DEFAULTS.otherMessage));
-  const [bubbleStyle, setBubbleStyle] = useState(() => ['outlined', 'glass'].includes(localStorage.getItem('skylineChatBubbleStyle') || '') ? localStorage.getItem('skylineChatBubbleStyle')! : 'soft');
+  const [bubbleStyle, setBubbleStyle] = useState(() => ['outlined', 'glass', 'none'].includes(localStorage.getItem('skylineChatBubbleStyle') || '') ? localStorage.getItem('skylineChatBubbleStyle')! : 'soft');
   const [textStyle, setTextStyle] = useState(() => ['glow', 'bold'].includes(localStorage.getItem('skylineChatTextStyle') || '') ? localStorage.getItem('skylineChatTextStyle')! : 'normal');
 
   useEffect(() => {
@@ -395,8 +395,8 @@ export default function Settings() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <fieldset>
                   <legend className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-t-secondary">Форма сообщений</legend>
-                  <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/[0.07] bg-slate-950/30 p-1">
-                    {([['soft', 'Мягкая'], ['outlined', 'Контур'], ['glass', 'Стекло']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={bubbleStyle === value} onClick={() => chooseChatStyle('skylineChatBubbleStyle', value, setBubbleStyle)} className={`min-h-9 rounded-lg px-1 text-[10px] font-semibold transition ${bubbleStyle === value ? 'bg-accent/20 text-accent shadow-sm' : 'text-t-secondary hover:bg-white/5'}`}>{label}</button>)}
+                  <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[0.07] bg-slate-950/30 p-1 sm:grid-cols-4">
+                    {([['soft', 'Мягкая'], ['outlined', 'Контур'], ['glass', 'Стекло'], ['none', 'Без обводки']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={bubbleStyle === value} onClick={() => chooseChatStyle('skylineChatBubbleStyle', value, setBubbleStyle)} className={`min-h-9 rounded-lg px-1 text-[10px] font-semibold transition ${bubbleStyle === value ? 'bg-accent/20 text-accent shadow-sm' : 'text-t-secondary hover:bg-white/5'}`}>{label}</button>)}
                   </div>
                 </fieldset>
                 <fieldset>
