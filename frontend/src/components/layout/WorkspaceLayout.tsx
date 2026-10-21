@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Radio } from 'lucide-react';
+import { Pencil, Radio, Users } from 'lucide-react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import WorkspaceSidebarHeader from './WorkspaceSidebarHeader';
 import UnifiedWorkspaceList from './UnifiedWorkspaceList';
@@ -16,11 +16,31 @@ export default function WorkspaceLayout() {
   const showDiscover = params.get('discover') === '1';
   return (
     <main className="flex h-full min-h-0 w-full overflow-hidden bg-bg-base text-t-primary">
-      <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-[340px]`}>
+      <aside className={`${activeId ? 'hidden md:flex' : 'flex'} relative w-full shrink-0 flex-col border-r border-white/[0.08] bg-panel md:w-[340px]`}>
         <WorkspaceSidebarHeader searchValue={search} onSearchChange={setSearch} searchPlaceholder="Поиск чатов, групп и каналов" />
         <div className="flex items-center justify-between px-4 pb-1 pt-3"><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Все переписки</span>
           <button type="button" onClick={() => navigate(showDiscover ? '/channels' : '/channels?discover=1')} className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-accent"><Radio size={12} /> {showDiscover ? 'Мои каналы' : 'Найти каналы'}</button></div>
         <UnifiedWorkspaceList search={search} activeKind={activeKind} activeId={activeId} includeDiscover={showDiscover} />
+        <div className="group absolute bottom-4 left-4 z-50">
+          <button
+            type="button"
+            aria-label="Создать"
+            title="Создать"
+            className="grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-accent text-white shadow-lg shadow-accent/20 transition duration-200 hover:scale-105 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
+          >
+            <Pencil size={19} />
+          </button>
+          <div className="pointer-events-none absolute bottom-0 left-14 w-48 translate-x-1 opacity-0 transition duration-200 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-x-0 group-focus-within:opacity-100">
+            <div className="rounded-2xl border border-white/10 bg-[#111a2a] p-1.5 shadow-2xl">
+              <button type="button" onClick={() => navigate('/groups?create=1')} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.07] hover:text-white">
+                <Users size={16} className="text-accent" /> Создать группу
+              </button>
+              <button type="button" onClick={() => navigate('/channels?create=1')} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.07] hover:text-white">
+                <Radio size={16} className="text-cyan-300" /> Создать канал
+              </button>
+            </div>
+          </div>
+        </div>
       </aside><section className={`${activeId ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}>{activeId ? <Outlet /> : <div className="hidden flex-1 flex-col items-center justify-center text-center text-slate-500 md:flex"><div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl border border-white/[0.08] bg-white/[0.03]"><Radio size={26} className="text-accent/60" /></div><p className="text-sm font-medium text-t-secondary">Выберите чат</p><p className="mt-1 max-w-xs text-xs leading-5 text-slate-500">Откройте переписку из списка слева, чтобы прочитать сообщения и ответить.</p></div>}</section>
     </main>
   );
