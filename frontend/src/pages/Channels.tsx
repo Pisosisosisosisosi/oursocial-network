@@ -518,29 +518,49 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
         </>}
       </section>
 
-      {(creating || editing) && <div className="fixed inset-0 z-[120] flex justify-end overflow-y-auto bg-black/60 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) { setCreating(false); setEditing(false); } }}>
-        <section className="my-auto min-h-full w-full max-w-lg border-l border-white/10 bg-panel p-5 shadow-2xl md:p-7">
-          <header className="mb-5 flex items-start justify-between gap-3">
-            <div><h2 className="text-lg font-bold">{creating ? 'Создать канал' : 'Настройки канала'}</h2><p className="mt-1 text-xs text-slate-500">{creating ? 'Публикуйте новости для своих подписчиков.' : 'Управляйте информацией и доступом к каналу.'}</p></div>
-            <button type="button" onClick={() => { setCreating(false); setEditing(false); }} aria-label="Закрыть" className="rounded-xl p-2 text-slate-500 hover:bg-white/5 hover:text-white"><X size={18} /></button>
+      {(creating || editing) && <div className="fixed inset-0 z-[120] flex justify-center overflow-y-auto bg-[#030712]/80 p-3 backdrop-blur-md sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) { setCreating(false); setEditing(false); } }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="channel-form-title" className="my-auto w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/10 bg-[#101827] shadow-[0_30px_100px_rgba(0,0,0,0.55)] animate-scale-in">
+          <header className="relative overflow-hidden border-b border-white/[0.07] px-5 pb-6 pt-6 sm:px-8">
+            <div className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full bg-sky-400/10 blur-3xl" />
+            <div className="relative flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-sky-400/20 bg-gradient-to-br from-sky-400/20 to-accent/10 text-sky-300 shadow-lg shadow-sky-500/10"><Radio size={25} /></div>
+                <div><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-sky-300">{creating ? 'Новое пространство' : 'Управление сообществом'}</p><h2 id="channel-form-title" className="mt-1 text-xl font-bold tracking-tight text-white sm:text-2xl">{creating ? 'Создать канал' : 'Настройки канала'}</h2><p className="mt-1.5 max-w-md text-xs leading-5 text-slate-400">{creating ? 'Поделитесь новостями, идеями и публикациями со своей аудиторией.' : 'Обновите описание и параметры доступа к каналу.'}</p></div>
+              </div>
+              <button type="button" onClick={() => { setCreating(false); setEditing(false); }} aria-label="Закрыть" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.07] text-slate-400 transition hover:border-white/15 hover:bg-white/[0.06] hover:text-white"><X size={17} /></button>
+            </div>
           </header>
-          <form onSubmit={creating ? (event) => void createChannel(event) : (event) => void saveChannelSettings(event)} className="space-y-4">
-            {editing && activeChannel && <div className="flex items-center gap-3 rounded-2xl bg-slate-950/40 p-3">
-              <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-xl bg-accent/15 text-accent">{activeChannel.avatarUrl ? <img src={activeChannel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={19} />}</div>
-              <label className="flex-1 text-xs font-medium text-slate-300">Изображение канала <span className="mt-1 block text-[10px] text-slate-500">PNG, JPG или WebP · до 1 МБ</span><input type="file" name="avatar" accept="image/*" className="mt-2 block w-full text-[10px] text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-2 file:py-1.5 file:text-[10px] file:text-slate-200" /></label>
-            </div>}
-            <label className="block text-xs font-medium text-slate-300">Название<input name="title" required minLength={2} maxLength={64} defaultValue={editing ? activeChannel?.title : title} onChange={creating ? (event) => setTitle(event.target.value) : undefined} placeholder="Например, Skyline Новости" className="mt-1.5 h-11 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 text-sm outline-none focus:border-accent/50" /></label>
-            <label className="block text-xs font-medium text-slate-300">Описание<textarea name="description" maxLength={500} rows={3} defaultValue={editing ? activeChannel?.description : description} onChange={creating ? (event) => setDescription(event.target.value) : undefined} placeholder="О чём этот канал?" className="mt-1.5 w-full resize-y rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2.5 text-sm outline-none focus:border-accent/50" /></label>
-            <fieldset><legend className="mb-2 text-xs font-medium text-slate-300">Доступ к каналу</legend><div className="grid grid-cols-2 gap-2">
-              {(['public', 'private'] as const).map((kind) => <label key={kind} className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition ${visibility === kind ? 'border-accent/35 bg-accent/[0.07]' : 'border-white/[0.08] hover:bg-white/[0.03]'}`}>
-                <input type="radio" name="visibility" value={kind} checked={visibility === kind} onChange={() => setVisibility(kind)} className="mt-0.5 accent-accent" />
-                <span><span className="flex items-center gap-1.5 text-xs font-semibold">{kind === 'public' ? <Radio size={13} /> : <LockKeyhole size={13} />}{kind === 'public' ? 'Публичный' : 'Приватный'}</span><span className="mt-1 block text-[10px] leading-4 text-slate-500">{kind === 'public' ? 'Можно найти в каталоге.' : 'Доступ только по ссылке.'}</span></span>
-              </label>)}
-            </div></fieldset>
-            <div className="flex flex-col-reverse gap-2 border-t border-white/[0.07] pt-4 sm:flex-row sm:items-center">
-              {editing && <button type="button" disabled={busy} onClick={() => void deleteChannel()} className="mr-auto inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-400/10 disabled:opacity-50"><Trash2 size={14} /> Удалить канал</button>}
-              <button type="button" onClick={() => { setCreating(false); setEditing(false); }} className="rounded-xl px-4 py-2.5 text-xs font-semibold text-t-secondary hover:bg-white/5">Отмена</button>
-              <button type="submit" disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-accent disabled:opacity-50"><Check size={15} />{busy ? 'Сохраняем…' : creating ? 'Создать канал' : 'Сохранить'}</button>
+          <form onSubmit={creating ? (event) => void createChannel(event) : (event) => void saveChannelSettings(event)} className="grid gap-0 md:grid-cols-[minmax(0,1fr)_250px]">
+            <div className="space-y-5 px-5 py-6 sm:px-8">
+              {editing && activeChannel && <div className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
+                <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-sky-400/10 text-sky-300">{activeChannel.avatarUrl ? <img src={activeChannel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={19} />}</div>
+                <label className="min-w-0 flex-1 text-xs font-semibold text-slate-200">Изображение канала <span className="mt-1 block text-[10px] font-normal text-slate-500">PNG, JPG или WebP · до 1 МБ</span><input type="file" name="avatar" accept="image/*" className="mt-2 block w-full text-[10px] text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-2 file:py-1.5 file:text-[10px] file:text-slate-200" /></label>
+              </div>}
+              <div><div className="mb-2 flex items-center justify-between gap-3"><label htmlFor="channel-title" className="text-xs font-semibold text-slate-200">Название канала</label><span className="text-[10px] tabular-nums text-slate-500">{title.length}/64</span></div><input id="channel-title" name="title" required minLength={2} maxLength={64} value={creating ? title : undefined} defaultValue={editing ? activeChannel?.title : undefined} onChange={creating ? (event) => setTitle(event.target.value) : undefined} placeholder="Например, Skyline Новости" className="h-12 w-full rounded-2xl border border-white/10 bg-[#080e19]/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-600 hover:border-white/15 focus:border-sky-400/50 focus:ring-4 focus:ring-sky-400/10" /></div>
+              <div><div className="mb-2 flex items-center justify-between gap-3"><label htmlFor="channel-description" className="text-xs font-semibold text-slate-200">Описание</label><span className="text-[10px] tabular-nums text-slate-500">{description.length}/500</span></div><textarea id="channel-description" name="description" maxLength={500} rows={4} value={creating ? description : undefined} defaultValue={editing ? activeChannel?.description : undefined} onChange={creating ? (event) => setDescription(event.target.value) : undefined} placeholder="Расскажите, о чём этот канал и что здесь найдут подписчики…" className="w-full resize-y rounded-2xl border border-white/10 bg-[#080e19]/80 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 hover:border-white/15 focus:border-sky-400/50 focus:ring-4 focus:ring-sky-400/10" /></div>
+              <fieldset><legend className="mb-2.5 text-xs font-semibold text-slate-200">Кто сможет найти канал?</legend><div className="grid gap-2 sm:grid-cols-2">
+                {(['public', 'private'] as const).map((kind) => <label key={kind} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition ${visibility === kind ? 'border-sky-400/35 bg-sky-400/[0.07] shadow-[inset_0_0_0_1px_rgba(56,189,248,0.04)]' : 'border-white/[0.08] hover:border-white/15 hover:bg-white/[0.025]'}`}>
+                  <input type="radio" name="visibility" value={kind} checked={visibility === kind} onChange={() => setVisibility(kind)} className="mt-1 accent-sky-400" />
+                  <span className="min-w-0 flex-1"><span className="flex items-center gap-2 text-xs font-semibold text-slate-200">{kind === 'public' ? <Radio size={15} className="text-sky-300" /> : <LockKeyhole size={15} className="text-amber-300" />}{kind === 'public' ? 'Публичный' : 'Приватный'}</span><span className="mt-1.5 block text-[10px] leading-4 text-slate-500">{kind === 'public' ? 'Появится в каталоге, его смогут найти другие.' : 'Вступление будет доступно по ссылке-приглашению.'}</span></span>
+                </label>)}
+              </div></fieldset>
+            </div>
+            <aside className="border-t border-white/[0.07] bg-black/10 px-5 py-6 sm:px-8 md:border-l md:border-t-0 md:px-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Предпросмотр</p>
+              <div className="mt-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a111e]">
+                <div className="h-16 bg-gradient-to-br from-sky-500/20 via-accent/10 to-transparent" />
+                <div className="-mt-8 px-4 pb-4">
+                  <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border-4 border-[#0a111e] bg-gradient-to-br from-sky-400/20 to-accent/15 text-sky-300 shadow-lg">{editing && activeChannel?.avatarUrl ? <img src={activeChannel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={23} />}</div>
+                  <p className="mt-3 break-words text-sm font-bold text-white">{(creating ? title : activeChannel?.title || title).trim() || 'Название канала'}</p>
+                  <p className="mt-2 min-h-12 whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-400">{(creating ? description : activeChannel?.description || description).trim() || 'Здесь будет отображаться описание вашего канала.'}</p>
+                  <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/[0.07] pt-3"><span className="inline-flex items-center gap-1.5 text-[10px] text-slate-500"><Users size={12} />{editing ? activeChannel?.memberCount || 0 : 0} подписчиков</span><span className={`rounded-full px-2 py-1 text-[9px] font-semibold ${visibility === 'public' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-200'}`}>{visibility === 'public' ? 'Публичный' : 'Приватный'}</span></div>
+                </div>
+              </div>
+              <p className="mt-3 text-[10px] leading-5 text-slate-500">Так канал будет выглядеть в списке сообществ. Параметры можно изменить позже.</p>
+            </aside>
+            <div className="flex flex-col-reverse gap-2 border-t border-white/[0.07] bg-black/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8 md:col-span-2">
+              {editing && <button type="button" disabled={busy} onClick={() => void deleteChannel()} className="mr-auto inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-400/10 disabled:opacity-50"><Trash2 size={14} />Удалить канал</button>}
+              <div className="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row"><button type="button" onClick={() => { setCreating(false); setEditing(false); }} className="h-11 rounded-xl border border-white/10 px-5 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.05]">Отмена</button><button type="submit" disabled={busy || (creating && title.trim().length < 2)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-from to-accent-to px-6 text-xs font-bold text-white shadow-lg shadow-accent/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"><Check size={15} />{busy ? 'Сохраняем…' : creating ? 'Создать канал' : 'Сохранить изменения'}</button></div>
             </div>
           </form>
         </section>
