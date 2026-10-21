@@ -761,7 +761,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
         {activeGroup ? (
           <>
             <EncryptionNotice />
-            <header className="flex items-center gap-3 border-b border-white/[0.08] bg-panel px-3 py-3 sm:px-5">
+            <header className="relative z-10 flex items-center gap-3 border-b border-slate-800/60 p-2.5 glass-panel sm:p-4">
               <button type="button" onClick={() => { setActiveGroupId(''); setSearchParams({}, { replace: true }); }} className="rounded-lg p-2 text-t-secondary hover:bg-white/[0.06] md:hidden" aria-label="К списку групп"><ArrowLeft size={18} /></button>
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Users size={18} /></div>
               <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{activeGroup.title}</h2><p className="text-[11px] text-slate-500">{activeGroup.memberCount} участников</p></div>
@@ -846,7 +846,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
               </div>
             )}
 
-            <div className="chat-wallpaper-surface flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-6">
+            <div className="chat-wallpaper-surface custom-scrollbar relative z-10 flex-1 min-h-0 space-y-3 overflow-y-auto px-3 py-4 sm:px-6">
               {hasMore && <button type="button" onClick={() => void loadOlder()} className="mx-auto block rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-t-secondary hover:bg-white/[0.04]">Загрузить более ранние сообщения</button>}
               {loadingMessages && <div role="status" className="space-y-3">{[0, 1, 2].map((item) => <div key={item} className="chat-skeleton h-14 w-2/3 rounded-2xl" />)}</div>}
               {!loadingMessages && !messages.length && <p className="m-auto py-10 text-center text-xs text-slate-500">В этой группе пока нет сообщений.</p>}
@@ -877,11 +877,11 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
             </div>
 
             {replyingMessage && <div className="flex items-center gap-3 border-t border-white/[0.08] bg-panel px-4 pt-3"><Reply size={14} className="shrink-0 text-accent" /><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold uppercase tracking-wider text-accent">Ответ участнику группы</p><p className="truncate text-xs text-t-secondary">{replyingMessage.text || '📎 Вложение'}</p></div><button type="button" onClick={() => setReplyingMessage(null)} aria-label="Отменить ответ" className="grid h-10 w-10 place-items-center rounded-xl text-t-secondary hover:bg-white/5 hover:text-white"><X size={15} /></button></div>}
-            <form onSubmit={(event) => void sendMessage(event)} className="flex items-end gap-2 border-t border-white/[0.08] bg-panel p-3 sm:px-5">
+            <form onSubmit={(event) => void sendMessage(event)} className="glass-panel relative z-10 mx-3 mb-3 mt-2 flex items-end gap-1 rounded-2xl p-1.5 shadow-2xl transition-all focus-within:ring-2 focus-within:ring-accent/30 sm:mx-5 sm:gap-2 sm:p-2">
               <label className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-t-secondary transition ${sending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-white/5 hover:text-accent'}`} title="Зашифрованное вложение"><Paperclip size={17} /><input type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void sendAttachment(event)} className="hidden" disabled={sending} /></label>
               <div className="hidden max-w-[30%] gap-1 overflow-hidden sm:flex">{activeGroup.members.slice(0, 3).map((member) => <button key={member.userId} type="button" onClick={() => setDraft((value) => `${value}${value && !value.endsWith(' ') ? ' ' : ''}@${member.username} `)} className="truncate rounded-full bg-white/[0.04] px-2 py-1 text-[9px] text-slate-500 hover:text-accent">@{member.username}</button>)}</div>
-              <textarea value={draft} onChange={(event) => { setDraft(event.target.value); writeGroupDraft(userId, activeGroupKey, event.target.value); }} rows={1} maxLength={4000} disabled={sending} placeholder="Сообщение группе… Используйте @username для упоминания" className="max-h-32 min-h-11 min-w-0 flex-1 resize-y rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm outline-none transition focus:border-accent/40" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && localStorage.getItem('skylineEnterToSend') !== 'false') { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-              <button type="submit" disabled={!draft.trim() || sending} aria-label="Отправить сообщение" className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">{sending ? <span className="text-xs">…</span> : <Send size={17} />}</button>
+              <textarea value={draft} onChange={(event) => { setDraft(event.target.value); writeGroupDraft(userId, activeGroupKey, event.target.value); }} rows={1} maxLength={4000} disabled={sending} placeholder="Сообщение группе… Используйте @username для упоминания" className="max-h-36 min-h-10 min-w-0 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-500 focus:outline-none" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && localStorage.getItem('skylineEnterToSend') !== 'false') { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+              <button type="submit" disabled={!draft.trim() || sending} aria-label="Отправить сообщение" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">{sending ? <span className="text-xs">…</span> : <Send size={17} />}</button>
             </form>
           </>
         ) : discoverOpen ? <div className="flex-1 overflow-y-auto p-4 sm:p-6">
