@@ -518,8 +518,8 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
         </>}
       </section>
 
-      {(creating || editing) && <div className="fixed inset-0 z-[120] grid place-items-center overflow-y-auto bg-black/65 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) { setCreating(false); setEditing(false); } }}>
-        <section className="my-auto w-full max-w-lg rounded-3xl border border-white/10 bg-[#111a2a] p-5 shadow-2xl md:p-7">
+      {(creating || editing) && <div className="fixed inset-0 z-[120] flex justify-end overflow-y-auto bg-black/60 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) { setCreating(false); setEditing(false); } }}>
+        <section className="my-auto min-h-full w-full max-w-lg border-l border-white/10 bg-panel p-5 shadow-2xl md:p-7">
           <header className="mb-5 flex items-start justify-between gap-3">
             <div><h2 className="text-lg font-bold">{creating ? 'Создать канал' : 'Настройки канала'}</h2><p className="mt-1 text-xs text-slate-500">{creating ? 'Публикуйте новости для своих подписчиков.' : 'Управляйте информацией и доступом к каналу.'}</p></div>
             <button type="button" onClick={() => { setCreating(false); setEditing(false); }} aria-label="Закрыть" className="rounded-xl p-2 text-slate-500 hover:bg-white/5 hover:text-white"><X size={18} /></button>
