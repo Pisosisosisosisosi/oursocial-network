@@ -145,6 +145,28 @@ async def join_group_by_invite(payload: JoinInviteRequest, current=Depends(get_c
     return {"status": "ok", "id": str(group["_id"]), "alreadyMember": False}
 
 
+@router.post("/groups/{group_id}/join")
+async def join_public_group(group_id: str, current=Depends(get_current_user)):
+    if not ObjectId.is_valid(group_id):
+        raise HTTPException(status_code=400, detail="Invalid group id")
+    group = groups_collection().find_one({"_id": ObjectId(group_id), "isPublic": True})
+    if not group:
+        raise HTTPException(status_code=404, detail="Public group not found")
+    user_id = current["userId"]
+    if any(member.get("userId") == user_id for member in group.get("members", [])):
+        return {"status": "ok", "id": group_id, "alreadyMember": True}
+    if len(group.get("members", [])) >= 100:
+        raise HTTPException(status_code=409, detail="This group has reached its member limit")
+    now = datetime.now(timezone.utc)
+    groups_collection().update_one(
+        {"_id": group["_id"], "members.userId": {"$ne": user_id}},
+        {"$push": {"members": {"userId": user_id, "joinedAt": now, "role": "member"}}, "$set": {"updatedAt": now}},
+    )
+    updated = groups_collection().find_one({"_id": group["_id"]})
+    await _notify_members(updated, group_id, "members")
+    return {"status": "ok", "id": group_id, "alreadyMember": False}
+
+
 @router.get("/groups/discover")
 def discover_public_groups(current=Depends(get_current_user)):
     groups = list(groups_collection().find(
