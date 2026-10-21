@@ -165,10 +165,9 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const [forwardSearch, setForwardSearch] = useState('');
   const [forwarding, setForwarding] = useState(false);
   useEffect(() => { if (searchParams.get('create') === '1') { setCreating(true); setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true }); } }, [searchParams, setSearchParams]);
-  useEffect(() => { if (!requestedGroupId && !creating && groups.length) setSearchParams({ group: groups[0].id }, { replace: true }); }, [requestedGroupId, creating, groups, setSearchParams]);
   const activeGroup = activeGroupId === ''
     ? null
-    : groups.find((group) => group.id === activeGroupId) || groups[0] || null;
+    : groups.find((group) => group.id === activeGroupId) || (!embedded ? groups[0] || null : null);
   const loadingMessages = Boolean(activeGroup && activeGroup.id !== loadedGroupId);
   const activeGroupKey = activeGroup?.id;
   const activeGroupKeyRef = useRef<string | undefined>(activeGroupKey);
