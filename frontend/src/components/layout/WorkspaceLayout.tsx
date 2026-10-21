@@ -25,7 +25,7 @@ export default function WorkspaceLayout() {
         <div className="flex items-center justify-between px-4 pb-1 pt-3"><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Все переписки</span>
           <button type="button" onClick={() => navigate(showDiscover ? '/channels' : '/channels?discover=1')} className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-accent"><Radio size={12} /> {showDiscover ? 'Мои каналы' : 'Найти каналы'}</button></div>
         <UnifiedWorkspaceList search={search} activeKind={activeKind} activeId={activeId} includeDiscover={showDiscover} />
-      </aside><section className={`${activeId ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}><Outlet /></section>
+      </aside><section className={`${activeId ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}>{activeId ? <Outlet /> : <div className="hidden flex-1 flex-col items-center justify-center text-center text-slate-500 md:flex"><div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl border border-white/[0.08] bg-white/[0.03]"><Radio size={26} className="text-accent/60" /></div><p className="text-sm font-medium text-t-secondary">Выберите чат</p><p className="mt-1 max-w-xs text-xs leading-5 text-slate-500">Откройте переписку из списка слева, чтобы прочитать сообщения и ответить.</p></div>}</section>
     </main>
   );
 }
