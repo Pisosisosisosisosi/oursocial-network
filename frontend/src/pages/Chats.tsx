@@ -1699,7 +1699,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
               </form>
             </div>
           </>
-        ) : (
+        ) : !embedded ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-500 relative z-10">
              <div className="w-24 h-24 mb-6 rounded-full bg-slate-800/30 flex items-center justify-center border border-slate-700/30 animate-float">
                <svg className="w-10 h-10 text-accent/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
@@ -1707,7 +1707,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
              <p className="text-sm font-medium text-t-secondary">Выберите пользователя</p>
              <p className="text-xs text-slate-600 mt-1">чтобы начать общение</p>
           </div>
-        )}
+        ) : null}
         {profilePanelOpen && chatProfile && (
           <div className={`profile-panel-layer absolute inset-0 z-40 flex justify-end ${profilePanelClosing ? 'profile-layer-out' : 'profile-layer-in'}`}>
             <button
