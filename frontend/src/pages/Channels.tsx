@@ -101,7 +101,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       const discovering = searchParams.get('discover') === '1';
       const initial = requested && items.some((channel) => channel.id === requested)
         ? requested
-        : discovering ? null : items.find((channel) => channel.isSubscribed)?.id || items[0]?.id || null;
+        : (embedded || discovering) ? null : items.find((channel) => channel.isSubscribed)?.id || items[0]?.id || null;
       setActiveChannelId(initial);
       if (initial && !requested && !discovering) setSearchParams({ channel: initial }, { replace: true });
     } catch (error) {
