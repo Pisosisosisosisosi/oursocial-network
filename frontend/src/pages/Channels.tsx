@@ -69,6 +69,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [channelAvatarUrl, setChannelAvatarUrl] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -209,6 +210,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       const response = await api.post<Channel & { inviteCode?: string }>('/channels', {
         title,
         description,
+        avatarUrl: channelAvatarUrl,
         visibility,
       });
       const refreshed = await loadChannels();
@@ -217,6 +219,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       setCreating(false);
       setTitle('');
       setDescription('');
+      setChannelAvatarUrl('');
       setVisibility('public');
       showToast('Канал создан.', 'success');
       if (response.data.inviteCode) {
@@ -532,6 +535,11 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           </header>
           <form onSubmit={creating ? (event) => void createChannel(event) : (event) => void saveChannelSettings(event)} className="grid gap-0 md:grid-cols-[minmax(0,1fr)_250px]">
             <div className="space-y-5 px-5 py-6 sm:px-8">
+              {creating && <div className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
+                <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-sky-400/10 text-sky-300">{channelAvatarUrl ? <img src={channelAvatarUrl} alt="Предпросмотр аватара канала" className="h-full w-full object-cover" /> : <Radio size={19} />}</div>
+                <label className="min-w-0 flex-1 text-xs font-semibold text-slate-200">Изображение канала <span className="mt-1 block text-[10px] font-normal text-slate-500">PNG, JPG, GIF или WebP · до 1 МБ</span><input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; if (file.size > 1_000_000 || !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) { showToast('Выберите PNG, JPG, GIF или WebP размером до 1 МБ.', 'error'); return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === 'string') setChannelAvatarUrl(reader.result); }; reader.onerror = () => showToast('Не удалось прочитать изображение.', 'error'); reader.readAsDataURL(file); }} className="mt-2 block w-full text-[10px] text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-2 file:py-1.5 file:text-[10px] file:text-slate-200" /></label>
+                {channelAvatarUrl && <button type="button" onClick={() => setChannelAvatarUrl('')} className="rounded-lg p-2 text-slate-500 hover:bg-rose-400/10 hover:text-rose-300" aria-label="Убрать аватар"><X size={15} /></button>}
+              </div>}
               {editing && activeChannel && <div className="flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-3">
                 <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-sky-400/10 text-sky-300">{activeChannel.avatarUrl ? <img src={activeChannel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={19} />}</div>
                 <label className="min-w-0 flex-1 text-xs font-semibold text-slate-200">Изображение канала <span className="mt-1 block text-[10px] font-normal text-slate-500">PNG, JPG или WebP · до 1 МБ</span><input type="file" name="avatar" accept="image/*" className="mt-2 block w-full text-[10px] text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-2 file:py-1.5 file:text-[10px] file:text-slate-200" /></label>
@@ -550,7 +558,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
               <div className="mt-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a111e]">
                 <div className="h-16 bg-gradient-to-br from-sky-500/20 via-accent/10 to-transparent" />
                 <div className="-mt-8 px-4 pb-4">
-                  <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border-4 border-[#0a111e] bg-gradient-to-br from-sky-400/20 to-accent/15 text-sky-300 shadow-lg">{editing && activeChannel?.avatarUrl ? <img src={activeChannel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={23} />}</div>
+                  <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border-4 border-[#0a111e] bg-gradient-to-br from-sky-400/20 to-accent/15 text-sky-300 shadow-lg">{(creating ? channelAvatarUrl : activeChannel?.avatarUrl) ? <img src={(creating ? channelAvatarUrl : activeChannel?.avatarUrl) || ''} alt="" className="h-full w-full object-cover" /> : <Radio size={23} />}</div>
                   <p className="mt-3 break-words text-sm font-bold text-white">{(creating ? title : activeChannel?.title || title).trim() || 'Название канала'}</p>
                   <p className="mt-2 min-h-12 whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-400">{(creating ? description : activeChannel?.description || description).trim() || 'Здесь будет отображаться описание вашего канала.'}</p>
                   <div className="mt-4 flex items-center justify-between gap-2 border-t border-white/[0.07] pt-3"><span className="inline-flex items-center gap-1.5 text-[10px] text-slate-500"><Users size={12} />{editing ? activeChannel?.memberCount || 0 : 0} подписчиков</span><span className={`rounded-full px-2 py-1 text-[9px] font-semibold ${visibility === 'public' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-200'}`}>{visibility === 'public' ? 'Публичный' : 'Приватный'}</span></div>
