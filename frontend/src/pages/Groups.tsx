@@ -23,6 +23,8 @@ interface GroupMember extends User {
 interface Group {
   id: string;
   title: string;
+  description?: string;
+  avatarUrl?: string;
   memberCount: number;
   members: GroupMember[];
   createdAt: string;
@@ -157,11 +159,15 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const [addingMembers, setAddingMembers] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [groupTitleDraft, setGroupTitleDraft] = useState('');
+  const [groupDescriptionDraft, setGroupDescriptionDraft] = useState('');
+  const [groupAvatarDraft, setGroupAvatarDraft] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [publicGroups, setPublicGroups] = useState<Array<{ id: string; title: string; memberCount: number; ownerUsername: string }>>([]);
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const [joiningPublicGroup, setJoiningPublicGroup] = useState<string | null>(null);
   const [groupTitle, setGroupTitle] = useState('');
+  const [groupDescription, setGroupDescription] = useState('');
+  const [groupAvatarUrl, setGroupAvatarUrl] = useState('');
   const [groupSearch, setGroupSearch] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
   const [memberResults, setMemberResults] = useState<User[]>([]);
@@ -194,8 +200,12 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   }, []);
 
   useEffect(() => {
-    if (activeGroup) setGroupTitleDraft(activeGroup.title);
-  }, [activeGroup?.id, activeGroup?.title]);
+    if (activeGroup) {
+      setGroupTitleDraft(activeGroup.title);
+      setGroupDescriptionDraft(activeGroup.description || '');
+      setGroupAvatarDraft(activeGroup.avatarUrl || '');
+    }
+  }, [activeGroup?.id, activeGroup?.title, activeGroup?.description, activeGroup?.avatarUrl]);
   useEffect(() => {
     const inviteToken = searchParams.get('invite');
     if (!inviteToken || !userId) return;
@@ -363,12 +373,16 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     try {
       const response = await api.post<{ id: string }>('/groups', {
         title: groupTitle.trim(),
+        description: groupDescription.trim(),
+        avatarUrl: groupAvatarUrl,
         memberIds: selectedMembers.map((member) => member.id),
       });
       const refreshedGroups = await loadGroups();
       setActiveGroupId(refreshedGroups.find((group) => group.id === response.data.id)?.id || null);
       setCreating(false);
       setGroupTitle('');
+      setGroupDescription('');
+      setGroupAvatarUrl('');
       setMemberSearch('');
       setSelectedMembers([]);
       showToast('Группа создана.', 'success');
@@ -399,7 +413,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     if (!activeGroup || !['owner', 'admin'].includes(activeGroup.currentUserRole)) return;
     setSavingSettings(true);
     try {
-      await api.patch(`/groups/${activeGroup.id}/settings`, { title: groupTitleDraft.trim() });
+      await api.patch(`/groups/${activeGroup.id}/settings`, { title: groupTitleDraft.trim(), description: groupDescriptionDraft.trim(), avatarUrl: groupAvatarDraft });
       await loadGroups();
       showToast('Настройки группы сохранены.', 'success');
     } catch (error) {
@@ -794,7 +808,16 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
                   <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold">Приглашение и видимость</p><p className="mt-1 text-[10px] text-slate-500">Ссылку можно отправить любому пользователю.</p></div><span className="inline-flex items-center gap-1 rounded-full bg-white/[0.05] px-2 py-1 text-[10px] text-t-secondary">{activeGroup.isPublic ? <Globe size={12} /> : <Lock size={12} />}{activeGroup.isPublic ? 'Публичная' : 'Приватная'}</span></div>
                   {['owner', 'admin'].includes(activeGroup.currentUserRole) ? <>
                     <label className="mb-2 block text-[10px] text-t-secondary">Название группы</label>
-                    <div className="mb-3 flex gap-2"><input value={groupTitleDraft} onChange={(event) => setGroupTitleDraft(event.target.value)} maxLength={64} minLength={2} className="h-9 min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950/50 px-3 text-xs outline-none focus:border-accent/40" /><button type="button" disabled={savingSettings || groupTitleDraft.trim().length < 2} onClick={() => void saveGroupSettings()} className="rounded-lg bg-accent px-3 text-xs font-semibold text-white disabled:opacity-40">{savingSettings ? '…' : 'Сохранить'}</button></div>
+                    <input value={groupTitleDraft} onChange={(event) => setGroupTitleDraft(event.target.value)} maxLength={64} minLength={2} className="mb-3 h-9 w-full rounded-lg border border-white/10 bg-slate-950/50 px-3 text-xs outline-none focus:border-accent/40" />
+                    <label className="mb-2 block text-[10px] text-t-secondary">Описание группы</label>
+                    <textarea value={groupDescriptionDraft} onChange={(event) => setGroupDescriptionDraft(event.target.value)} maxLength={500} rows={3} placeholder="Кратко расскажите о группе" className="mb-3 w-full resize-y rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2 text-xs outline-none focus:border-accent/40" />
+                    <label className="mb-2 block text-[10px] text-t-secondary">Аватар группы · PNG, JPG, GIF или WebP до 1 МБ</label>
+                    <div className="mb-3 flex items-center gap-3">
+                      <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-accent/10 text-accent">{groupAvatarDraft ? <img src={groupAvatarDraft} alt="Аватар группы" className="h-full w-full object-cover" /> : <Users size={17} />}</div>
+                      <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; if (file.size > 1_000_000 || !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) { showToast('Выберите PNG, JPG, GIF или WebP размером до 1 МБ.', 'error'); return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === 'string') setGroupAvatarDraft(reader.result); }; reader.onerror = () => showToast('Не удалось прочитать изображение.', 'error'); reader.readAsDataURL(file); }} className="min-w-0 flex-1 text-[10px] text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-2 file:py-1.5 file:text-[10px] file:text-slate-200" />
+                      {groupAvatarDraft && <button type="button" onClick={() => setGroupAvatarDraft('')} className="rounded-lg px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-400/10">Убрать</button>}
+                    </div>
+                    <button type="button" disabled={savingSettings || groupTitleDraft.trim().length < 2} onClick={() => void saveGroupSettings()} className="w-full rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{savingSettings ? 'Сохраняем…' : 'Сохранить изменения'}</button>
                     <button type="button" disabled={savingSettings} onClick={() => void toggleGroupPrivacy()} className="w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-t-secondary hover:border-accent/30 hover:text-accent disabled:opacity-50">{activeGroup.isPublic ? 'Сделать группу приватной' : 'Сделать группу публичной'}</button>
                   </> : <p className="text-[11px] text-slate-500">Изменять настройки группы могут администраторы и владелец. Назначать администраторов и передавать владение может только владелец.</p>}
                 </div>
@@ -886,11 +909,17 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
             </div>
           </div>
           <div className="space-y-6 px-6 py-6 sm:px-8">
+            <div className="flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
+              <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-accent/20 bg-accent/10 text-accent shadow-lg">{groupAvatarUrl ? <img src={groupAvatarUrl} alt="Предпросмотр аватара группы" className="h-full w-full object-cover" /> : <Users size={25} />}</div>
+              <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-slate-200">Аватар группы</p><p className="mt-1 text-[10px] leading-4 text-slate-500">Изображение помогает участникам узнать группу</p><label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-slate-300 transition hover:bg-white/[0.05]"><Plus size={12} />{groupAvatarUrl ? 'Изменить изображение' : 'Выбрать изображение'}<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; if (file.size > 1_000_000 || !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) { showToast('Выберите PNG, JPG, GIF или WebP размером до 1 МБ.', 'error'); return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === 'string') setGroupAvatarUrl(reader.result); }; reader.onerror = () => showToast('Не удалось прочитать изображение.', 'error'); reader.readAsDataURL(file); }} /></label></div>
+              {groupAvatarUrl && <button type="button" onClick={() => setGroupAvatarUrl('')} className="rounded-lg p-2 text-slate-500 hover:bg-rose-400/10 hover:text-rose-300" aria-label="Убрать аватар"><X size={15} /></button>}
+            </div>
             <div>
               <div className="mb-2 flex items-center justify-between gap-3"><label htmlFor="new-group-title" className="text-xs font-semibold text-slate-200">Название группы</label><span className="text-[10px] tabular-nums text-slate-500">{groupTitle.length}/64</span></div>
               <input id="new-group-title" autoFocus value={groupTitle} onChange={(event) => setGroupTitle(event.target.value)} required minLength={2} maxLength={64} placeholder="Например, Друзья, команда или клуб" className="h-12 w-full rounded-2xl border border-white/10 bg-[#080e19]/80 px-4 text-sm text-white outline-none transition placeholder:text-slate-600 hover:border-white/15 focus:border-accent/60 focus:ring-4 focus:ring-accent/10" />
               <p className="mt-2 text-[10px] leading-4 text-slate-500">Название можно будет изменить позже в настройках группы.</p>
             </div>
+            <div><div className="mb-2 flex items-center justify-between gap-3"><label htmlFor="new-group-description" className="text-xs font-semibold text-slate-200">Описание группы</label><span className="text-[10px] tabular-nums text-slate-500">{groupDescription.length}/500</span></div><textarea id="new-group-description" value={groupDescription} onChange={(event) => setGroupDescription(event.target.value)} maxLength={500} rows={3} placeholder="О чём эта группа? Расскажите участникам…" className="w-full resize-y rounded-2xl border border-white/10 bg-[#080e19]/80 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-accent/50 focus:ring-4 focus:ring-accent/10" /></div>
             <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
               <div className="mb-3 flex items-center gap-3">
                 <div className="grid h-10 w-10 place-items-center rounded-xl bg-sky-400/10 text-sky-300"><UserPlus size={17} /></div>
