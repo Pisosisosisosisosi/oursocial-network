@@ -245,6 +245,11 @@ export default function Groups() {
     if (!socket) return;
     const handleMessage = (event: { action: string; groupId?: string; messageId?: string; senderId?: string; message?: Partial<GroupMessage> }) => {
       if (!event.groupId) return;
+      if (event.action === 'created') {
+        void loadGroups().catch((error: unknown) => {
+          console.error('Не удалось обновить порядок групп после нового сообщения:', error);
+        });
+      }
       if (event.action === 'created' && event.senderId && event.senderId !== user?.id && event.groupId !== activeGroupKey) {
         const groupName = groups.find((group) => group.id === event.groupId)?.title || 'группе';
         showToast(`Новое сообщение в группе «${groupName}».`, 'info');
