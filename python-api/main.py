@@ -1463,7 +1463,7 @@ def list_groups(current=Depends(get_current_user)):
             group["inviteCode"] = secrets.token_urlsafe(24)
             group.setdefault("isPublic", False)
             groups_collection().update_one(
-                {"_id": group["_id"], "inviteCode": {"$exists": False}},
+                {"_id": group["_id"]},
                 {"$set": {"inviteCode": group["inviteCode"], "isPublic": bool(group.get("isPublic", False))}},
             )
     group_ids = [str(group["_id"]) for group in groups]
@@ -1508,7 +1508,7 @@ def list_groups(current=Depends(get_current_user)):
             "ownerId": group.get("createdBy") or next((member["userId"] for member in group.get("members", []) if member.get("role") == "owner"), ""),
             "isPublic": bool(group.get("isPublic", False)),
             "inviteCode": group.get("inviteCode", ""),
-            "currentUserRole": next((member.get("role", "member") for member in group.get("members", []) if member.get("userId") == user_id), "member"),
+            "currentUserRole": "owner" if group.get("createdBy") == user_id else next((member.get("role", "member") for member in group.get("members", []) if member.get("userId") == user_id), "member"),
             "members": [
                 {
                     "userId": member["userId"],
