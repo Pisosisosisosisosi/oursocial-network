@@ -768,8 +768,9 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
                 </div>
               </section>
             )}
-            {settingsOpen && (
-              <section className="max-h-[45vh] overflow-y-auto border-b border-white/[0.08] bg-panel p-4 sm:px-5">
+            {settingsOpen && (<>
+              <button type="button" aria-label="Закрыть меню настроек группы" onClick={() => setSettingsOpen(false)} className="fixed inset-0 z-[79] bg-black/55 backdrop-blur-sm" />
+              <section className="fixed inset-y-0 right-0 z-[80] w-full max-w-lg overflow-y-auto border-l border-white/10 bg-panel p-4 shadow-2xl sm:p-6">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div><h3 className="text-sm font-semibold">Участники группы</h3><p className="mt-1 text-[11px] text-slate-500">{activeGroup.members.length} участников · владелец и администраторы отмечены отдельно</p></div>
                   <button type="button" onClick={() => void copyInviteLink()} className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2 text-xs text-accent hover:bg-accent/15"><Copy size={14} /> Скопировать приглашение</button>
@@ -798,7 +799,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
                   </> : <p className="text-[11px] text-slate-500">Изменять настройки группы могут администраторы и владелец. Назначать администраторов и передавать владение может только владелец.</p>}
                 </div>
               </section>
-            )}
+              </>)}
 
             <div className="flex items-center gap-2 border-b border-white/[0.06] bg-panel px-3 py-2 sm:px-5">
               <label className="relative min-w-0 flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} placeholder="Поиск в переписке" aria-label="Поиск по сообщениям группы" className="h-9 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-accent/40" /></label>
@@ -881,7 +882,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
             <input value={groupTitle} onChange={(event) => setGroupTitle(event.target.value)} required minLength={2} maxLength={64} placeholder="Название группы" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 text-sm outline-none focus:border-accent/50" />
             <label className="relative block">
               <Search size={14} className="absolute left-3 top-3 text-slate-500" />
-              <input value={memberSearch} onChange={(event) => handleMemberSearchChange(event.target.value)} placeholder="Найти по полному @username" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-accent/50" />
+              <input value={memberSearch} onChange={(event) => handleMemberSearchChange(event.target.value)} placeholder="Найти участников по @username (необязательно)" className="h-10 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-accent/50" />
             </label>
             {searching && <p className="text-[11px] text-slate-500">Ищем пользователя…</p>}
             <div className="max-h-32 space-y-1 overflow-y-auto">
@@ -892,7 +893,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
               ))}
             </div>
             {!!selectedMembers.length && <div className="flex flex-wrap gap-1.5">{selectedMembers.map((member) => <button key={member.id} type="button" onClick={() => toggleMember(member)} className="inline-flex items-center gap-1 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[10px] text-accent">@{member.username}<X size={11} /></button>)}</div>}
-            <button disabled={groupTitle.trim().length < 2 || !selectedMembers.length} className="btn-glow btn-shine min-h-[44px] w-full rounded-xl bg-gradient-to-r from-accent-from to-accent-to px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Создать группу</button>
+            <button disabled={groupTitle.trim().length < 2} className="btn-glow btn-shine min-h-[44px] w-full rounded-xl bg-gradient-to-r from-accent-from to-accent-to px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Создать группу</button>
           </form>
       </div>,
       document.body,
