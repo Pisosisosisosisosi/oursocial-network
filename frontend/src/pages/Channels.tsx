@@ -149,6 +149,18 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   }, [inviteCode, loadInvitePreview]);
 
   useEffect(() => {
+    const requested = searchParams.get('channel');
+    if (requested && channels.some((channel) => channel.id === requested) && requested !== activeChannelId) {
+      setActiveChannelId(requested);
+      setInviteLink('');
+    } else if (!requested && embedded && activeChannelId) {
+      setActiveChannelId(null);
+      setPosts([]);
+      setLoadedPostChannelId(null);
+    }
+  }, [searchParams, channels, activeChannelId, embedded]);
+
+  useEffect(() => {
     if (!activeChannelId || inviteCode) return;
     void loadPosts(activeChannelId).catch((error: unknown) => {
       console.error('Не удалось загрузить публикации канала:', error);
