@@ -101,7 +101,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
             onClick={() => {
               if (entry.kind === 'chat') navigate('/chats?chat=' + encodeURIComponent(entry.id));
               else if (entry.kind === 'group') navigate('/groups?group=' + encodeURIComponent(entry.id));
-              else navigate('/channels?channel=' + encodeURIComponent(entry.id));
+              else navigate('/channels?channel=' + encodeURIComponent(entry.id) + (includeDiscover ? '&discover=1' : ''));
             }}
             aria-current={active ? 'page' : undefined}
             className={`chat-card chat-list-item group mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${active ? 'chat-active text-white' : 'text-slate-300'}`}
