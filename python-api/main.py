@@ -1458,6 +1458,14 @@ async def edit_message(
 def list_groups(current=Depends(get_current_user)):
     user_id = current["userId"]
     groups = list(groups_collection().find({"members.userId": user_id}).sort("updatedAt", -1))
+    for group in groups:
+        if not group.get("inviteCode"):
+            group["inviteCode"] = secrets.token_urlsafe(24)
+            group.setdefault("isPublic", False)
+            groups_collection().update_one(
+                {"_id": group["_id"], "inviteCode": {"$exists": False}},
+                {"$set": {"inviteCode": group["inviteCode"], "isPublic": bool(group.get("isPublic", False))}},
+            )
     group_ids = [str(group["_id"]) for group in groups]
     last_message_by_group = {
         row["_id"]: row.get("lastMessageAt")
