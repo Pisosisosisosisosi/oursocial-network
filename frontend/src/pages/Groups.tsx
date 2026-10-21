@@ -145,7 +145,6 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const [searchingHistory, setSearchingHistory] = useState(false);
   const [searchedHistoryPages, setSearchedHistoryPages] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [loadedGroupId, setLoadedGroupId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -189,7 +188,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     }).catch((error: unknown) => {
       console.error('Не удалось загрузить группы:', error);
       showToast('Не удалось загрузить список групп.', 'error');
-    }).finally(() => setLoading(false));
+    });
   }, [loadGroups, requestedGroupId, showToast]);
 
   const loadMessages = useCallback(async (groupId: string, before?: string) => {
