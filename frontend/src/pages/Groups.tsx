@@ -140,7 +140,6 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   useEffect(() => {
     if (requestedGroupId && requestedGroupId !== activeGroupId) setActiveGroupId(requestedGroupId);
   }, [requestedGroupId, activeGroupId]);
-  useEffect(() => { if (searchParams.get('create') === '1') { setCreating(true); setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true }); } }, [searchParams, setSearchParams]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingHistory, setSearchingHistory] = useState(false);
@@ -165,6 +164,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const [forwardingMessage, setForwardingMessage] = useState<GroupMessage | null>(null);
   const [forwardSearch, setForwardSearch] = useState('');
   const [forwarding, setForwarding] = useState(false);
+  useEffect(() => { if (searchParams.get('create') === '1') { setCreating(true); setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true }); } }, [searchParams, setSearchParams]);
   useEffect(() => { if (!requestedGroupId && !creating && groups.length) setSearchParams({ group: groups[0].id }, { replace: true }); }, [requestedGroupId, creating, groups, setSearchParams]);
   const activeGroup = activeGroupId === ''
     ? null
