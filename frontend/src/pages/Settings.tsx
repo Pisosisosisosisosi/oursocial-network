@@ -316,10 +316,26 @@ export default function Settings() {
               <Languages size={18} className="text-accent" />
               <div><h2 className="text-sm font-semibold">Язык интерфейса</h2><p className="mt-1 text-xs text-t-secondary">Выберите язык приложения. Изменение применяется сразу.</p></div>
             </div>
-            <label htmlFor="skyline-language" className="block text-xs font-medium text-t-secondary">Язык приложения</label>
-            <select id="skyline-language" value={language} onChange={(event) => { const next = event.target.value as AppLanguage; setLanguage(next); setAppLanguage(next); }} className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-t-primary outline-none focus:border-accent/50">
-              {LANGUAGES.map((item) => <option key={item.code} value={item.code}>{item.nativeName}</option>)}
-            </select>
+            <p className="mb-3 text-xs font-medium text-t-secondary">Язык приложения</p>
+            <div role="radiogroup" aria-label="Язык интерфейса" className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {LANGUAGES.map((item) => {
+                const selected = language === item.code;
+                return <button
+                  key={item.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => { setLanguage(item.code); setAppLanguage(item.code); }}
+                  className={`flex min-h-12 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${selected ? 'border-accent/60 bg-accent/10 text-t-primary ring-1 ring-accent/20' : 'border-white/[0.08] bg-white/[0.02] text-t-secondary hover:border-white/20 hover:bg-white/[0.05]'}`}
+                >
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${selected ? 'border-accent' : 'border-white/25'}`}>
+                    {selected && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
+                  </span>
+                  <span className="min-w-0 flex-1 text-sm">{item.nativeName}</span>
+                  {selected && <span className="text-[10px] font-semibold text-accent">Выбран</span>}
+                </button>;
+              })}
+            </div>
             <p className="mt-3 text-[11px] leading-relaxed text-t-secondary">Выбор сохраняется на этом устройстве. Перезапуск приложения не требуется.</p>
           </section>}
 
