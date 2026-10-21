@@ -138,7 +138,7 @@ async function decryptChatMessage(message: ChatMessage, userId?: string): Promis
   return message;
 }
 
-export default function Chats() {
+export default function Chats({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser, e2eeStatus } = useAuth();
@@ -1259,7 +1259,7 @@ export default function Chats() {
   });
 
   return (
-    <div className="animate-fade-in absolute left-0 top-0 flex h-full w-full overflow-hidden bg-bg-base font-sans text-t-primary selection:bg-accent/30">
+    <div className={`${embedded ? 'relative' : 'absolute'} animate-fade-in left-0 top-0 flex h-full w-full overflow-hidden bg-bg-base font-sans text-t-primary selection:bg-accent/30`}>
       
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -1276,7 +1276,7 @@ export default function Chats() {
       `}</style>
 
       {/* 1. ЛЕВАЯ КОЛОНКА */}
-      <div className={`${activeChat ? 'hidden md:flex' : 'flex'} relative z-10 h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-r border-slate-800/60 glass-panel md:flex md:w-[340px]`}>
+      <div className={`${embedded ? 'hidden' : activeChat ? 'hidden md:flex' : 'flex'} relative z-10 h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-r border-slate-800/60 glass-panel ${embedded ? '' : 'md:flex'} md:w-[340px]`}>
         <WorkspaceSidebarHeader
           searchValue={searchQuery}
           onSearchChange={handleSearchChange}
@@ -1376,7 +1376,7 @@ export default function Chats() {
       </div>
 
       {/* 2. ЦЕНТРАЛЬНАЯ КОЛОНКА */}
-      <div className={`${activeChat ? 'flex' : 'hidden md:flex'} relative z-0 h-full min-h-0 min-w-0 flex-1 flex-col bg-bg-base`}>
+      <div className={`${embedded ? 'flex' : activeChat ? 'flex' : 'hidden md:flex'} relative z-0 h-full min-h-0 min-w-0 flex-1 flex-col bg-bg-base`}>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-accent/10 via-[#090d16] to-black pointer-events-none"></div>
 
         {activeChat ? (
@@ -1389,6 +1389,7 @@ export default function Chats() {
                     stopTyping(String(activeChat.id));
                     setTypingUser(null);
                     setActiveChat(null);
+                    setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('chat'); return next; }, { replace: true });
                   }} className="md:hidden rounded-xl p-2 text-slate-300 hover:bg-white/10" aria-label="Назад к контактам">
                     <ArrowLeft size={19} />
                   </button>
