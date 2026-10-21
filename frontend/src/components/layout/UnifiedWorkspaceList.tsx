@@ -8,6 +8,8 @@ import { formatAppDateTime } from '../../time';
 interface GroupItem {
   id: string;
   title: string;
+  description?: string;
+  avatarUrl?: string;
   memberCount: number;
   lastMessageAt?: string | null;
 }
@@ -23,7 +25,7 @@ interface ChannelItem {
 }
 type Entry =
   | { kind: 'chat'; id: string; title: string; subtitle: string; time?: string | null; contact: Contact }
-  | { kind: 'group'; id: string; title: string; subtitle: string; time?: string | null }
+  | { kind: 'group'; id: string; title: string; subtitle: string; time?: string | null; group: GroupItem }
   | { kind: 'channel'; id: string; title: string; subtitle: string; time?: string | null; channel: ChannelItem };
 
 interface UnifiedWorkspaceListProps {
@@ -113,7 +115,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       });
     const groupEntries: Entry[] = groups.map((group) => ({
       kind: 'group', id: group.id, title: group.title,
-      subtitle: `${group.memberCount} участников`, time: group.lastMessageAt,
+      subtitle: `${group.memberCount} участников${group.description ? ` · ${group.description}` : ''}`, time: group.lastMessageAt, group,
     }));
     const channelEntries: Entry[] = channels
       .filter((channel) => channel.isSubscribed || includeDiscover || (query.length > 0 && channel.visibility === 'public'))
@@ -129,7 +131,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
           ? `${entry.title} ${entry.subtitle} ${entry.contact.username} ${entry.contact.displayName || ''}`
           : entry.kind === 'channel'
             ? `${entry.title} ${entry.subtitle} ${entry.channel.description}`
-            : `${entry.title} ${entry.subtitle}`;
+            : `${entry.title} ${entry.subtitle} ${entry.group.description || ''}`;
         return searchable.toLocaleLowerCase().includes(query.replace(/^@/, '').trim());
       })
       .sort((a, b) => (Date.parse(b.time || '') || 0) - (Date.parse(a.time || '') || 0));
@@ -158,7 +160,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
             className={`chat-card chat-list-item group mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${active ? 'chat-active text-white' : 'text-slate-300'}`}
           >
             <span className={`grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl ${entry.kind === 'chat' ? 'bg-emerald-400/10 text-emerald-300' : entry.kind === 'group' ? 'bg-accent/15 text-accent' : 'bg-cyan-400/10 text-cyan-300'}`}>
-              {entry.kind === 'chat' ? entry.contact.avatarUrl ? <img src={entry.contact.avatarUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-sm font-semibold">{entry.contact.username?.[0]?.toUpperCase() || <MessageCircle size={18} />}</span> : entry.kind === 'group' ? <Users size={18} /> : entry.channel.avatarUrl ? <img src={entry.channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={18} />}
+              {entry.kind === 'chat' ? entry.contact.avatarUrl ? <img src={entry.contact.avatarUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-sm font-semibold">{entry.contact.username?.[0]?.toUpperCase() || <MessageCircle size={18} />}</span> : entry.kind === 'group' ? entry.group.avatarUrl ? <img src={entry.group.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Users size={18} /> : entry.channel.avatarUrl ? <img src={entry.channel.avatarUrl} alt="" className="h-full w-full object-cover" /> : <Radio size={18} />}
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center justify-between gap-2">
