@@ -6,6 +6,7 @@ import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
+import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import { formatAppDateTime } from '../time';
 
 interface Channel {
@@ -21,6 +22,8 @@ interface Channel {
   isSubscribed: boolean;
   isOwner: boolean;
   createdAt: string;
+  updatedAt?: string;
+  lastMessageAt?: string | null;
 }
 
 interface ChannelPost {
@@ -83,8 +86,13 @@ export default function Channels() {
 
   const loadChannels = useCallback(async () => {
     const response = await api.get<Channel[]>('/channels');
-    setChannels(response.data);
-    return response.data;
+    const sorted = [...response.data].sort((a, b) => {
+      const aTime = Date.parse(a.lastMessageAt || a.updatedAt || a.createdAt) || 0;
+      const bTime = Date.parse(b.lastMessageAt || b.updatedAt || b.createdAt) || 0;
+      return bTime - aTime;
+    });
+    setChannels(sorted);
+    return sorted;
   }, []);
 
   const initializeChannels = useCallback(async () => {
@@ -412,6 +420,7 @@ export default function Channels() {
           onSearchChange={setSearch}
           searchPlaceholder="Поиск каналов"
         />
+        <div className="border-b border-white/[0.06] px-3 py-2"><WorkspaceTabs /></div>
         <header className="flex items-center gap-3 border-b border-white/[0.08] px-4 py-4">
           <button type="button" onClick={() => navigate('/')} aria-label="Назад к чатам" className="rounded-xl p-2 text-t-secondary transition hover:bg-white/[0.06] hover:text-white"><ArrowLeft size={18} /></button>
           <div className="min-w-0 flex-1">
