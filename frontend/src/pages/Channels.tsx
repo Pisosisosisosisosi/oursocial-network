@@ -64,7 +64,6 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [invitePreviewState, setInvitePreviewState] = useState<{ code: string; preview: InvitePreview } | null>(null);
   const [search, setSearch] = useState('');
   const [listMode, setListMode] = useState<'mine' | 'discover'>('mine');
-  const [loading, setLoading] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -107,8 +106,6 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     } catch (error) {
       console.error('Не удалось загрузить каналы:', error);
       showToast('Не удалось загрузить каналы.', 'error');
-    } finally {
-      setLoading(false);
     }
   }, [loadChannels, searchParams, setSearchParams, showToast]);
 
