@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { ArrowLeft, Bell, ChevronRight, Contrast, Download, Image, LogOut, MessageSquare, Shield, Smartphone, UserRound } from 'lucide-react';
+import { ArrowLeft, Bell, ChevronRight, Clock3, Contrast, Download, Image, LogOut, MessageSquare, Shield, Smartphone, UserRound } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { applyAppPreferences, APP_THEMES, CHAT_STYLE_DEFAULTS, getStoredChatWallpaperUrl, storeChatWallpaper, type AppTheme, type WallpaperFit } from '../preferences';
@@ -7,6 +7,7 @@ import { api } from '../api/client';
 import { useToast } from '../context/useToast';
 //import GlassPanel from '../components/ui/GlassPanel';
 import Toggle from '../components/ui/Toggle';
+import { formatAppTime, formatTimeZoneOffset, getAppTimeZone, getStoredTimeZone, SYSTEM_TIME_ZONE } from '../time';
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -71,6 +72,7 @@ const CHAT_PALETTES = [
 const SETTINGS_SECTIONS = [
   { id: 'appearance', title: 'Внешний вид', description: 'Темы, обои, палитры и стиль сообщений', icon: Contrast, color: 'from-violet-500/20 to-indigo-500/5' },
   { id: 'chats', title: 'Чаты', description: 'Ввод, медиа и отметки прочтения', icon: MessageSquare, color: 'from-cyan-500/20 to-blue-500/5' },
+  { id: 'time', title: 'Время и часовой пояс', description: 'Синхронизация с компьютером и формат времени', icon: Clock3, color: 'from-sky-500/20 to-cyan-500/5' },
   { id: 'privacy', title: 'Приватность', description: 'Статус, прочтение и личные данные', icon: Shield, color: 'from-emerald-500/20 to-teal-500/5' },
   { id: 'notifications', title: 'Уведомления', description: 'Оповещения и установка приложения', icon: Bell, color: 'from-amber-500/20 to-orange-500/5' },
   { id: 'account', title: 'Аккаунт', description: 'Данные профиля и завершение сессии', icon: UserRound, color: 'from-rose-500/20 to-pink-500/5' },
@@ -100,6 +102,10 @@ export default function Settings() {
   const [desktopNotifications, setDesktopNotifications] = useState(() => localStorage.getItem('skylineNotifications') === 'true');
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [notice, setNotice] = useState('');
+  const [timeZone, setTimeZone] = useState(getStoredTimeZone);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+  const shownTimeZone = timeZone === 'system' ? SYSTEM_TIME_ZONE : timeZone;
+  const availableTimeZones = ['Europe/Chisinau', 'Europe/Bucharest', 'Europe/Kyiv', 'Europe/Moscow', 'Europe/Istanbul', 'Europe/London', 'Europe/Berlin', 'Europe/Paris', 'America/New_York', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Tashkent', 'Asia/Almaty', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'UTC'];
   const wallpaperInputRef = useRef<HTMLInputElement>(null);
   const [wallpaper, setWallpaper] = useState('');
   const [wallpaperFit, setWallpaperFit] = useState<WallpaperFit>(() => {
@@ -120,6 +126,11 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     void getStoredChatWallpaperUrl().then((value) => { if (active) setWallpaper(value); });
     return () => { active = false; };
@@ -128,6 +139,13 @@ export default function Settings() {
   const savePreference = (key: string, value: string) => {
     localStorage.setItem(key, value);
     applyAppPreferences(Boolean(user?.isPremium));
+  };
+
+  const chooseTimeZone = (value: string) => {
+    const next = value === 'system' ? 'system' : value;
+    localStorage.setItem('skylineTimeZone', next);
+    setTimeZone(next);
+    showToast(next === 'system' ? 'Время синхронизировано с компьютером.' : 'Часовой пояс обновлён.', 'success');
   };
 
   const chooseTheme = (value: 'dark' | 'light') => { setTheme(value); savePreference('skylineTheme', value); };
@@ -412,6 +430,26 @@ export default function Settings() {
             <Toggle on={enterToSend} onChange={(v) => { setEnterToSend(v); savePreference('skylineEnterToSend', String(v)); }} label="Enter — отправить" description="Enter отправляет сообщение, Shift+Enter переносит строку." />
             <Toggle on={showReadReceipts} onChange={(v) => { setShowReadReceipts(v); savePreference('skylineShowReadReceipts', String(v)); }} label="Показывать прочтение" description="Показывать другим отметки о прочтении ваших сообщений." />
             <Toggle on={mediaPreview} onChange={(v) => { setMediaPreview(v); savePreference('skylineMediaPreview', String(v)); }} label="Предпросмотр медиа" description="Открывать изображения во всплывающем просмотре." />
+          </section>}
+
+          {activeSection === 'time' && <section className={`${cardClass} animate-fade-in`}>
+            <div className="mb-4 flex items-center gap-3">
+              <Clock3 size={18} className="text-accent" />
+              <div><h2 className="text-sm font-semibold">Время и часовой пояс</h2><p className="mt-1 text-xs text-t-secondary">По умолчанию Skyline использует время и часовой пояс компьютера.</p></div>
+            </div>
+            <div className="rounded-2xl border border-accent/20 bg-accent/[0.06] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-t-secondary">Текущее время в Skyline</p>
+              <p className="mt-1 text-3xl font-semibold tabular-nums text-t-primary">{formatAppTime(currentTime, { second: '2-digit' })}</p>
+              <p className="mt-1 text-xs text-t-secondary">{shownTimeZone} · {formatTimeZoneOffset(currentTime, getAppTimeZone())}</p>
+            </div>
+            <label className="mt-4 block text-xs font-medium text-t-secondary" htmlFor="skyline-time-zone">Часовой пояс</label>
+            <select id="skyline-time-zone" value={timeZone} onChange={(event) => chooseTimeZone(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-t-primary outline-none focus:border-accent/50">
+              <option value="system">Автоматически с компьютера ({SYSTEM_TIME_ZONE})</option>
+              {!availableTimeZones.includes(SYSTEM_TIME_ZONE) && <option value={SYSTEM_TIME_ZONE}>{SYSTEM_TIME_ZONE}</option>}
+              {availableTimeZones.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+            </select>
+            <p className="mt-2 text-[11px] leading-relaxed text-t-secondary">Время сообщений, каналов, групп, статуса «был(а) в сети» и дат профиля будет отображаться в выбранном часовом поясе. Изменение применяется сразу.</p>
+            <button type="button" onClick={() => chooseTimeZone('system')} className="mt-4 min-h-10 rounded-xl bg-accent/15 px-4 text-xs font-semibold text-t-primary transition hover:bg-accent/25">Синхронизировать с компьютером</button>
           </section>}
 
           {activeSection === 'privacy' && <section className={`${cardClass} animate-fade-in`}>

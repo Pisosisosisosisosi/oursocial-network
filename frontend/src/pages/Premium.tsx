@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import { applyAppPreferences } from '../preferences';
+import { formatAppDate } from '../time';
 import GlassPanel from '../components/ui/GlassPanel';
 
 const coinPackages = [
@@ -102,7 +103,7 @@ export default function Premium() {
               <ul className="my-5 flex-1 space-y-2.5 text-xs text-t-primary/90">
                 {['Золотой значок Premium в профиле и чатах', 'Эксклюзивные темы оформления', 'Статус подписки в профиле', 'Новые привилегии будут добавляться'].map((feature) => <li key={feature} className="flex items-center gap-2"><BadgeCheck size={14} className="shrink-0 text-amber-300" />{feature}</li>)}
               </ul>
-              {user?.isPremium && user.premiumUntil && <p className="mb-3 text-[10px] text-t-secondary">Действует до {new Date(user.premiumUntil).toLocaleDateString('ru-RU')}</p>}
+              {user?.isPremium && user.premiumUntil && <p className="mb-3 text-[10px] text-t-secondary">Действует до {formatAppDate(user.premiumUntil)}</p>}
               <button type="button" disabled={busy !== null} onClick={() => void buyPremium()} className="btn-glow flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 px-4 text-sm font-bold text-slate-950 disabled:cursor-wait disabled:opacity-60">
                 <Crown size={16} />{busy === 'premium' ? 'Активируем…' : user?.isPremium ? 'Продлить на 30 дней' : 'Купить Premium'}
               </button>

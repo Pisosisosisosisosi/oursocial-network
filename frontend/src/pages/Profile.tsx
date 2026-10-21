@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { formatAppDate } from '../time';
 import Button from '../components/ui/Button';
 import GlassPanel from '../components/ui/GlassPanel';
 import Avatar from '../components/ui/Avatar';
@@ -118,7 +119,7 @@ export default function Profile() {
                 <Crown size={15} />{user?.isPremium ? 'Premium и монеты' : 'Купить Premium'}
               </button>
             </div>
-            {user?.isPremium && user.premiumUntil && <p className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] text-t-secondary">Premium действует до {new Date(user.premiumUntil).toLocaleDateString('ru-RU')}</p>}
+            {user?.isPremium && user.premiumUntil && <p className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] text-t-secondary">Premium действует до {formatAppDate(user.premiumUntil)}</p>}
           </section>
 
           <div className="mb-7 flex flex-wrap items-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
@@ -194,7 +195,7 @@ export default function Profile() {
 
             {user?.createdAt && (
               <p className="text-xs text-t-secondary">
-                Аккаунт создан: {new Date(user.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                Аккаунт создан: {formatAppDate(user.createdAt)}
               </p>
             )}
 

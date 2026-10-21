@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { formatAppTime } from '../time';
 
 export interface Message {
   _id?: string;
@@ -75,10 +76,7 @@ export default function MessageList({ messages, currentUserId }: Props) {
                     isMine ? 'text-blue-100 text-right' : 'text-gray-400 text-left'
                   }`}
                 >
-                  {new Date(msg.createdAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatAppTime(msg.createdAt)}
                 </div>
               )}
             </div>

@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
+import { formatAppDateTime } from '../time';
 
 interface Channel {
   id: string;
@@ -45,15 +46,7 @@ interface InvitePreview {
 
 const REACTIONS = ['❤️', '👍', '😂'];
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
-}
+function formatDate(value: string) { return formatAppDateTime(value); }
 
 export default function Channels() {
   const navigate = useNavigate();

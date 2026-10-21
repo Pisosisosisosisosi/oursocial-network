@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, type Contact, type User } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { formatAppDateTime } from '../time';
 import GlassPanel from '../components/ui/GlassPanel';
 import Avatar from '../components/ui/Avatar';
 import Button from '../components/ui/Button';
@@ -119,7 +120,7 @@ export default function UserProfile() {
             )}
             {profile.lastSeen && (
               <p className="mb-5 text-xs text-t-secondary">
-                Был(а) в сети: {new Date(profile.lastSeen).toLocaleString('ru-RU')}
+                Был(а) в сети: {formatAppDateTime(profile.lastSeen, { second: '2-digit' })}
               </p>
             )}
 

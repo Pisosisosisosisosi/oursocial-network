@@ -13,6 +13,7 @@ import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader'
 import EmojiPicker from '../components/chat/EmojiPicker';
 import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
 import { useCallActions } from '../context/CallContext';
+import { formatAppDateTime, formatAppTime, getAppTimeZone } from '../time';
 
 interface ChatMessage {
   id: string;
@@ -60,14 +61,15 @@ function formatLastSeen(value?: string | null) {
   if (elapsed < 60_000) return 'Был(а) в сети только что';
   if (elapsed < 60 * 60_000) return `Был(а) в сети ${Math.floor(elapsed / 60_000)} мин. назад`;
 
-  const time = lastSeen.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  if (lastSeen.toDateString() === now.toDateString()) return `Был(а) сегодня в ${time}`;
+  const time = formatAppTime(lastSeen);
+  const dateKey = (date: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: getAppTimeZone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  if (dateKey(lastSeen) === dateKey(now)) return `Был(а) сегодня в ${time}`;
 
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (lastSeen.toDateString() === yesterday.toDateString()) return `Был(а) вчера в ${time}`;
+  if (dateKey(lastSeen) === dateKey(yesterday)) return `Был(а) вчера в ${time}`;
 
-  return `Был(а) в сети ${lastSeen.toLocaleString('ru-RU', {
+  return `Был(а) в сети ${formatAppDateTime(lastSeen, {
     day: 'numeric',
     month: 'short',
     year: lastSeen.getFullYear() === now.getFullYear() ? undefined : 'numeric',
@@ -1466,7 +1468,7 @@ export default function Chats() {
                           </>
                         )}
                         <div className={`mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono ${isMe ? 'text-accent/70' : 'text-t-secondary/70'}`}>
-                          <time>{m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time>
+                          <time>{m.createdAt ? formatAppTime(m.createdAt) : ''}</time>
                           {isMe && localStorage.getItem('skylineShowReadReceipts') !== 'false' && (
                             m.read
                               ? <CheckCheck size={13} aria-label="Прочитано" className="text-sky-300" />
@@ -1622,7 +1624,7 @@ export default function Chats() {
                 )}
                 {chatProfile.lastSeen && !onlineUsers.has(String(chatProfile.id)) && (
                   <p className="mt-4 px-1 text-xs text-slate-500">
-                    Последний раз в сети: {new Date(chatProfile.lastSeen).toLocaleString('ru-RU')}
+                    Последний раз в сети: {formatAppDateTime(chatProfile.lastSeen, { second: '2-digit' })}
                   </p>
                 )}
                 {profileLoading && <p role="status" className="mt-5 text-center text-xs text-slate-500">Обновляем профиль…</p>}
