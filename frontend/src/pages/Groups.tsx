@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Download, FileText, Forward, Paperclip, Plus, Reply, Search, Send, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { ArrowLeft, Copy, Crown, Download, FileText, Forward, Globe, Lock, Paperclip, Plus, Reply, Search, Send, Settings, ShieldCheck, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { api, type User } from '../api/client';
@@ -17,6 +17,7 @@ interface GroupMember extends User {
   userId: string;
   joinedAt: string;
   publicKey: string;
+  role: 'owner' | 'admin' | 'member';
 }
 
 interface Group {
@@ -27,6 +28,10 @@ interface Group {
   createdAt: string;
   updatedAt?: string;
   lastMessageAt?: string | null;
+  ownerId: string;
+  isPublic: boolean;
+  inviteCode: string;
+  currentUserRole: 'owner' | 'admin' | 'member';
 }
 
 interface GroupMessage {
@@ -150,6 +155,12 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const [sending, setSending] = useState(false);
   const [creating, setCreating] = useState(false);
   const [addingMembers, setAddingMembers] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [groupTitleDraft, setGroupTitleDraft] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [publicGroups, setPublicGroups] = useState<Array<{ id: string; title: string; memberCount: number; ownerUsername: string }>>([]);
+  const [discoverOpen, setDiscoverOpen] = useState(false);
+  const [joiningPublicGroup, setJoiningPublicGroup] = useState<string | null>(null);
   const [groupTitle, setGroupTitle] = useState('');
   const [groupSearch, setGroupSearch] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
@@ -182,6 +193,27 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     return sorted;
   }, []);
 
+  useEffect(() => {
+    if (activeGroup) setGroupTitleDraft(activeGroup.title);
+  }, [activeGroup?.id, activeGroup?.title]);
+  useEffect(() => {
+    const inviteToken = searchParams.get('invite');
+    if (!inviteToken || !userId) return;
+    let current = true;
+    void api.post<{ id: string }>('/groups/join-by-invite', { token: inviteToken })
+      .then(async (response) => {
+        if (!current) return;
+        await loadGroups();
+        setSearchParams({ group: response.data.id }, { replace: true });
+        setActiveGroupId(response.data.id);
+        showToast('Вы присоединились к группе по приглашению.', 'success');
+      })
+      .catch((error: unknown) => {
+        console.error('Не удалось принять приглашение в группу:', error);
+        if (current) showToast('Ссылка приглашения недействительна или устарела.', 'error');
+      });
+    return () => { current = false; };
+  }, [searchParams, userId, loadGroups, setSearchParams, showToast]);
   useEffect(() => {
     void loadGroups().then((items) => {
       if (requestedGroupId && items.some((group) => group.id === requestedGroupId)) setActiveGroupId(requestedGroupId);
@@ -362,6 +394,94 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
       console.error('Не удалось добавить участников:', error);
       showToast('Не удалось добавить участников.', 'error');
     }
+  };
+
+  const saveGroupSettings = async () => {
+    if (!activeGroup || !['owner', 'admin'].includes(activeGroup.currentUserRole)) return;
+    setSavingSettings(true);
+    try {
+      await api.patch(`/groups/${activeGroup.id}/settings`, { title: groupTitleDraft.trim() });
+      await loadGroups();
+      showToast('Настройки группы сохранены.', 'success');
+    } catch (error) {
+      console.error('Не удалось сохранить настройки группы:', error);
+      showToast('Не удалось сохранить настройки группы.', 'error');
+    } finally { setSavingSettings(false); }
+  };
+
+  const toggleGroupPrivacy = async () => {
+    if (!activeGroup || !['owner', 'admin'].includes(activeGroup.currentUserRole)) return;
+    setSavingSettings(true);
+    try {
+      await api.patch(`/groups/${activeGroup.id}/settings`, { isPublic: !activeGroup.isPublic });
+      await loadGroups();
+      showToast(!activeGroup.isPublic ? 'Группа теперь публичная.' : 'Группа теперь приватная.', 'success');
+    } catch (error) {
+      console.error('Не удалось изменить видимость группы:', error);
+      showToast('Не удалось изменить видимость группы.', 'error');
+    } finally { setSavingSettings(false); }
+  };
+
+  const copyInviteLink = async () => {
+    if (!activeGroup?.inviteCode) { showToast('Для этой группы пока нет ссылки приглашения.', 'error'); return; }
+    const link = new URL(`/groups?invite=${encodeURIComponent(activeGroup.inviteCode)}`, window.location.origin).toString();
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast('Ссылка приглашения скопирована.', 'success');
+    } catch (error) {
+      console.error('Не удалось скопировать ссылку:', error);
+      window.prompt('Скопируйте ссылку приглашения:', link);
+    }
+  };
+
+  const updateMemberRole = async (member: GroupMember, role: 'admin' | 'member') => {
+    if (!activeGroup) return;
+    try {
+      await api.patch(`/groups/${activeGroup.id}/members/${member.userId}/role`, { role });
+      await loadGroups();
+      showToast(role === 'admin' ? `@${member.username} назначен администратором.` : `У @${member.username} сняты права администратора.`, 'success');
+    } catch (error) {
+      console.error('Не удалось изменить роль участника:', error);
+      showToast('Не удалось изменить роль участника.', 'error');
+    }
+  };
+
+  const transferOwnership = async (member: GroupMember) => {
+    if (!activeGroup || !window.confirm(`Передать владение группой пользователю @${member.username}? Вы станете администратором.`)) return;
+    try {
+      await api.post(`/groups/${activeGroup.id}/transfer-ownership`, { userId: member.userId });
+      await loadGroups();
+      showToast(`Владелец группы изменён: @${member.username}.`, 'success');
+    } catch (error) {
+      console.error('Не удалось передать владение группой:', error);
+      showToast('Не удалось передать владение группой.', 'error');
+    }
+  };
+
+  const loadPublicGroups = async () => {
+    try {
+      const response = await api.get<typeof publicGroups>('/groups/discover');
+      setPublicGroups(response.data);
+      setDiscoverOpen(true);
+    } catch (error) {
+      console.error('Не удалось загрузить публичные группы:', error);
+      showToast('Не удалось загрузить публичные группы.', 'error');
+    }
+  };
+
+  const joinPublicGroup = async (groupId: string) => {
+    setJoiningPublicGroup(groupId);
+    try {
+      await api.post(`/groups/${groupId}/join`);
+      await loadGroups();
+      setDiscoverOpen(false);
+      setSearchParams({ group: groupId }, { replace: true });
+      setActiveGroupId(groupId);
+      showToast('Вы вступили в группу.', 'success');
+    } catch (error) {
+      console.error('Не удалось вступить в публичную группу:', error);
+      showToast('Не удалось вступить в группу.', 'error');
+    } finally { setJoiningPublicGroup(null); }
   };
 
   const sendMessage = async (event: FormEvent) => {
@@ -630,8 +750,41 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
               <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{activeGroup.title}</h2><p className="text-[11px] text-slate-500">{activeGroup.memberCount} участников</p></div>
               <button type="button" onClick={() => void exportGroup('json')} title="Экспорт JSON" aria-label="Экспортировать группу в JSON" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-accent"><Download size={15} /></button>
               <button type="button" onClick={() => void exportGroup('html')} title="Экспорт HTML" aria-label="Экспортировать группу в HTML" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-accent"><FileText size={15} /></button>
-              <button type="button" onClick={() => { setAddingMembers(true); setCreating(false); setSelectedMembers([]); setMemberSearch(''); }} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.05]"><UserPlus size={15} /><span className="hidden sm:inline">Добавить участников</span></button>
+              <button type="button" onClick={() => { setAddingMembers(true); setCreating(false); setSelectedMembers([]); setMemberSearch(''); }} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/[0.05]"><UserPlus size={15} /><span className="hidden sm:inline">Добавить</span></button>
+              <button type="button" onClick={() => setSettingsOpen((value) => !value)} title="Участники и настройки" aria-label="Участники и настройки группы" className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/[0.05] hover:text-accent"><Settings size={16} /></button>
             </header>
+
+            {settingsOpen && (
+              <section className="max-h-[45vh] overflow-y-auto border-b border-white/[0.08] bg-panel p-4 sm:px-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div><h3 className="text-sm font-semibold">Участники группы</h3><p className="mt-1 text-[11px] text-slate-500">{activeGroup.members.length} участников · владелец и администраторы отмечены отдельно</p></div>
+                  <button type="button" onClick={() => void copyInviteLink()} className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-accent/25 bg-accent/10 px-3 py-2 text-xs text-accent hover:bg-accent/15"><Copy size={14} /> Скопировать приглашение</button>
+                </div>
+                <div className="space-y-1.5">
+                  {activeGroup.members.map((member) => {
+                    const role = member.role || (member.userId === activeGroup.ownerId ? 'owner' : 'member');
+                    const isOwner = role === 'owner' || member.userId === activeGroup.ownerId;
+                    return <div key={member.userId} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.06] px-3 py-2">
+                      {member.avatarUrl ? <img src={member.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" /> : <div className="grid h-8 w-8 place-items-center rounded-full bg-accent/10 text-xs text-accent">{(member.displayName || member.username || '?').slice(0, 1).toUpperCase()}</div>}
+                      <div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{member.displayName || member.username} <span className="text-slate-500">@{member.username}</span></p>
+                        <p className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-500">{isOwner ? <><Crown size={11} className="text-amber-400" /> Владелец</> : role === 'admin' ? <><ShieldCheck size={11} className="text-accent" /> Администратор</> : 'Участник'}</p></div>
+                      {activeGroup.currentUserRole === 'owner' && !isOwner && <>
+                        <button type="button" onClick={() => void updateMemberRole(member, role === 'admin' ? 'member' : 'admin')} className="rounded-lg border border-white/10 px-2 py-1.5 text-[10px] text-t-secondary hover:border-accent/30 hover:text-accent">{role === 'admin' ? 'Снять админа' : 'Назначить админом'}</button>
+                        <button type="button" onClick={() => void transferOwnership(member)} className="rounded-lg border border-amber-400/20 px-2 py-1.5 text-[10px] text-amber-300 hover:bg-amber-400/10">Передать владельца</button>
+                      </>}
+                    </div>;
+                  })}
+                </div>
+                <div className="mt-4 rounded-xl border border-white/[0.07] p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-xs font-semibold">Приглашение и видимость</p><p className="mt-1 text-[10px] text-slate-500">Ссылку можно отправить любому пользователю.</p></div><span className="inline-flex items-center gap-1 rounded-full bg-white/[0.05] px-2 py-1 text-[10px] text-t-secondary">{activeGroup.isPublic ? <Globe size={12} /> : <Lock size={12} />}{activeGroup.isPublic ? 'Публичная' : 'Приватная'}</span></div>
+                  {['owner', 'admin'].includes(activeGroup.currentUserRole) ? <>
+                    <label className="mb-2 block text-[10px] text-t-secondary">Название группы</label>
+                    <div className="mb-3 flex gap-2"><input value={groupTitleDraft} onChange={(event) => setGroupTitleDraft(event.target.value)} maxLength={64} minLength={2} className="h-9 min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950/50 px-3 text-xs outline-none focus:border-accent/40" /><button type="button" disabled={savingSettings || groupTitleDraft.trim().length < 2} onClick={() => void saveGroupSettings()} className="rounded-lg bg-accent px-3 text-xs font-semibold text-white disabled:opacity-40">{savingSettings ? '…' : 'Сохранить'}</button></div>
+                    <button type="button" disabled={savingSettings} onClick={() => void toggleGroupPrivacy()} className="w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-t-secondary hover:border-accent/30 hover:text-accent disabled:opacity-50">{activeGroup.isPublic ? 'Сделать группу приватной' : 'Сделать группу публичной'}</button>
+                  </> : <p className="text-[11px] text-slate-500">Изменять настройки группы могут администраторы и владелец. Назначать администраторов и передавать владение может только владелец.</p>}
+                </div>
+              </section>
+            )}
 
             <div className="flex items-center gap-2 border-b border-white/[0.06] bg-panel px-3 py-2 sm:px-5">
               <label className="relative min-w-0 flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} placeholder="Поиск в переписке" aria-label="Поиск по сообщениям группы" className="h-9 w-full rounded-xl border border-white/10 bg-slate-950/50 pl-9 pr-3 text-xs outline-none focus:border-accent/40" /></label>
