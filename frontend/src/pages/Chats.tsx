@@ -1266,14 +1266,14 @@ export default function Chats() {
       `}</style>
 
       {/* 1. ЛЕВАЯ КОЛОНКА */}
-      <div className={`${activeChat ? 'hidden md:flex md:w-[340px]' : 'flex w-full'} shrink-0 flex-col glass-panel border-r border-slate-800/60 h-full z-10 relative`}>
+      <div className={`${activeChat ? 'hidden md:flex md:w-[340px]' : 'flex w-full'} relative z-10 flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-slate-800/60 glass-panel`}>
         <WorkspaceSidebarHeader
           searchValue={searchQuery}
           onSearchChange={handleSearchChange}
           searchPlaceholder="Поиск чатов, групп, каналов или @username"
         />
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain custom-scrollbar p-3">
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-2 flex justify-between">
             <span>{searchQuery.trim() ? `Результаты (${unifiedEntries.length})` : `Все переписки (${unifiedEntries.length})`}</span>
             <span className="text-[10px] normal-case tracking-normal text-slate-600">
