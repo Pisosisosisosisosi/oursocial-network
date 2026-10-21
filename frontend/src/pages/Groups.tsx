@@ -130,7 +130,7 @@ function writeGroupDraft(userId: string | undefined, groupId: string | undefined
 
 export default function Groups() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const requestedGroupId = searchParams.get('group');
   const { user, e2eeStatus } = useAuth();
   const userId = user?.id;
@@ -647,7 +647,7 @@ export default function Groups() {
           <>
             <EncryptionNotice />
             <header className="flex items-center gap-3 border-b border-white/[0.08] bg-panel px-3 py-3 sm:px-5">
-              <button type="button" onClick={() => setActiveGroupId('')} className="rounded-lg p-2 text-t-secondary hover:bg-white/[0.06] md:hidden" aria-label="К списку групп"><ArrowLeft size={18} /></button>
+              <button type="button" onClick={() => { setActiveGroupId(''); setSearchParams({}, { replace: true }); }} className="rounded-lg p-2 text-t-secondary hover:bg-white/[0.06] md:hidden" aria-label="К списку групп"><ArrowLeft size={18} /></button>
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Users size={18} /></div>
               <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{activeGroup.title}</h2><p className="text-[11px] text-slate-500">{activeGroup.memberCount} участников</p></div>
               <button type="button" onClick={() => void exportGroup('json')} title="Экспорт JSON" aria-label="Экспортировать группу в JSON" className="rounded-xl p-2 text-slate-500 hover:bg-white/[0.05] hover:text-accent"><Download size={15} /></button>
