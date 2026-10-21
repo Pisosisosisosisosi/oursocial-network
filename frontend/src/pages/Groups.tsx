@@ -7,6 +7,7 @@ import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
+import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import { formatAppDateTime } from '../time';
 import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
 import { decryptBytes, encryptBytes, packAttachmentPayload, unpackAttachmentPayload, type RecipientPublicKey } from '../crypto/encrypt';
@@ -23,6 +24,8 @@ interface Group {
   memberCount: number;
   members: GroupMember[];
   createdAt: string;
+  updatedAt?: string;
+  lastMessageAt?: string | null;
 }
 
 interface GroupMessage {
@@ -170,8 +173,13 @@ export default function Groups() {
 
   const loadGroups = useCallback(async () => {
     const response = await api.get<Group[]>('/groups');
-    setGroups(response.data);
-    return response.data;
+    const sorted = [...response.data].sort((a, b) => {
+      const aTime = Date.parse(a.lastMessageAt || a.updatedAt || a.createdAt) || 0;
+      const bTime = Date.parse(b.lastMessageAt || b.updatedAt || b.createdAt) || 0;
+      return bTime - aTime;
+    });
+    setGroups(sorted);
+    return sorted;
   }, []);
 
   useEffect(() => {
@@ -591,6 +599,7 @@ export default function Groups() {
           onSearchChange={setGroupSearch}
           searchPlaceholder="Поиск групп"
         />
+        <div className="border-b border-white/[0.06] px-3 py-2"><WorkspaceTabs /></div>
         <header className="flex items-center justify-between border-b border-white/[0.08] p-4">
           <button type="button" onClick={() => navigate('/')} className="rounded-xl p-2 text-t-secondary transition hover:bg-white/[0.06] hover:text-white" aria-label="Назад к чатам">
             <ArrowLeft size={18} />
@@ -636,7 +645,7 @@ export default function Groups() {
           ) : visibleGroups.map((group) => (
             <button key={group.id} type="button" onClick={() => setActiveGroupId(group.id)} className={`chat-card chat-list-item group mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${activeGroup?.id === group.id ? 'chat-active text-white' : 'text-slate-300'}`}>
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent/20 to-indigo-400/10 text-accent transition duration-300 group-hover:rotate-[-5deg] group-hover:scale-105"><Users size={18} /></span>
-              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{group.title}</span><span className="mt-1 block text-[10px] text-slate-500">{group.memberCount} участников</span></span>
+              <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-medium">{group.title}</span>{group.lastMessageAt && <time className="shrink-0 text-[10px] text-slate-500">{formatAppDateTime(group.lastMessageAt, { hour: '2-digit', minute: '2-digit' })}</time>}</span><span className="mt-1 block truncate text-[10px] text-slate-500">{group.memberCount} участников</span></span>
             </button>
           ))}
         </div>
