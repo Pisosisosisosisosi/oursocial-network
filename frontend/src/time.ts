@@ -24,7 +24,7 @@ export function getAppTimeZone() {
 // as the viewer's local wall-clock time.
 function parseAppDate(value: string | number | Date) {
   if (value instanceof Date) return value;
-  if (typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?$/.test(value)) {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value)) {
     return new Date(value + 'Z');
   }
   return new Date(value);
