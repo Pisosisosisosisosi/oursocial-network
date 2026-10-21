@@ -9,6 +9,7 @@ import VerifyEmail from './pages/VerifyEmail';
 import UserProfile from './pages/UserProfile';
 import Settings from './pages/Settings';
 import Groups from './pages/Groups';
+import WorkspaceLayout from './components/layout/WorkspaceLayout';
 import { applyAppPreferences } from './preferences';
 import { getSocket } from './api/socket';
 import { ToastProvider } from './context/ToastContext';
@@ -127,17 +128,17 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
-      <Route path="/chats" element={user ? <Chats /> : <Navigate to="/login" replace />} />
-      <Route path="/" element={user ? <Chats /> : <Navigate to="/login" replace />} />
+      <Route element={user ? <WorkspaceLayout /> : <Navigate to="/login" replace />}>
+        <Route index element={<Chats embedded />} />
+        <Route path="chats" element={<Chats embedded />} />
+        <Route path="groups" element={<Groups embedded />} />
+        <Route path="channels" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем каналы…</div>}><Channels embedded /></Suspense>} />
+      </Route>
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
       <Route path="/premium" element={user
         ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем Skyline Premium…</div>}><Premium /></Suspense>
         : <Navigate to="/login" replace />} />
       <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
-      <Route path="/groups" element={user ? <Groups /> : <Navigate to="/login" replace />} />
-      <Route path="/channels" element={user
-        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем каналы…</div>}><Channels /></Suspense>
-        : <Navigate to="/login" replace />} />
       <Route path="/join/:inviteCode" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем канал…</div>}><Channels /></Suspense>} />
       <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
