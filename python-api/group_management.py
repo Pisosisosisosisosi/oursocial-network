@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from auth import get_current_user
 from db import groups_collection, users_collection
@@ -45,7 +45,18 @@ async def _notify_members(group: dict, group_id: str, action: str):
 
 class GroupSettingsRequest(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=64)
+    description: str | None = Field(default=None, max_length=500)
+    avatarUrl: str | None = Field(default=None, max_length=1_400_000)
     isPublic: bool | None = None
+
+    @field_validator("avatarUrl")
+    @classmethod
+    def validate_avatar_url(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        if not re.fullmatch(r"data:image/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+=*", value):
+            raise ValueError("Avatar must be a supported base64 image")
+        return value
 
 
 class GroupRoleRequest(BaseModel):
