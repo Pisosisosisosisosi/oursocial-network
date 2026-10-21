@@ -246,7 +246,7 @@ export function applyAppPreferences(isPremium = false) {
   const messageSize = localStorage.getItem('skylineMessageSize');
   root.dataset.messageSize = messageSize === 'small' || messageSize === 'large' ? messageSize : 'medium';
   const bubbleStyle = localStorage.getItem('skylineChatBubbleStyle');
-  root.dataset.chatBubbleStyle = bubbleStyle === 'outlined' || bubbleStyle === 'glass' ? bubbleStyle : 'soft';
+  root.dataset.chatBubbleStyle = bubbleStyle === 'outlined' || bubbleStyle === 'glass' || bubbleStyle === 'none' ? bubbleStyle : 'soft';
   const textStyle = localStorage.getItem('skylineChatTextStyle');
   root.dataset.chatTextStyle = textStyle === 'glow' || textStyle === 'bold' ? textStyle : 'normal';
   applyChatPreferences(root);
