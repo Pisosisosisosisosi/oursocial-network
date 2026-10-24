@@ -106,9 +106,11 @@ class SecurityEndpointTests(unittest.TestCase):
         target_id = "507f1f77bcf86cd799439012"
         with patch("main.users_blocked_either_way", return_value=True):
             with self.assertRaises(HTTPException) as raised:
-                main.send_friend_request(
-                    main.FriendRequestRequest(targetUserId=target_id),
-                    {"userId": user_id},
+                asyncio.run(
+                    main.send_friend_request(
+                        main.FriendRequestRequest(targetUserId=target_id),
+                        {"userId": user_id},
+                    )
                 )
         self.assertEqual(raised.exception.status_code, 403)
 
