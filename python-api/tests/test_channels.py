@@ -136,6 +136,26 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(added["reactions"], [{"userId": SUBSCRIBER_ID, "emoji": "❤️"}])
         self.assertEqual(removed["reactions"], [])
 
+    async def test_update_channel_rejects_stale_owner(self) -> None:
+        collection = Mock()
+        collection.update_one.return_value.matched_count = 0
+
+        with (
+            patch("channels.channel_by_id", return_value=make_channel()),
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            with self.assertRaises(HTTPException) as error:
+                await channels.update_channel(
+                    str(CHANNEL_ID),
+                    channels.UpdateChannelRequest(title="Updated title"),
+                    {"userId": OWNER_ID},
+                )
+
+        self.assertEqual(error.exception.status_code, 409)
+        collection.update_one.assert_called_once()
+        notify.assert_not_awaited()
+
     async def test_public_subscribe_race_returns_persisted_membership(self):
         channel_before = make_channel("public")
         channel_before["members"] = [{
