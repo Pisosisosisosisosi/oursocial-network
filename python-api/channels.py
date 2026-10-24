@@ -226,13 +226,22 @@ async def join_channel_by_invite(invite_code: str, current=Depends(get_current_u
     user_id = current["userId"]
     if not get_member(channel, user_id):
         now = datetime.now(timezone.utc)
-        channels_collection().update_one(
+        update_result = channels_collection().update_one(
             {"_id": channel["_id"], "members.userId": {"$ne": user_id}},
             {"$push": {"members": {"userId": user_id, "role": "subscriber", "joinedAt": now}},
              "$set": {"updatedAt": now}},
         )
-        channel["members"].append({"userId": user_id, "role": "subscriber", "joinedAt": now})
-        await notify_members(channel, {"action": "member_joined", "channelId": str(channel["_id"])})
+        if update_result.modified_count == 1:
+            channel["members"].append({"userId": user_id, "role": "subscriber", "joinedAt": now})
+            channel["updatedAt"] = now
+            await notify_members(channel, {"action": "member_joined", "channelId": str(channel["_id"])})
+        else:
+            # Another request may have joined this user concurrently; return the persisted state.
+            channel = channels_collection().find_one({"_id": channel["_id"]})
+            if not channel:
+                raise HTTPException(status_code=404, detail="Channel not found")
+            if not get_member(channel, user_id):
+                raise HTTPException(status_code=409, detail="Could not join channel; please retry")
     return serialize_channel(channel, user_id)
 
 
