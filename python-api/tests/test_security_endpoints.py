@@ -9,6 +9,50 @@ import group_management
 
 
 class SecurityEndpointTests(unittest.TestCase):
+    def test_removed_group_member_cannot_access_own_old_group_message(self):
+        user_id = "507f1f77bcf86cd799439011"
+        group_id = "507f1f77bcf86cd799439012"
+        message = {
+            "_id": main.ObjectId("507f1f77bcf86cd799439013"),
+            "senderId": user_id,
+            "receiverId": "",
+            "groupId": group_id,
+            "createdAt": main.datetime.now(main.timezone.utc),
+        }
+        with (
+            patch("main.messages_collection") as messages,
+            patch("main.groups_collection") as groups,
+        ):
+            messages.return_value.find_one.return_value = message
+            groups.return_value.find_one.return_value = None
+            with self.assertRaises(HTTPException) as raised:
+                main.find_message_for_user(str(message["_id"]), user_id)
+
+        self.assertEqual(raised.exception.status_code, 404)
+
+    def test_current_group_member_can_access_group_message(self):
+        user_id = "507f1f77bcf86cd799439011"
+        group_id = "507f1f77bcf86cd799439012"
+        message = {
+            "_id": main.ObjectId("507f1f77bcf86cd799439013"),
+            "senderId": user_id,
+            "receiverId": "",
+            "groupId": group_id,
+            "createdAt": main.datetime.now(main.timezone.utc),
+        }
+        joined_at = message["createdAt"] - main.timedelta(seconds=1)
+        with (
+            patch("main.messages_collection") as messages,
+            patch("main.groups_collection") as groups,
+        ):
+            messages.return_value.find_one.return_value = message
+            groups.return_value.find_one.return_value = {
+                "members": [{"userId": user_id, "joinedAt": joined_at}]
+            }
+            found = main.find_message_for_user(str(message["_id"]), user_id)
+
+        self.assertEqual(found, message)
+
     def test_unimplemented_security_controls_fail_instead_of_claiming_success(self):
         current = {"userId": "507f1f77bcf86cd799439011"}
         cases = [
