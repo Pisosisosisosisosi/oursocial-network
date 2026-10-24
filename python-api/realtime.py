@@ -9,7 +9,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 
 from auth import decode_token
-from db import users_collection
+from db import blocked_users_collection, users_collection
 
 
 sio = socketio.AsyncServer(
@@ -25,6 +25,15 @@ hidden_online_users: set[str] = set()
 active_calls: dict[str, set[str]] = {}
 accepted_calls: set[str] = set()
 call_invitees: dict[str, str] = {}
+
+
+def users_blocked_either_way(user_id: str, target_id: str) -> bool:
+    """Return True when either participant has blocked the other."""
+    blocked = blocked_users_collection()
+    return bool(
+        blocked.find_one({"userId": user_id, "blockedUserId": target_id}, {"_id": 1})
+        or blocked.find_one({"userId": target_id, "blockedUserId": user_id}, {"_id": 1})
+    )
 
 
 def _valid_call_id(value: Any) -> bool:
@@ -51,6 +60,8 @@ async def call_invite(sid: str, data: dict[str, Any] | None = None) -> dict[str,
     users = users_collection()
     if not users.find_one({"_id": ObjectId(target_id)}, {"_id": 1}):
         return {"status": "error", "error": "User not found"}
+    if users_blocked_either_way(caller_id, target_id):
+        return {"status": "error", "error": "Calls are unavailable for this user"}
     if call_id in active_calls:
         return {"status": "error", "error": "Call identifier already exists"}
     if any({caller_id, target_id} & participants for participants in active_calls.values()):
@@ -219,10 +230,12 @@ async def typing(sid: str, data: dict[str, Any] | None = None) -> None:
     is_typing = data.get("isTyping")
     if (
         not isinstance(recipient_id, str)
-        or not recipient_id
+        or not ObjectId.is_valid(recipient_id)
         or recipient_id == user_id
         or not isinstance(is_typing, bool)
     ):
+        return
+    if users_blocked_either_way(user_id, recipient_id):
         return
 
     session = await sio.get_session(sid)
