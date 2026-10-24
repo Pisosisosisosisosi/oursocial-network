@@ -6,9 +6,36 @@ from fastapi import HTTPException, Request
 
 import main
 import group_management
+import realtime
 
 
 class SecurityEndpointTests(unittest.TestCase):
+    def test_socket_rejects_token_with_malformed_user_id(self):
+        with (
+            patch("realtime.decode_token", return_value={"userId": "not-an-object-id"}),
+            patch("realtime.users_collection") as users,
+        ):
+            accepted = asyncio.run(
+                realtime.connect("test-invalid-sid", {}, {"token": "valid-looking-token"})
+            )
+
+        self.assertFalse(accepted)
+        users.return_value.find_one.assert_not_called()
+        self.assertNotIn("test-invalid-sid", realtime.sid_users)
+
+    def test_socket_rejects_token_for_deleted_user(self):
+        with (
+            patch("realtime.decode_token", return_value={"userId": "507f1f77bcf86cd799439011"}),
+            patch("realtime.users_collection") as users,
+        ):
+            users.return_value.find_one.return_value = None
+            accepted = asyncio.run(
+                realtime.connect("test-deleted-sid", {}, {"token": "valid-looking-token"})
+            )
+
+        self.assertFalse(accepted)
+        self.assertNotIn("test-deleted-sid", realtime.sid_users)
+
     def test_removed_group_member_cannot_access_own_old_group_message(self):
         user_id = "507f1f77bcf86cd799439011"
         group_id = "507f1f77bcf86cd799439012"
