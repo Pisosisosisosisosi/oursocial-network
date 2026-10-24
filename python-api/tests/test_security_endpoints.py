@@ -30,6 +30,28 @@ class SecurityEndpointTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 404)
 
+    def test_removed_group_member_cannot_delete_group_message_for_all(self):
+        user_id = "507f1f77bcf86cd799439011"
+        group_id = "507f1f77bcf86cd799439012"
+        message = {
+            "_id": main.ObjectId("507f1f77bcf86cd799439013"),
+            "senderId": user_id,
+            "receiverId": "",
+            "groupId": group_id,
+            "createdAt": main.datetime.now(main.timezone.utc),
+        }
+        with (
+            patch("main.messages_collection") as messages,
+            patch("main.groups_collection") as groups,
+        ):
+            messages.return_value.find_one.return_value = message
+            groups.return_value.find_one.return_value = None
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(main.delete_message_for_all(str(message["_id"]), {"userId": user_id}))
+
+        self.assertEqual(raised.exception.status_code, 404)
+        messages.return_value.update_one.assert_not_called()
+
     def test_current_group_member_can_access_group_message(self):
         user_id = "507f1f77bcf86cd799439011"
         group_id = "507f1f77bcf86cd799439012"
