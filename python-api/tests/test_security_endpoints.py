@@ -1,6 +1,6 @@
 import asyncio
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi import HTTPException, Request
 
@@ -439,6 +439,73 @@ class SecurityEndpointTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 403)
         groups.assert_not_called()
+
+    def test_admin_member_add_checks_capacity_and_permissions_atomically(self):
+        owner_id = "507f1f77bcf86cd799439011"
+        admin_id = "507f1f77bcf86cd799439012"
+        group_id = "507f1f77bcf86cd799439013"
+        target_ids = [
+            "507f1f77bcf86cd799439014",
+            "507f1f77bcf86cd799439015",
+        ]
+        members = [
+            {"userId": owner_id, "role": "owner"},
+            {"userId": admin_id, "role": "admin"},
+        ]
+        members.extend(
+            {"userId": f"member-{index}", "role": "member"}
+            for index in range(96)
+        )
+        group = {
+            "_id": main.ObjectId(group_id),
+            "createdBy": owner_id,
+            "members": members,
+        }
+        collection = Mock()
+        collection.update_one.return_value.matched_count = 1
+        collection.find_one.return_value = {
+            **group,
+            "members": members + [
+                {"userId": target_id, "role": "member"}
+                for target_id in target_ids
+            ],
+        }
+        users = Mock()
+        users.find.return_value = [{"_id": main.ObjectId(value)} for value in target_ids]
+
+        with (
+            patch("main.get_group_for_member", return_value=group),
+            patch("main.groups_collection", return_value=collection),
+            patch("main.users_collection", return_value=users),
+            patch("main.sio.emit", new_callable=AsyncMock),
+        ):
+            result = asyncio.run(
+                main.add_group_members(
+                    group_id,
+                    main.AddGroupMembersRequest(memberIds=target_ids),
+                    {"userId": admin_id},
+                )
+            )
+
+        self.assertEqual(result["added"], target_ids)
+        query, update = collection.update_one.call_args.args[:2]
+        self.assertEqual(query["members.userId"], {"$nin": target_ids})
+        self.assertEqual(
+            query["$expr"],
+            {
+                "$lte": [
+                    {
+                        "$add": [
+                            {"$size": {"$ifNull": ["$members", []]}},
+                            2,
+                        ]
+                    },
+                    100,
+                ]
+            },
+        )
+        self.assertIn("$or", query)
+        self.assertIn("$push", update)
 
     def test_group_settings_reject_if_admin_permission_changes_during_update(self):
         user_id = "507f1f77bcf86cd799439011"
