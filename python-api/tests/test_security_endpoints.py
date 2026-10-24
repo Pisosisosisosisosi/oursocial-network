@@ -11,6 +11,53 @@ import auth
 
 
 class SecurityEndpointTests(unittest.TestCase):
+    def test_scheduled_message_requires_exactly_one_destination(self):
+        payload = main.ScheduledMessageRequest(
+            receiverId="507f1f77bcf86cd799439012",
+            groupId="507f1f77bcf86cd799439013",
+            text="skyline-e2e:v3:test",
+            sendAt="2099-01-01T12:00:00+00:00",
+        )
+        with patch("main.scheduled_messages_collection") as scheduled:
+            with self.assertRaises(HTTPException) as raised:
+                main.create_scheduled_message(payload, {"userId": "507f1f77bcf86cd799439011"})
+        self.assertEqual(raised.exception.status_code, 400)
+        scheduled.return_value.insert_one.assert_not_called()
+
+    def test_scheduled_message_respects_user_blocks(self):
+        user_id = "507f1f77bcf86cd799439011"
+        target_id = "507f1f77bcf86cd799439012"
+        payload = main.ScheduledMessageRequest(
+            receiverId=target_id,
+            text="skyline-e2e:v3:test",
+            sendAt="2099-01-01T12:00:00+00:00",
+        )
+        with (
+            patch("main.users_collection") as users,
+            patch("main.users_blocked_either_way", return_value=True),
+            patch("main.scheduled_messages_collection") as scheduled,
+        ):
+            users.return_value.find_one.return_value = {"_id": main.ObjectId(target_id)}
+            with self.assertRaises(HTTPException) as raised:
+                main.create_scheduled_message(payload, {"userId": user_id})
+        self.assertEqual(raised.exception.status_code, 403)
+        scheduled.return_value.insert_one.assert_not_called()
+
+    def test_scheduled_message_rejects_timezone_naive_datetime(self):
+        payload = main.ScheduledMessageRequest(
+            receiverId="507f1f77bcf86cd799439012",
+            text="skyline-e2e:v3:test",
+            sendAt="2099-01-01T12:00:00",
+        )
+        with (
+            patch("main.users_collection") as users,
+            patch("main.users_blocked_either_way", return_value=False),
+        ):
+            users.return_value.find_one.return_value = {"_id": main.ObjectId("507f1f77bcf86cd799439012")}
+            with self.assertRaises(HTTPException) as raised:
+                main.create_scheduled_message(payload, {"userId": "507f1f77bcf86cd799439011"})
+        self.assertEqual(raised.exception.status_code, 422)
+
     def test_api_auth_rejects_token_with_malformed_user_id(self):
         with (
             patch("auth.decode_token", return_value={"userId": "not-an-object-id"}),
