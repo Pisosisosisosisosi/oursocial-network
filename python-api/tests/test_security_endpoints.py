@@ -49,6 +49,31 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 403)
         groups.assert_not_called()
 
+    def test_ownership_transfer_reports_stale_owner_instead_of_success(self):
+        user_id = "507f1f77bcf86cd799439011"
+        target_id = "507f1f77bcf86cd799439012"
+        group_id = "507f1f77bcf86cd799439013"
+        legacy_group = {
+            "_id": main.ObjectId(group_id),
+            "members": [{"userId": user_id, "role": "owner"}],
+        }
+
+        with (
+            patch("group_management._group_for_member", return_value=legacy_group),
+            patch("group_management.groups_collection") as groups,
+        ):
+            groups.return_value.update_one.return_value.matched_count = 0
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(
+                    group_management.transfer_group_ownership(
+                        group_id,
+                        group_management.TransferOwnershipRequest(userId=target_id),
+                        {"userId": user_id},
+                    )
+                )
+
+        self.assertEqual(raised.exception.status_code, 409)
+
     def test_group_avatar_validation_accepts_supported_data_uri(self):
         settings = group_management.GroupSettingsRequest(
             avatarUrl="data:image/png;base64,AAAA"
