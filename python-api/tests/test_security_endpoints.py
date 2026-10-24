@@ -87,6 +87,61 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 403)
         gifts.return_value.find_one.assert_not_called()
 
+    def test_event_rejects_invalid_participant_ids(self):
+        payload = main.EventCreateRequest(
+            title="Meeting",
+            eventDate="2099-01-01T12:00:00Z",
+            participants=["not-an-object-id"],
+        )
+        with patch("main.events_collection") as events:
+            with self.assertRaises(HTTPException) as raised:
+                main.create_event(payload, {"userId": "507f1f77bcf86cd799439011"})
+        self.assertEqual(raised.exception.status_code, 400)
+        events.return_value.insert_one.assert_not_called()
+
+    def test_event_normalizes_datetime_and_deduplicates_participants(self):
+        user_id = "507f1f77bcf86cd799439011"
+        participant_id = "507f1f77bcf86cd799439012"
+        payload = main.EventCreateRequest(
+            title="Meeting",
+            eventDate="2099-01-01T12:00:00",
+            participants=[participant_id, participant_id, user_id],
+        )
+        with (
+            patch("main.users_collection") as users,
+            patch("main.events_collection") as events,
+        ):
+            users.return_value.count_documents.return_value = 1
+            events.return_value.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439013")
+            result = main.create_event(payload, {"userId": user_id})
+        self.assertEqual(result["status"], "ok")
+        saved = events.return_value.insert_one.call_args.args[0]
+        self.assertEqual(saved["participants"], [user_id, participant_id])
+        self.assertEqual(saved["eventDate"].utcoffset(), main.timedelta(0))
+
+    def test_story_view_rejects_expired_or_missing_story(self):
+        with patch("main.stories_collection") as stories:
+            stories.return_value.update_one.return_value.matched_count = 0
+            with self.assertRaises(HTTPException) as raised:
+                main.view_story("507f1f77bcf86cd799439011", {"userId": "507f1f77bcf86cd799439012"})
+        self.assertEqual(raised.exception.status_code, 404)
+
+    def test_report_rejects_missing_target(self):
+        payload = main.ReportRequest(
+            targetType="user",
+            targetId="507f1f77bcf86cd799439013",
+            reason="Test report",
+        )
+        with (
+            patch("main.users_collection") as users,
+            patch("main.reports_collection") as reports,
+        ):
+            users.return_value.find_one.return_value = None
+            with self.assertRaises(HTTPException) as raised:
+                main.create_report(payload, {"userId": "507f1f77bcf86cd799439011"})
+        self.assertEqual(raised.exception.status_code, 404)
+        reports.return_value.insert_one.assert_not_called()
+
     def test_api_auth_rejects_token_with_malformed_user_id(self):
         with (
             patch("auth.decode_token", return_value={"userId": "not-an-object-id"}),
