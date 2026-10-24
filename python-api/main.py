@@ -2964,6 +2964,17 @@ def create_event(
         })
         if existing_users != len(participant_ids):
             raise HTTPException(status_code=404, detail="One or more participants were not found")
+        creator = users_collection().find_one(
+            {"_id": ObjectId(current["userId"])},
+            {"contacts.userId": 1},
+        ) or {}
+        contact_ids = {
+            str(contact.get("userId"))
+            for contact in creator.get("contacts", [])
+            if isinstance(contact, dict) and contact.get("userId")
+        }
+        if any(user_id not in contact_ids for user_id in participant_ids):
+            raise HTTPException(status_code=403, detail="Events can only invite your contacts")
 
     doc = {
         "creatorId": current["userId"],
