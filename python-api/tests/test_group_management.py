@@ -1,0 +1,100 @@
+import unittest
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, Mock, patch
+
+from bson import ObjectId
+from fastapi import HTTPException
+
+import group_management
+
+
+OWNER_ID = "507f1f77bcf86cd799439011"
+JOINER_ID = "507f1f77bcf86cd799439012"
+GROUP_ID = ObjectId("507f1f77bcf86cd799439013")
+INVITE_TOKEN = "a-valid-invite-token-12345"
+
+
+def make_group(*, is_public=True, members=None):
+    now = datetime.now(timezone.utc)
+    return {
+        "_id": GROUP_ID,
+        "title": "Test group",
+        "isPublic": is_public,
+        "inviteCode": INVITE_TOKEN,
+        "createdBy": OWNER_ID,
+        "members": members or [{"userId": OWNER_ID, "role": "owner", "joinedAt": now}],
+        "createdAt": now,
+        "updatedAt": now,
+    }
+
+
+class GroupJoinConcurrencyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invite_join_race_returns_already_member_without_duplicate_notification(self):
+        before = make_group()
+        after = make_group(members=[
+            *before["members"],
+            {"userId": JOINER_ID, "role": "member", "joinedAt": datetime.now(timezone.utc)},
+        ])
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 0
+        collection.find_one.side_effect = [before, after]
+
+        with (
+            patch("group_management.groups_collection", return_value=collection),
+            patch("group_management._notify_members", new_callable=AsyncMock) as notify,
+        ):
+            response = await group_management.join_group_by_invite(
+                group_management.JoinInviteRequest(token=INVITE_TOKEN),
+                {"userId": JOINER_ID},
+            )
+
+        self.assertTrue(response["alreadyMember"])
+        self.assertEqual(response["id"], str(GROUP_ID))
+        notify.assert_not_awaited()
+
+    async def test_public_join_race_returns_already_member_without_duplicate_notification(self):
+        before = make_group(is_public=True)
+        after = make_group(is_public=True, members=[
+            *before["members"],
+            {"userId": JOINER_ID, "role": "member", "joinedAt": datetime.now(timezone.utc)},
+        ])
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 0
+        collection.find_one.side_effect = [before, after]
+
+        with (
+            patch("group_management.groups_collection", return_value=collection),
+            patch("group_management._notify_members", new_callable=AsyncMock) as notify,
+        ):
+            response = await group_management.join_public_group(
+                str(GROUP_ID),
+                {"userId": JOINER_ID},
+            )
+
+        self.assertTrue(response["alreadyMember"])
+        self.assertEqual(response["id"], str(GROUP_ID))
+        notify.assert_not_awaited()
+
+    async def test_public_join_rejects_group_that_became_private_during_join(self):
+        before = make_group(is_public=True)
+        after = make_group(is_public=False)
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 0
+        collection.find_one.side_effect = [before, after]
+
+        with (
+            patch("group_management.groups_collection", return_value=collection),
+            patch("group_management._notify_members", new_callable=AsyncMock) as notify,
+        ):
+            with self.assertRaises(HTTPException) as error:
+                await group_management.join_public_group(
+                    str(GROUP_ID),
+                    {"userId": JOINER_ID},
+                )
+
+        self.assertEqual(error.exception.status_code, 404)
+        notify.assert_not_awaited()
+
+
+if __name__ == "__main__":
+    unittest.main()
