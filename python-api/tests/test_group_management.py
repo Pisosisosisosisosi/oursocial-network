@@ -55,7 +55,13 @@ class GroupJoinConcurrencyTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response["ownerId"], new_owner_id)
         query, update = collection.update_one.call_args.args[:2]
-        self.assertEqual(query["members.userId"], new_owner_id)
+        self.assertEqual(
+            query["$and"],
+            [
+                {"members": {"$elemMatch": {"userId": OWNER_ID}}},
+                {"members": {"$elemMatch": {"userId": new_owner_id}}},
+            ],
+        )
         self.assertNotIn("members", update["$set"])
         self.assertEqual(
             collection.update_one.call_args.kwargs["array_filters"],
