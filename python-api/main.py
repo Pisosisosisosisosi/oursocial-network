@@ -1630,15 +1630,45 @@ async def add_group_members(
     now = datetime.now(timezone.utc)
     joined_at = now + timedelta(milliseconds=1)
     new_members = [{"userId": value, "joinedAt": joined_at, "role": "member"} for value in new_ids]
-    groups_collection().update_one(
-        {"_id": group["_id"]},
+    update_result = groups_collection().update_one(
+        {
+            "_id": group["_id"],
+            # Re-check admin privileges and member capacity at write time.
+            "$or": [
+                {"createdBy": current_user_id},
+                {"members": {"$elemMatch": {
+                    "userId": current_user_id,
+                    "role": {"$in": ["owner", "admin"]},
+                }}},
+            ],
+            # Reject if any requested user was added concurrently.
+            "members.userId": {"$nin": new_ids},
+            "$expr": {
+                "$lte": [
+                    {
+                        "$add": [
+                            {"$size": {"$ifNull": ["$members", []]}},
+                            len(new_ids),
+                        ]
+                    },
+                    100,
+                ]
+            },
+        },
         {"$push": {"members": {"$each": new_members}}, "$set": {"updatedAt": now}},
     )
-    for member_id in [*existing_ids, *new_ids]:
+    if update_result.matched_count != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Group membership or permissions changed; refresh and retry",
+        )
+
+    updated_group = groups_collection().find_one({"_id": group["_id"]})
+    for member in updated_group.get("members", []):
         await sio.emit(
             "group_changed",
             {"groupId": group_id, "action": "members"},
-            to=f"user:{member_id}",
+            to=f"user:{member['userId']}",
         )
     return {"status": "ok", "added": new_ids}
 
