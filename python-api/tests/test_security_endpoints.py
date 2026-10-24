@@ -58,6 +58,35 @@ class SecurityEndpointTests(unittest.TestCase):
                 main.create_scheduled_message(payload, {"userId": "507f1f77bcf86cd799439011"})
         self.assertEqual(raised.exception.status_code, 422)
 
+    def test_gift_rejects_invalid_recipient_id(self):
+        payload = main.GiftSendRequest(
+            giftId="507f1f77bcf86cd799439013",
+            targetUserId="not-an-object-id",
+        )
+        with patch("main.gifts_collection") as gifts:
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(main.send_gift(payload, {"userId": "507f1f77bcf86cd799439011"}))
+        self.assertEqual(raised.exception.status_code, 400)
+        gifts.return_value.find_one.assert_not_called()
+
+    def test_gift_respects_block_relationships(self):
+        user_id = "507f1f77bcf86cd799439011"
+        target_id = "507f1f77bcf86cd799439012"
+        payload = main.GiftSendRequest(
+            giftId="507f1f77bcf86cd799439013",
+            targetUserId=target_id,
+        )
+        with (
+            patch("main.users_collection") as users,
+            patch("main.users_blocked_either_way", return_value=True),
+            patch("main.gifts_collection") as gifts,
+        ):
+            users.return_value.find_one.return_value = {"_id": main.ObjectId(target_id)}
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(main.send_gift(payload, {"userId": user_id}))
+        self.assertEqual(raised.exception.status_code, 403)
+        gifts.return_value.find_one.assert_not_called()
+
     def test_api_auth_rejects_token_with_malformed_user_id(self):
         with (
             patch("auth.decode_token", return_value={"userId": "not-an-object-id"}),
