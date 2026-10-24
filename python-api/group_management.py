@@ -177,13 +177,22 @@ async def join_group_by_invite(payload: JoinInviteRequest, current=Depends(get_c
     if len(group.get("members", [])) >= 100:
         raise HTTPException(status_code=409, detail="This group has reached its member limit")
     now = datetime.now(timezone.utc)
-    groups_collection().update_one(
+    update_result = groups_collection().update_one(
         {"_id": group["_id"], "members.userId": {"$ne": user_id}},
         {"$push": {"members": {"userId": user_id, "joinedAt": now, "role": "member"}}, "$set": {"updatedAt": now}},
     )
+    if update_result.modified_count == 1:
+        updated = groups_collection().find_one({"_id": group["_id"]})
+        await _notify_members(updated, str(group["_id"]), "members")
+        return {"status": "ok", "id": str(group["_id"]), "alreadyMember": False}
+
+    # Another request may have joined this user concurrently; return persisted state.
     updated = groups_collection().find_one({"_id": group["_id"]})
-    await _notify_members(updated, str(group["_id"]), "members")
-    return {"status": "ok", "id": str(group["_id"]), "alreadyMember": False}
+    if not updated:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if not any(member.get("userId") == user_id for member in updated.get("members", [])):
+        raise HTTPException(status_code=409, detail="Could not join group; please retry")
+    return {"status": "ok", "id": str(group["_id"]), "alreadyMember": True}
 
 
 @router.post("/groups/{group_id}/join")
@@ -199,13 +208,24 @@ async def join_public_group(group_id: str, current=Depends(get_current_user)):
     if len(group.get("members", [])) >= 100:
         raise HTTPException(status_code=409, detail="This group has reached its member limit")
     now = datetime.now(timezone.utc)
-    groups_collection().update_one(
-        {"_id": group["_id"], "members.userId": {"$ne": user_id}},
+    update_result = groups_collection().update_one(
+        {"_id": group["_id"], "isPublic": True, "members.userId": {"$ne": user_id}},
         {"$push": {"members": {"userId": user_id, "joinedAt": now, "role": "member"}}, "$set": {"updatedAt": now}},
     )
+    if update_result.modified_count == 1:
+        updated = groups_collection().find_one({"_id": group["_id"]})
+        await _notify_members(updated, group_id, "members")
+        return {"status": "ok", "id": group_id, "alreadyMember": False}
+
+    # Another request may have joined this user or the group may have become private.
     updated = groups_collection().find_one({"_id": group["_id"]})
-    await _notify_members(updated, group_id, "members")
-    return {"status": "ok", "id": group_id, "alreadyMember": False}
+    if not updated:
+        raise HTTPException(status_code=404, detail="Public group not found")
+    if not updated.get("isPublic", False):
+        raise HTTPException(status_code=404, detail="Public group not found")
+    if not any(member.get("userId") == user_id for member in updated.get("members", [])):
+        raise HTTPException(status_code=409, detail="Could not join group; please retry")
+    return {"status": "ok", "id": group_id, "alreadyMember": True}
 
 
 @router.get("/groups/discover")
