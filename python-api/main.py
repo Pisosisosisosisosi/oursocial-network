@@ -2703,9 +2703,15 @@ def block_user(
         {"$set": {"blockedAt": datetime.now(timezone.utc)}},
         upsert=True,
     )
+    owner_filter = {"_id": ObjectId(current["userId"])}
+    # Contacts are normally embedded documents; also clean up legacy scalar IDs.
     users_collection().update_one(
-        {"_id": ObjectId(current["userId"])},
-        {"$pull": {"contacts": target_id}}
+        owner_filter,
+        {"$pull": {"contacts": {"userId": target_id}}},
+    )
+    users_collection().update_one(
+        owner_filter,
+        {"$pull": {"contacts": target_id}},
     )
     return {"status": "ok"}
 

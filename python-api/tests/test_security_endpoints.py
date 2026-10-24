@@ -11,6 +11,22 @@ import auth
 
 
 class SecurityEndpointTests(unittest.TestCase):
+    def test_block_user_removes_embedded_and_legacy_contact_entries(self):
+        user_id = "507f1f77bcf86cd799439011"
+        target_id = "507f1f77bcf86cd799439012"
+        payload = main.BlockUserRequest(targetUserId=target_id)
+        with (
+            patch("main.blocked_users_collection") as blocked,
+            patch("main.users_collection") as users,
+        ):
+            result = main.block_user(payload, {"userId": user_id})
+        self.assertEqual(result, {"status": "ok"})
+        blocked.return_value.update_one.assert_called_once()
+        self.assertEqual(users.return_value.update_one.call_count, 2)
+        calls = users.return_value.update_one.call_args_list
+        self.assertEqual(calls[0].args[1], {"$pull": {"contacts": {"userId": target_id}}})
+        self.assertEqual(calls[1].args[1], {"$pull": {"contacts": target_id}})
+
     def test_scheduled_message_requires_exactly_one_destination(self):
         payload = main.ScheduledMessageRequest(
             receiverId="507f1f77bcf86cd799439012",
