@@ -2429,9 +2429,45 @@ def create_scheduled_message(
     current=Depends(get_current_user),
 ):
     """Запланировать отправку сообщения на определённое время"""
-    send_at = datetime.fromisoformat(payload.sendAt)
+    has_receiver = bool(payload.receiverId)
+    has_group = bool(payload.groupId)
+    if has_receiver == has_group:
+        raise HTTPException(status_code=400, detail="Choose exactly one message destination")
+
+    if has_group:
+        # Scheduling is only available to current group members.
+        get_group_for_member(payload.groupId, current["userId"])
+    else:
+        if not ObjectId.is_valid(payload.receiverId):
+            raise HTTPException(status_code=400, detail="Invalid receiver id")
+        if payload.receiverId == current["userId"]:
+            raise HTTPException(status_code=400, detail="Cannot schedule a message to yourself")
+        if not users_collection().find_one({"_id": ObjectId(payload.receiverId)}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Recipient not found")
+        if users_blocked_either_way(current["userId"], payload.receiverId):
+            raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
+
+    try:
+        send_at = datetime.fromisoformat(payload.sendAt.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Invalid sendAt datetime")
+    if send_at.tzinfo is None or send_at.utcoffset() is None:
+        raise HTTPException(status_code=422, detail="sendAt must include a timezone")
+    send_at = send_at.astimezone(timezone.utc)
     if send_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Send time must be in the future")
+    if payload.type == "text":
+        if not payload.text.strip():
+            raise HTTPException(status_code=400, detail="Message text cannot be empty")
+        if not payload.text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
+            raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
+    else:
+        if payload.fileName or payload.contentType:
+            raise HTTPException(status_code=400, detail="Attachment metadata must be encrypted on the client")
+        recipients = {current["userId"]}
+        if payload.receiverId:
+            recipients.add(payload.receiverId)
+        validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, recipients)
     doc = {
         "senderId": current["userId"],
         "senderName": current.get("username", "Пользователь"),
