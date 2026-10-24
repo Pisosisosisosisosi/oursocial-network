@@ -46,6 +46,52 @@ class SecurityEndpointTests(unittest.TestCase):
                 )
         self.assertEqual(raised.exception.status_code, 403)
 
+    def test_blocked_user_cannot_forward_to_direct_chat(self):
+        user_id = "507f1f77bcf86cd799439011"
+        target_id = "507f1f77bcf86cd799439012"
+        original = {
+            "_id": main.ObjectId("507f1f77bcf86cd799439013"),
+            "senderId": user_id,
+            "receiverId": "507f1f77bcf86cd799439014",
+            "createdAt": main.datetime.now(main.timezone.utc),
+        }
+        with (
+            patch("main.find_message_for_user", return_value=original),
+            patch("main.users_blocked_either_way", return_value=True),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(
+                    main.forward_message(
+                        str(original["_id"]),
+                        main.MessageForwardRequest(targetUserId=target_id, text="skyline-e2e:v3:test"),
+                        {"userId": user_id},
+                    )
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+
+    def test_blocked_user_cannot_reply_in_direct_chat(self):
+        user_id = "507f1f77bcf86cd799439011"
+        target_id = "507f1f77bcf86cd799439012"
+        original = {
+            "_id": main.ObjectId("507f1f77bcf86cd799439013"),
+            "senderId": target_id,
+            "receiverId": user_id,
+            "createdAt": main.datetime.now(main.timezone.utc),
+        }
+        with (
+            patch("main.find_message_for_user", return_value=original),
+            patch("main.users_blocked_either_way", return_value=True),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(
+                    main.reply_to_message(
+                        str(original["_id"]),
+                        main.MessageReplyRequest(text="skyline-e2e:v3:test"),
+                        {"userId": user_id},
+                    )
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+
     def test_non_admin_cannot_add_group_members(self):
         user_id = "507f1f77bcf86cd799439011"
         owner_id = "507f1f77bcf86cd799439012"
