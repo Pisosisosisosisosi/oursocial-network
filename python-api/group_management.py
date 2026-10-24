@@ -126,10 +126,18 @@ async def transfer_group_ownership(group_id: str, payload: TransferOwnershipRequ
         elif item.get("userId") == payload.userId:
             item["role"] = "owner"
         members.append(item)
-    groups_collection().update_one(
-        {"_id": group["_id"], "createdBy": current["userId"]},
+    update_result = groups_collection().update_one(
+        {
+            "_id": group["_id"],
+            "$or": [
+                {"createdBy": current["userId"]},
+                {"members": {"$elemMatch": {"userId": current["userId"], "role": "owner"}}},
+            ],
+        },
         {"$set": {"members": members, "createdBy": payload.userId, "updatedAt": now}},
     )
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Group ownership changed; refresh and try again")
     updated = groups_collection().find_one({"_id": group["_id"]})
     await _notify_members(updated, group_id, "ownership")
     return {"status": "ok", "ownerId": payload.userId}
