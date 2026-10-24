@@ -165,10 +165,20 @@ async def connect(sid: str, environ: dict[str, Any], auth_data: dict[str, Any] |
     except (HTTPException, KeyError, TypeError):
         return False
 
+    # Do not establish a Socket.IO session for malformed IDs or tokens belonging
+    # to deleted/nonexistent accounts. Validate before mutating connection state.
+    if not ObjectId.is_valid(user_id):
+        return False
+    user = users_collection().find_one(
+        {"_id": ObjectId(user_id)},
+        {"hideOnlineStatus": 1},
+    )
+    if not user:
+        return False
+
     sid_users[sid] = user_id
     await sio.save_session(sid, {"user_id": user_id, "username": username})
     await sio.enter_room(sid, f"user:{user_id}")
-    user = users_collection().find_one({"_id": ObjectId(user_id)}, {"hideOnlineStatus": 1}) or {}
     if user.get("hideOnlineStatus", False):
         hidden_online_users.add(user_id)
     else:
