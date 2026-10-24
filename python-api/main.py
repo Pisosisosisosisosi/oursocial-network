@@ -2157,6 +2157,8 @@ async def forward_message(
         target_user_id = payload.targetUserId
         if not target_user_id or not ObjectId.is_valid(target_user_id) or target_user_id == current["userId"]:
             raise HTTPException(status_code=400, detail="Invalid forwarding recipient")
+        if users_blocked_either_way(current["userId"], target_user_id):
+            raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
         if not users_collection().find_one({"_id": ObjectId(target_user_id)}, {"_id": 1}):
             raise HTTPException(status_code=404, detail="Forwarding recipient not found")
         recipient_ids = {current["userId"], target_user_id}
@@ -2244,6 +2246,8 @@ async def reply_to_message(
         if len(participants) != 2 or current["userId"] not in participants:
             raise HTTPException(status_code=404, detail="Message not found")
         receiver_id = next(participant for participant in participants if participant != current["userId"])
+        if users_blocked_either_way(current["userId"], receiver_id):
+            raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
         recipient_ids = participants
 
     if payload.fileName or payload.contentType:
