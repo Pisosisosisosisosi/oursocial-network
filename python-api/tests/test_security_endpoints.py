@@ -22,6 +22,19 @@ class SecurityEndpointTests(unittest.TestCase):
                 handler(*args)
             self.assertEqual(raised.exception.status_code, 501)
 
+    def test_blocked_user_cannot_send_direct_message(self):
+        user_id = "507f1f77bcf86cd799439011"
+        target_id = "507f1f77bcf86cd799439012"
+        with patch("main.users_blocked_either_way", return_value=True):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(
+                    main.send_message(
+                        main.MessageRequest(receiverId=target_id, text="skyline-e2e:v3:test"),
+                        {"userId": user_id},
+                    )
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+
     def test_non_admin_cannot_add_group_members(self):
         user_id = "507f1f77bcf86cd799439011"
         owner_id = "507f1f77bcf86cd799439012"
