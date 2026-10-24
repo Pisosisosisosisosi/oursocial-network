@@ -2930,10 +2930,12 @@ def view_story(storyId: str, current=Depends(get_current_user)):
     """Отметить просмотр истории"""
     if not ObjectId.is_valid(storyId):
         raise HTTPException(status_code=400, detail="Invalid story id")
-    stories_collection().update_one(
-        {"_id": ObjectId(storyId)},
+    result = stories_collection().update_one(
+        {"_id": ObjectId(storyId), "expiresAt": {"$gt": datetime.now(timezone.utc)}},
         {"$addToSet": {"views": current["userId"]}}
     )
+    if result.matched_count != 1:
+        raise HTTPException(status_code=404, detail="Story not found or expired")
     return {"status": "ok"}
 
 
@@ -2943,14 +2945,33 @@ def create_event(
     current=Depends(get_current_user),
 ):
     """Создать событие (встречу с датой и местом)"""
-    event_date = datetime.fromisoformat(payload.eventDate)
+    try:
+        event_date = datetime.fromisoformat(payload.eventDate.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Invalid event date")
+    if event_date.tzinfo is None or event_date.utcoffset() is None:
+        event_date = event_date.replace(tzinfo=timezone.utc)
+    event_date = event_date.astimezone(timezone.utc)
+
+    participant_ids = list(dict.fromkeys(payload.participants))
+    if current["userId"] in participant_ids:
+        participant_ids.remove(current["userId"])
+    if any(not ObjectId.is_valid(user_id) for user_id in participant_ids):
+        raise HTTPException(status_code=400, detail="Invalid participant id")
+    if participant_ids:
+        existing_users = users_collection().count_documents({
+            "_id": {"$in": [ObjectId(user_id) for user_id in participant_ids]}
+        })
+        if existing_users != len(participant_ids):
+            raise HTTPException(status_code=404, detail="One or more participants were not found")
+
     doc = {
         "creatorId": current["userId"],
         "title": payload.title,
         "description": payload.description,
         "eventDate": event_date,
         "location": payload.location,
-        "participants": [current["userId"], *payload.participants],
+        "participants": [current["userId"], *participant_ids],
         "createdAt": datetime.now(timezone.utc),
     }
     result = events_collection().insert_one(doc)
@@ -2986,6 +3007,18 @@ def create_report(
     current=Depends(get_current_user),
 ):
     """Пожаловаться на пользователя, сообщение, канал или группу"""
+    if not ObjectId.is_valid(payload.targetId):
+        raise HTTPException(status_code=400, detail="Invalid report target id")
+    target_oid = ObjectId(payload.targetId)
+    target_collections = {
+        "user": users_collection,
+        "message": messages_collection,
+        "channel": channels_collection,
+        "group": groups_collection,
+    }
+    target = target_collections[payload.targetType]().find_one({"_id": target_oid}, {"_id": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="Report target not found")
     doc = {
         "reporterId": current["userId"],
         "targetType": payload.targetType,
