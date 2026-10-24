@@ -29,6 +29,43 @@ def make_group(*, is_public=True, members=None):
 
 
 class GroupJoinConcurrencyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_transfer_ownership_updates_roles_without_replacing_members_snapshot(self):
+        new_owner_id = "507f1f77bcf86cd799439014"
+        before = make_group(members=[
+            {"userId": OWNER_ID, "role": "owner", "joinedAt": datetime.now(timezone.utc)},
+            {"userId": new_owner_id, "role": "member", "joinedAt": datetime.now(timezone.utc)},
+        ])
+        after = make_group(members=[
+            {"userId": OWNER_ID, "role": "admin", "joinedAt": before["members"][0]["joinedAt"]},
+            {"userId": new_owner_id, "role": "owner", "joinedAt": before["members"][1]["joinedAt"]},
+        ])
+        collection = Mock()
+        collection.update_one.return_value.matched_count = 1
+        collection.find_one.return_value = after
+
+        with (
+            patch("group_management.groups_collection", return_value=collection),
+            patch("group_management._notify_members", new_callable=AsyncMock) as notify,
+        ):
+            response = await group_management.transfer_group_ownership(
+                str(GROUP_ID),
+                group_management.TransferOwnershipRequest(userId=new_owner_id),
+                {"userId": OWNER_ID},
+            )
+
+        self.assertEqual(response["ownerId"], new_owner_id)
+        query, update = collection.update_one.call_args.args[:2]
+        self.assertEqual(query["members.userId"], new_owner_id)
+        self.assertNotIn("members", update["$set"])
+        self.assertEqual(
+            collection.update_one.call_args.kwargs["array_filters"],
+            [
+                {"old_owner.userId": OWNER_ID},
+                {"new_owner.userId": new_owner_id},
+            ],
+        )
+        notify.assert_awaited_once()
+
     async def test_invite_join_race_returns_already_member_without_duplicate_notification(self):
         before = make_group()
         after = make_group(members=[
