@@ -2508,7 +2508,7 @@ def list_quick_replies(current=Depends(get_current_user)):
 
 
 @app.post("/friend-requests")
-def send_friend_request(
+async def send_friend_request(
     payload: FriendRequestRequest,
     current=Depends(get_current_user),
 ):
@@ -2545,7 +2545,7 @@ def send_friend_request(
     }
     result = friend_requests_collection().insert_one(doc)
     try:
-        sio.emit("friend_request_received", {
+        await sio.emit("friend_request_received", {
             "requestId": str(result.inserted_id),
             "fromUserId": current["userId"],
             "fromUsername": current.get("username", "Пользователь"),
@@ -2587,7 +2587,7 @@ def list_friend_requests(current=Depends(get_current_user)):
 
 
 @app.post("/friend-requests/{request_id}/respond")
-def respond_to_friend_request(
+async def respond_to_friend_request(
     request_id: str,
     payload: FriendRequestActionRequest,
     current=Depends(get_current_user),
@@ -2625,7 +2625,7 @@ def respond_to_friend_request(
                     {"$addToSet": {"contacts": {"userId": contact_id, "nickname": nickname}}},
                 )
         try:
-            sio.emit("friend_request_accepted", {
+            await sio.emit("friend_request_accepted", {
                 "requestId": request_id,
                 "acceptedBy": current["userId"],
             }, to=f"user:{req['fromUserId']}")
@@ -3076,7 +3076,7 @@ def add_bot_command(bot_id: str, payload: BotCommandRequest, current=Depends(get
 
 
 @app.post("/gifts/send")
-def send_gift(
+async def send_gift(
     payload: GiftSendRequest,
     current=Depends(get_current_user),
 ):
@@ -3094,7 +3094,7 @@ def send_gift(
     from db import get_db
     get_db()["sent_gifts"].insert_one(doc)
     try:
-        sio.emit("gift_received", {
+        await sio.emit("gift_received", {
             "giftId": payload.giftId,
             "giftName": gift.get("name", "Подарок"),
             "senderId": current["userId"],
