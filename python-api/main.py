@@ -1095,7 +1095,20 @@ def find_message_for_user(message_id: str, user_id: str):
         raise HTTPException(status_code=404, detail="Message not found")
     if message.get("deletedForAll"):
         raise HTTPException(status_code=404, detail="Message not found")
-    if user_id in (message.get("senderId"), message.get("receiverId")):
+    group_id = message.get("groupId")
+    if group_id:
+        # Group messages must always pass current membership checks, even when
+        # the requester is the original sender (group messages use receiverId="").
+        if not ObjectId.is_valid(group_id):
+            raise HTTPException(status_code=404, detail="Message not found")
+        group = groups_collection().find_one(
+            {"_id": ObjectId(group_id), "members.userId": user_id},
+            {"members.$": 1},
+        )
+        membership = (group or {}).get("members", [])
+        if not membership or message["createdAt"] < membership[0]["joinedAt"]:
+            raise HTTPException(status_code=404, detail="Message not found")
+    elif user_id in (message.get("senderId"), message.get("receiverId")):
         other_id = message["receiverId"] if message["senderId"] == user_id else message["senderId"]
         owner = users_collection().find_one({"_id": ObjectId(user_id)}, {"hiddenChats": 1}) or {}
         hidden_entry = next(
@@ -1108,16 +1121,7 @@ def find_message_for_user(message_id: str, user_id: str):
         if hidden_entry and message["createdAt"] <= hidden_entry["hiddenAt"]:
             raise HTTPException(status_code=404, detail="Message not found")
     else:
-        group_id = message.get("groupId")
-        if not group_id or not ObjectId.is_valid(group_id):
-            raise HTTPException(status_code=404, detail="Message not found")
-        group = groups_collection().find_one(
-            {"_id": ObjectId(group_id), "members.userId": user_id},
-            {"members.$": 1},
-        )
-        membership = (group or {}).get("members", [])
-        if not membership or message["createdAt"] < membership[0]["joinedAt"]:
-            raise HTTPException(status_code=404, detail="Message not found")
+        raise HTTPException(status_code=404, detail="Message not found")
     return message
 
 
