@@ -336,10 +336,18 @@ async def unsubscribe_channel(channel_id: str, current=Depends(get_current_user)
     if channel["ownerId"] == user_id:
         raise HTTPException(status_code=400, detail="The channel owner cannot unsubscribe")
     if get_member(channel, user_id):
-        channels_collection().update_one(
-            {"_id": channel["_id"]},
+        update_result = channels_collection().update_one(
+            {"_id": channel["_id"], "members.userId": user_id},
             {"$pull": {"members": {"userId": user_id}}, "$set": {"updatedAt": datetime.now(timezone.utc)}},
         )
+        if update_result.modified_count != 1:
+            # Do not broadcast a leave event based only on stale in-memory membership.
+            persisted_channel = channels_collection().find_one({"_id": channel["_id"]})
+            if not persisted_channel:
+                raise HTTPException(status_code=404, detail="Channel not found")
+            if get_member(persisted_channel, user_id):
+                raise HTTPException(status_code=409, detail="Could not unsubscribe from channel; please retry")
+            return {"status": "unsubscribed"}
         await notify_members(
             {**channel, "members": [member for member in channel["members"] if member["userId"] != user_id]},
             {"action": "member_left", "channelId": channel_id},

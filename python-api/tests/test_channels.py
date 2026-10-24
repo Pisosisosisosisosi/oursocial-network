@@ -237,6 +237,49 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
         notify.assert_not_awaited()
         self.assertEqual(collection.find_one.call_count, 2)
 
+    async def test_unsubscribe_rejects_failed_update_while_membership_persists(self) -> None:
+        channel = make_channel("public")
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 0
+        collection.find_one.return_value = channel
+
+        with (
+            patch("channels.channel_by_id", return_value=channel),
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            with self.assertRaises(HTTPException) as error:
+                await channels.unsubscribe_channel(
+                    str(CHANNEL_ID), {"userId": SUBSCRIBER_ID}
+                )
+
+        self.assertEqual(error.exception.status_code, 409)
+        collection.update_one.assert_called_once()
+        notify.assert_not_awaited()
+
+    async def test_unsubscribe_race_does_not_broadcast_duplicate_leave(self) -> None:
+        channel_before = make_channel("public")
+        channel_after = make_channel("public")
+        channel_after["members"] = [
+            member for member in channel_after["members"]
+            if member["userId"] != SUBSCRIBER_ID
+        ]
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 0
+        collection.find_one.return_value = channel_after
+
+        with (
+            patch("channels.channel_by_id", return_value=channel_before),
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            response = await channels.unsubscribe_channel(
+                str(CHANNEL_ID), {"userId": SUBSCRIBER_ID}
+            )
+
+        self.assertEqual(response, {"status": "unsubscribed"})
+        notify.assert_not_awaited()
+
     def test_avatar_rejects_active_content_data_urls(self) -> None:
         with self.assertRaises(ValueError):
             channels.UpdateChannelRequest(avatarUrl="data:image/svg+xml,<svg></svg>")
