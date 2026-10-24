@@ -136,6 +136,29 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(added["reactions"], [{"userId": SUBSCRIBER_ID, "emoji": "❤️"}])
         self.assertEqual(removed["reactions"], [])
 
+    async def test_delete_channel_rejects_stale_owner(self) -> None:
+        collection = Mock()
+        collection.delete_one.return_value.deleted_count = 0
+        posts = Mock()
+
+        with (
+            patch("channels.channel_by_id", return_value=make_channel()),
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.channel_posts_collection", return_value=posts),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            with self.assertRaises(HTTPException) as error:
+                await channels.delete_channel(
+                    str(CHANNEL_ID), {"userId": OWNER_ID}
+                )
+
+        self.assertEqual(error.exception.status_code, 409)
+        collection.delete_one.assert_called_once_with(
+            {"_id": CHANNEL_ID, "ownerId": OWNER_ID}
+        )
+        posts.delete_many.assert_not_called()
+        notify.assert_not_awaited()
+
     async def test_update_channel_rejects_stale_owner(self) -> None:
         collection = Mock()
         collection.update_one.return_value.matched_count = 0
