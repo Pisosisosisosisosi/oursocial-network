@@ -848,6 +848,9 @@ def get_contacts(current=Depends(get_current_user)):
     result = []
     for contact in contacts:
         contact_id = contact.get("userId") if isinstance(contact, dict) else str(contact)
+        # A blocked relationship must not make the former contact reappear in the chat list.
+        if users_blocked_either_way(current_id, contact_id):
+            continue
         if contact_id not in profile_by_id:
             continue
         hidden_at = hidden_chats.get(contact_id)
@@ -890,6 +893,9 @@ def get_contacts(current=Depends(get_current_user)):
     known_ids = {str(c) for c in contact_ids}
     for partner_id, stats in chat_stats.items():
         if partner_id in known_ids:
+            continue
+        # Old message history is retained, but blocked conversations stay out of the chat list.
+        if users_blocked_either_way(current_id, partner_id):
             continue
         profile = users.find_one(
             {"_id": ObjectId(partner_id)},
