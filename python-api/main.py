@@ -1586,6 +1586,19 @@ async def add_group_members(
     current=Depends(get_current_user),
 ):
     group = get_group_for_member(group_id, current["userId"])
+    current_user_id = current["userId"]
+    current_member = next(
+        (member for member in group.get("members", []) if member.get("userId") == current_user_id),
+        {},
+    )
+    current_role = (
+        "owner"
+        if group.get("createdBy") == current_user_id or current_member.get("role") == "owner"
+        else current_member.get("role", "member")
+    )
+    if current_role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only group admins can add members")
+
     member_ids = list(dict.fromkeys(payload.memberIds))
     if any(not ObjectId.is_valid(value) for value in member_ids):
         raise HTTPException(status_code=400, detail="Invalid member id")
