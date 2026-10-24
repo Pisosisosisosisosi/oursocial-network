@@ -1159,9 +1159,6 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
         raise HTTPException(status_code=400, detail="Invalid receiver id")
     if payload.receiverId == current["userId"]:
         raise HTTPException(status_code=400, detail="Cannot send a message to yourself")
-    if users_blocked_either_way(current["userId"], payload.receiverId):
-        raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
-
     file_name = ""
     content_type = ""
     file_data = ""
@@ -1183,6 +1180,9 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
             raise HTTPException(status_code=400, detail="Attachment metadata must be encrypted on the client")
         validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, {current["userId"], payload.receiverId})
         file_data = payload.fileData
+
+    if users_blocked_either_way(current["userId"], payload.receiverId):
+        raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
 
     enforce_message_rate_limit(current["userId"])
 
