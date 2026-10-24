@@ -2103,32 +2103,33 @@ def set_disappearing_messages(
 
 
 @app.post("/messages/{message_id}/delete-for-all")
-def delete_message_for_all(
+async def delete_message_for_all(
     message_id: str,
     current=Depends(get_current_user),
 ):
     """Удалить сообщение у всех участников чата"""
-    if not ObjectId.is_valid(message_id):
-        raise HTTPException(status_code=400, detail="Invalid message id")
-    message = messages_collection().find_one({"_id": ObjectId(message_id)})
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
+    message = find_message_for_user(message_id, current["userId"])
     if message["senderId"] != current["userId"]:
         raise HTTPException(status_code=403, detail="Only sender can delete for everyone")
-    messages_collection().update_one(
-        {"_id": ObjectId(message_id)},
-        {"$set": {"deletedForAll": True, "deletedAt": datetime.now(timezone.utc), "deletedBy": current["userId"]}}
+    update_result = messages_collection().update_one(
+        {"_id": message["_id"], "senderId": current["userId"], "deletedForAll": {"$ne": True}},
+        {"$set": {"deletedForAll": True, "deletedAt": datetime.now(timezone.utc), "deletedBy": current["userId"]}},
     )
-    other_id = message["receiverId"] if message["senderId"] == current["userId"] else message["senderId"]
-    for uid in {current["userId"], other_id}:
-        try:
-            sio.emit("message_deleted_for_all", {
-                "messageId": message_id,
-                "chatId": message.get("chatId") or message.get("groupId"),
-                "senderId": current["userId"],
-            }, to=f"user:{uid}")
-        except Exception:
-            pass
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message.get("groupId"):
+        recipients = group_message_recipients(message["groupId"])
+    else:
+        recipients = [message["senderId"], message["receiverId"]]
+    event = {
+        "messageId": message_id,
+        "chatId": message.get("chatId") or message.get("groupId"),
+        "groupId": message.get("groupId"),
+        "senderId": current["userId"],
+        "action": "deleted_for_all",
+    }
+    for uid in set(recipients):
+        await sio.emit("message_deleted_for_all", event, to=f"user:{uid}")
     return {"status": "ok"}
 
 
