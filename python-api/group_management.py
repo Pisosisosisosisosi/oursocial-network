@@ -144,8 +144,11 @@ async def transfer_group_ownership(group_id: str, payload: TransferOwnershipRequ
     update_result = groups_collection().update_one(
         {
             "_id": group["_id"],
-            # Re-check both ownership and target membership at write time.
-            "members.userId": payload.userId,
+            # Re-check both members and ownership at write time.
+            "$and": [
+                {"members": {"$elemMatch": {"userId": current["userId"]}}},
+                {"members": {"$elemMatch": {"userId": payload.userId}}},
+            ],
             "$or": [
                 {"createdBy": current["userId"]},
                 {"members": {"$elemMatch": {"userId": current["userId"], "role": "owner"}}},
