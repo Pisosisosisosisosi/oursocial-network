@@ -2509,6 +2509,8 @@ def send_friend_request(
         raise HTTPException(status_code=400, detail="Cannot send request to yourself")
     if not ObjectId.is_valid(target_id):
         raise HTTPException(status_code=400, detail="Invalid user id")
+    if users_blocked_either_way(current["userId"], target_id):
+        raise HTTPException(status_code=403, detail="Friend requests are unavailable for this user")
     target = users_collection().find_one({"_id": ObjectId(target_id)})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
