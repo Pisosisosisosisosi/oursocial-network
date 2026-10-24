@@ -144,7 +144,7 @@ class SecurityEndpointTests(unittest.TestCase):
         user_id = "507f1f77bcf86cd799439011"
         sender_id = "507f1f77bcf86cd799439012"
         request = {"_id": main.ObjectId(request_id), "fromUserId": sender_id, "toUserId": user_id, "status": "pending"}
-        payload = main.FriendRequestActionRequest(accept=True)
+        payload = main.FriendRequestActionRequest(requestId=request_id, accept=True)
         with (
             patch("main.friend_requests_collection") as requests,
             patch("main.users_blocked_either_way", return_value=True),
@@ -162,7 +162,7 @@ class SecurityEndpointTests(unittest.TestCase):
         user_id = "507f1f77bcf86cd799439011"
         sender_id = "507f1f77bcf86cd799439012"
         request = {"_id": main.ObjectId(request_id), "fromUserId": sender_id, "toUserId": user_id, "status": "accepted"}
-        payload = main.FriendRequestActionRequest(accept=True)
+        payload = main.FriendRequestActionRequest(requestId=request_id, accept=True)
         with (
             patch("main.friend_requests_collection") as requests,
             patch("main.users_blocked_either_way", return_value=False),
