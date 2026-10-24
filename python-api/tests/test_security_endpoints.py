@@ -7,9 +7,32 @@ from fastapi import HTTPException, Request
 import main
 import group_management
 import realtime
+import auth
 
 
 class SecurityEndpointTests(unittest.TestCase):
+    def test_api_auth_rejects_token_with_malformed_user_id(self):
+        with (
+            patch("auth.decode_token", return_value={"userId": "not-an-object-id"}),
+            patch("auth.users_collection") as users,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                auth.get_current_user("Bearer valid-looking-token")
+
+        self.assertEqual(raised.exception.status_code, 401)
+        users.return_value.find_one.assert_not_called()
+
+    def test_api_auth_rejects_deleted_user(self):
+        with (
+            patch("auth.decode_token", return_value={"userId": "507f1f77bcf86cd799439011"}),
+            patch("auth.users_collection") as users,
+        ):
+            users.return_value.find_one.return_value = None
+            with self.assertRaises(HTTPException) as raised:
+                auth.get_current_user("Bearer valid-looking-token")
+
+        self.assertEqual(raised.exception.status_code, 401)
+
     def test_socket_rejects_token_with_malformed_user_id(self):
         with (
             patch("realtime.decode_token", return_value={"userId": "not-an-object-id"}),
