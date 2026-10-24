@@ -2457,18 +2457,20 @@ def create_scheduled_message(
     send_at = send_at.astimezone(timezone.utc)
     if send_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Send time must be in the future")
+    recipients = (
+        {member["userId"] for member in scheduled_group.get("members", [])}
+        if scheduled_group else {current["userId"], payload.receiverId}
+    )
     if payload.type == "text":
         if not payload.text.strip():
             raise HTTPException(status_code=400, detail="Message text cannot be empty")
-        if not payload.text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
+        if scheduled_group:
+            validate_v4_envelope(payload.text, 64_000, recipients)
+        elif not payload.text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
             raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
     else:
         if payload.fileName or payload.contentType:
             raise HTTPException(status_code=400, detail="Attachment metadata must be encrypted on the client")
-        recipients = (
-            {member["userId"] for member in scheduled_group.get("members", [])}
-            if scheduled_group else {current["userId"], payload.receiverId}
-        )
         validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, recipients)
     doc = {
         "senderId": current["userId"],
