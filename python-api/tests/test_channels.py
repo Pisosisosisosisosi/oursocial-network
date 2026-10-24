@@ -136,6 +136,35 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(added["reactions"], [{"userId": SUBSCRIBER_ID, "emoji": "❤️"}])
         self.assertEqual(removed["reactions"], [])
 
+    async def test_public_subscribe_race_returns_persisted_membership(self):
+        channel_before = make_channel("public")
+        channel_before["members"] = [{
+            "userId": OWNER_ID,
+            "role": "owner",
+            "joinedAt": channel_before["createdAt"],
+        }]
+        channel_after = make_channel("public")
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 0
+        collection.find_one.return_value = channel_after
+        users = Mock()
+        users.find_one.return_value = {"username": "owner", "displayName": "Owner"}
+
+        with (
+            patch("channels.channel_by_id", return_value=channel_before),
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.users_collection", return_value=users),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            response = await channels.subscribe_channel(
+                str(CHANNEL_ID), {"userId": SUBSCRIBER_ID}
+            )
+
+        self.assertTrue(response["isSubscribed"])
+        self.assertEqual(response["memberCount"], 2)
+        notify.assert_not_awaited()
+        collection.find_one.assert_called_once_with({"_id": CHANNEL_ID})
+
     async def test_invite_join_race_returns_persisted_membership(self):
         channel_before = make_channel("private")
         channel_before["members"] = [{"userId": OWNER_ID, "role": "owner", "joinedAt": channel_before["createdAt"]}]
