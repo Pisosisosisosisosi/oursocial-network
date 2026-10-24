@@ -39,7 +39,7 @@ from auth import (
     get_current_user,
 )
 from crypto import validate_public_key, make_key_document
-from realtime import sio
+from realtime import sio, users_blocked_either_way
 import socketio as socketio_server
 from channels import router as channels_router, channel_by_id, get_member, require_read_access
 from premium import router as premium_router, serialize_premium
@@ -848,6 +848,9 @@ def get_contacts(current=Depends(get_current_user)):
     result = []
     for contact in contacts:
         contact_id = contact.get("userId") if isinstance(contact, dict) else str(contact)
+        # A blocked relationship must not make the former contact reappear in the chat list.
+        if users_blocked_either_way(current_id, contact_id):
+            continue
         if contact_id not in profile_by_id:
             continue
         hidden_at = hidden_chats.get(contact_id)
@@ -890,6 +893,9 @@ def get_contacts(current=Depends(get_current_user)):
     known_ids = {str(c) for c in contact_ids}
     for partner_id, stats in chat_stats.items():
         if partner_id in known_ids:
+            continue
+        # Old message history is retained, but blocked conversations stay out of the chat list.
+        if users_blocked_either_way(current_id, partner_id):
             continue
         profile = users.find_one(
             {"_id": ObjectId(partner_id)},
@@ -1095,7 +1101,20 @@ def find_message_for_user(message_id: str, user_id: str):
         raise HTTPException(status_code=404, detail="Message not found")
     if message.get("deletedForAll"):
         raise HTTPException(status_code=404, detail="Message not found")
-    if user_id in (message.get("senderId"), message.get("receiverId")):
+    group_id = message.get("groupId")
+    if group_id:
+        # Group messages must always pass current membership checks, even when
+        # the requester is the original sender (group messages use receiverId="").
+        if not ObjectId.is_valid(group_id):
+            raise HTTPException(status_code=404, detail="Message not found")
+        group = groups_collection().find_one(
+            {"_id": ObjectId(group_id), "members.userId": user_id},
+            {"members.$": 1},
+        )
+        membership = (group or {}).get("members", [])
+        if not membership or message["createdAt"] < membership[0]["joinedAt"]:
+            raise HTTPException(status_code=404, detail="Message not found")
+    elif user_id in (message.get("senderId"), message.get("receiverId")):
         other_id = message["receiverId"] if message["senderId"] == user_id else message["senderId"]
         owner = users_collection().find_one({"_id": ObjectId(user_id)}, {"hiddenChats": 1}) or {}
         hidden_entry = next(
@@ -1108,16 +1127,7 @@ def find_message_for_user(message_id: str, user_id: str):
         if hidden_entry and message["createdAt"] <= hidden_entry["hiddenAt"]:
             raise HTTPException(status_code=404, detail="Message not found")
     else:
-        group_id = message.get("groupId")
-        if not group_id or not ObjectId.is_valid(group_id):
-            raise HTTPException(status_code=404, detail="Message not found")
-        group = groups_collection().find_one(
-            {"_id": ObjectId(group_id), "members.userId": user_id},
-            {"members.$": 1},
-        )
-        membership = (group or {}).get("members", [])
-        if not membership or message["createdAt"] < membership[0]["joinedAt"]:
-            raise HTTPException(status_code=404, detail="Message not found")
+        raise HTTPException(status_code=404, detail="Message not found")
     return message
 
 
@@ -1159,7 +1169,6 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
         raise HTTPException(status_code=400, detail="Invalid receiver id")
     if payload.receiverId == current["userId"]:
         raise HTTPException(status_code=400, detail="Cannot send a message to yourself")
-
     file_name = ""
     content_type = ""
     file_data = ""
@@ -1181,6 +1190,9 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
             raise HTTPException(status_code=400, detail="Attachment metadata must be encrypted on the client")
         validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, {current["userId"], payload.receiverId})
         file_data = payload.fileData
+
+    if users_blocked_either_way(current["userId"], payload.receiverId):
+        raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
 
     enforce_message_rate_limit(current["userId"])
 
@@ -1586,6 +1598,19 @@ async def add_group_members(
     current=Depends(get_current_user),
 ):
     group = get_group_for_member(group_id, current["userId"])
+    current_user_id = current["userId"]
+    current_member = next(
+        (member for member in group.get("members", []) if member.get("userId") == current_user_id),
+        {},
+    )
+    current_role = (
+        "owner"
+        if group.get("createdBy") == current_user_id or current_member.get("role") == "owner"
+        else current_member.get("role", "member")
+    )
+    if current_role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only group admins can add members")
+
     member_ids = list(dict.fromkeys(payload.memberIds))
     if any(not ObjectId.is_valid(value) for value in member_ids):
         raise HTTPException(status_code=400, detail="Invalid member id")
@@ -2084,32 +2109,33 @@ def set_disappearing_messages(
 
 
 @app.post("/messages/{message_id}/delete-for-all")
-def delete_message_for_all(
+async def delete_message_for_all(
     message_id: str,
     current=Depends(get_current_user),
 ):
     """Удалить сообщение у всех участников чата"""
-    if not ObjectId.is_valid(message_id):
-        raise HTTPException(status_code=400, detail="Invalid message id")
-    message = messages_collection().find_one({"_id": ObjectId(message_id)})
-    if not message:
-        raise HTTPException(status_code=404, detail="Message not found")
+    message = find_message_for_user(message_id, current["userId"])
     if message["senderId"] != current["userId"]:
         raise HTTPException(status_code=403, detail="Only sender can delete for everyone")
-    messages_collection().update_one(
-        {"_id": ObjectId(message_id)},
-        {"$set": {"deletedForAll": True, "deletedAt": datetime.now(timezone.utc), "deletedBy": current["userId"]}}
+    update_result = messages_collection().update_one(
+        {"_id": message["_id"], "senderId": current["userId"], "deletedForAll": {"$ne": True}},
+        {"$set": {"deletedForAll": True, "deletedAt": datetime.now(timezone.utc), "deletedBy": current["userId"]}},
     )
-    other_id = message["receiverId"] if message["senderId"] == current["userId"] else message["senderId"]
-    for uid in {current["userId"], other_id}:
-        try:
-            sio.emit("message_deleted_for_all", {
-                "messageId": message_id,
-                "chatId": message.get("chatId") or message.get("groupId"),
-                "senderId": current["userId"],
-            }, to=f"user:{uid}")
-        except Exception:
-            pass
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if message.get("groupId"):
+        recipients = group_message_recipients(message["groupId"])
+    else:
+        recipients = [message["senderId"], message["receiverId"]]
+    event = {
+        "messageId": message_id,
+        "chatId": message.get("chatId") or message.get("groupId"),
+        "groupId": message.get("groupId"),
+        "senderId": current["userId"],
+        "action": "deleted_for_all",
+    }
+    for uid in set(recipients):
+        await sio.emit("message_deleted_for_all", event, to=f"user:{uid}")
     return {"status": "ok"}
 
 
@@ -2142,6 +2168,8 @@ async def forward_message(
         target_user_id = payload.targetUserId
         if not target_user_id or not ObjectId.is_valid(target_user_id) or target_user_id == current["userId"]:
             raise HTTPException(status_code=400, detail="Invalid forwarding recipient")
+        if users_blocked_either_way(current["userId"], target_user_id):
+            raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
         if not users_collection().find_one({"_id": ObjectId(target_user_id)}, {"_id": 1}):
             raise HTTPException(status_code=404, detail="Forwarding recipient not found")
         recipient_ids = {current["userId"], target_user_id}
@@ -2229,6 +2257,8 @@ async def reply_to_message(
         if len(participants) != 2 or current["userId"] not in participants:
             raise HTTPException(status_code=404, detail="Message not found")
         receiver_id = next(participant for participant in participants if participant != current["userId"])
+        if users_blocked_either_way(current["userId"], receiver_id):
+            raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
         recipient_ids = participants
 
     if payload.fileName or payload.contentType:
@@ -2405,9 +2435,49 @@ def create_scheduled_message(
     current=Depends(get_current_user),
 ):
     """Запланировать отправку сообщения на определённое время"""
-    send_at = datetime.fromisoformat(payload.sendAt)
+    has_receiver = bool(payload.receiverId)
+    has_group = bool(payload.groupId)
+    if has_receiver == has_group:
+        raise HTTPException(status_code=400, detail="Choose exactly one message destination")
+
+    scheduled_group = None
+    if has_group:
+        # Scheduling is only available to current group members.
+        scheduled_group = get_group_for_member(payload.groupId, current["userId"])
+    else:
+        if not ObjectId.is_valid(payload.receiverId):
+            raise HTTPException(status_code=400, detail="Invalid receiver id")
+        if payload.receiverId == current["userId"]:
+            raise HTTPException(status_code=400, detail="Cannot schedule a message to yourself")
+        if not users_collection().find_one({"_id": ObjectId(payload.receiverId)}, {"_id": 1}):
+            raise HTTPException(status_code=404, detail="Recipient not found")
+        if users_blocked_either_way(current["userId"], payload.receiverId):
+            raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
+
+    try:
+        send_at = datetime.fromisoformat(payload.sendAt.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Invalid sendAt datetime")
+    if send_at.tzinfo is None or send_at.utcoffset() is None:
+        raise HTTPException(status_code=422, detail="sendAt must include a timezone")
+    send_at = send_at.astimezone(timezone.utc)
     if send_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Send time must be in the future")
+    recipients = (
+        {member["userId"] for member in scheduled_group.get("members", [])}
+        if scheduled_group else {current["userId"], payload.receiverId}
+    )
+    if payload.type == "text":
+        if not payload.text.strip():
+            raise HTTPException(status_code=400, detail="Message text cannot be empty")
+        if scheduled_group:
+            validate_v4_envelope(payload.text, 64_000, recipients)
+        elif not payload.text.startswith(("skyline-e2e:v3:", HYBRID_ENVELOPE_PREFIX)):
+            raise HTTPException(status_code=400, detail="Messages must use the supported end-to-end encrypted format")
+    else:
+        if payload.fileName or payload.contentType:
+            raise HTTPException(status_code=400, detail="Attachment metadata must be encrypted on the client")
+        validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, recipients)
     doc = {
         "senderId": current["userId"],
         "senderName": current.get("username", "Пользователь"),
@@ -2484,7 +2554,7 @@ def list_quick_replies(current=Depends(get_current_user)):
 
 
 @app.post("/friend-requests")
-def send_friend_request(
+async def send_friend_request(
     payload: FriendRequestRequest,
     current=Depends(get_current_user),
 ):
@@ -2494,6 +2564,8 @@ def send_friend_request(
         raise HTTPException(status_code=400, detail="Cannot send request to yourself")
     if not ObjectId.is_valid(target_id):
         raise HTTPException(status_code=400, detail="Invalid user id")
+    if users_blocked_either_way(current["userId"], target_id):
+        raise HTTPException(status_code=403, detail="Friend requests are unavailable for this user")
     target = users_collection().find_one({"_id": ObjectId(target_id)})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
@@ -2519,7 +2591,7 @@ def send_friend_request(
     }
     result = friend_requests_collection().insert_one(doc)
     try:
-        sio.emit("friend_request_received", {
+        await sio.emit("friend_request_received", {
             "requestId": str(result.inserted_id),
             "fromUserId": current["userId"],
             "fromUsername": current.get("username", "Пользователь"),
@@ -2561,22 +2633,35 @@ def list_friend_requests(current=Depends(get_current_user)):
 
 
 @app.post("/friend-requests/{request_id}/respond")
-def respond_to_friend_request(
+async def respond_to_friend_request(
     request_id: str,
     payload: FriendRequestActionRequest,
     current=Depends(get_current_user),
 ):
-    """Принять или отклонить заявку в друзья"""
+    """Принять или отклонить только активную заявку в друзья"""
     if not ObjectId.is_valid(request_id):
         raise HTTPException(status_code=400, detail="Invalid request id")
-    req = friend_requests_collection().find_one({"_id": ObjectId(request_id), "toUserId": current["userId"]})
+    request_object_id = ObjectId(request_id)
+    requests = friend_requests_collection()
+    req = requests.find_one({"_id": request_object_id, "toUserId": current["userId"]})
     if not req:
         raise HTTPException(status_code=404, detail="Friend request not found")
+    if req.get("status") != "pending":
+        raise HTTPException(status_code=409, detail="Friend request is no longer pending")
+
+    if payload.accept and users_blocked_either_way(current["userId"], req["fromUserId"]):
+        raise HTTPException(status_code=403, detail="Cannot accept a friend request while either user has blocked the other")
+
+    # Conditional transition prevents stale or concurrently handled requests from being processed twice.
+    new_status = "accepted" if payload.accept else "rejected"
+    updated_request = requests.update_one(
+        {"_id": request_object_id, "toUserId": current["userId"], "status": "pending"},
+        {"$set": {"status": new_status, "respondedAt": datetime.now(timezone.utc)}},
+    )
+    if updated_request.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Friend request is no longer pending")
+
     if payload.accept:
-        friend_requests_collection().update_one(
-            {"_id": ObjectId(request_id)},
-            {"$set": {"status": "accepted", "respondedAt": datetime.now(timezone.utc)}}
-        )
         current_user = users_collection().find_one({"_id": ObjectId(current["userId"])}, {"username": 1}) or {}
         requester = users_collection().find_one({"_id": ObjectId(req["fromUserId"])}, {"username": 1}) or {}
         for owner_id, contact_id, nickname in (
@@ -2599,17 +2684,12 @@ def respond_to_friend_request(
                     {"$addToSet": {"contacts": {"userId": contact_id, "nickname": nickname}}},
                 )
         try:
-            sio.emit("friend_request_accepted", {
+            await sio.emit("friend_request_accepted", {
                 "requestId": request_id,
                 "acceptedBy": current["userId"],
             }, to=f"user:{req['fromUserId']}")
         except Exception:
             pass
-    else:
-        friend_requests_collection().update_one(
-            {"_id": ObjectId(request_id)},
-            {"$set": {"status": "rejected", "respondedAt": datetime.now(timezone.utc)}}
-        )
     return {"status": "ok", "accepted": payload.accept}
 
 
@@ -2629,9 +2709,15 @@ def block_user(
         {"$set": {"blockedAt": datetime.now(timezone.utc)}},
         upsert=True,
     )
+    owner_filter = {"_id": ObjectId(current["userId"])}
+    # Contacts are normally embedded documents; also clean up legacy scalar IDs.
     users_collection().update_one(
-        {"_id": ObjectId(current["userId"])},
-        {"$pull": {"contacts": target_id}}
+        owner_filter,
+        {"$pull": {"contacts": {"userId": target_id}}},
+    )
+    users_collection().update_one(
+        owner_filter,
+        {"$pull": {"contacts": target_id}},
     )
     return {"status": "ok"}
 
@@ -2864,10 +2950,12 @@ def view_story(storyId: str, current=Depends(get_current_user)):
     """Отметить просмотр истории"""
     if not ObjectId.is_valid(storyId):
         raise HTTPException(status_code=400, detail="Invalid story id")
-    stories_collection().update_one(
-        {"_id": ObjectId(storyId)},
+    result = stories_collection().update_one(
+        {"_id": ObjectId(storyId), "expiresAt": {"$gt": datetime.now(timezone.utc)}},
         {"$addToSet": {"views": current["userId"]}}
     )
+    if result.matched_count != 1:
+        raise HTTPException(status_code=404, detail="Story not found or expired")
     return {"status": "ok"}
 
 
@@ -2877,14 +2965,44 @@ def create_event(
     current=Depends(get_current_user),
 ):
     """Создать событие (встречу с датой и местом)"""
-    event_date = datetime.fromisoformat(payload.eventDate)
+    try:
+        event_date = datetime.fromisoformat(payload.eventDate.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Invalid event date")
+    if event_date.tzinfo is None or event_date.utcoffset() is None:
+        event_date = event_date.replace(tzinfo=timezone.utc)
+    event_date = event_date.astimezone(timezone.utc)
+
+    participant_ids = list(dict.fromkeys(payload.participants))
+    if current["userId"] in participant_ids:
+        participant_ids.remove(current["userId"])
+    if any(not ObjectId.is_valid(user_id) for user_id in participant_ids):
+        raise HTTPException(status_code=400, detail="Invalid participant id")
+    if participant_ids:
+        existing_users = users_collection().count_documents({
+            "_id": {"$in": [ObjectId(user_id) for user_id in participant_ids]}
+        })
+        if existing_users != len(participant_ids):
+            raise HTTPException(status_code=404, detail="One or more participants were not found")
+        creator = users_collection().find_one(
+            {"_id": ObjectId(current["userId"])},
+            {"contacts.userId": 1},
+        ) or {}
+        contact_ids = {
+            str(contact.get("userId"))
+            for contact in creator.get("contacts", [])
+            if isinstance(contact, dict) and contact.get("userId")
+        }
+        if any(user_id not in contact_ids for user_id in participant_ids):
+            raise HTTPException(status_code=403, detail="Events can only invite your contacts")
+
     doc = {
         "creatorId": current["userId"],
         "title": payload.title,
         "description": payload.description,
         "eventDate": event_date,
         "location": payload.location,
-        "participants": [current["userId"], *payload.participants],
+        "participants": [current["userId"], *participant_ids],
         "createdAt": datetime.now(timezone.utc),
     }
     result = events_collection().insert_one(doc)
@@ -2920,6 +3038,18 @@ def create_report(
     current=Depends(get_current_user),
 ):
     """Пожаловаться на пользователя, сообщение, канал или группу"""
+    if not ObjectId.is_valid(payload.targetId):
+        raise HTTPException(status_code=400, detail="Invalid report target id")
+    target_oid = ObjectId(payload.targetId)
+    target_collections = {
+        "user": users_collection,
+        "message": messages_collection,
+        "channel": channels_collection,
+        "group": groups_collection,
+    }
+    target = target_collections[payload.targetType]().find_one({"_id": target_oid}, {"_id": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="Report target not found")
     doc = {
         "reporterId": current["userId"],
         "targetType": payload.targetType,
@@ -3042,19 +3172,34 @@ def request_auto_delete_account(
 @app.post("/bots/{bot_id}/commands")
 def add_bot_command(bot_id: str, payload: BotCommandRequest, current=Depends(get_current_user)):
     """Добавить команду для бота"""
-    bots_collection().update_one(
+    if not ObjectId.is_valid(bot_id):
+        raise HTTPException(status_code=400, detail="Invalid bot id")
+    result = bots_collection().update_one(
         {"_id": ObjectId(bot_id), "ownerId": current["userId"]},
         {"$push": {"commands": {"command": payload.command, "response": payload.response, "addedAt": datetime.now(timezone.utc)}}}
     )
+    if result.matched_count != 1:
+        raise HTTPException(status_code=404, detail="Bot not found")
     return {"status": "ok"}
 
 
 @app.post("/gifts/send")
-def send_gift(
+async def send_gift(
     payload: GiftSendRequest,
     current=Depends(get_current_user),
 ):
     """Отправить анимированный подарок (Lottie) пользователю"""
+    if not ObjectId.is_valid(payload.giftId):
+        raise HTTPException(status_code=400, detail="Invalid gift id")
+    if not ObjectId.is_valid(payload.targetUserId):
+        raise HTTPException(status_code=400, detail="Invalid recipient id")
+    if payload.targetUserId == current["userId"]:
+        raise HTTPException(status_code=400, detail="Cannot send a gift to yourself")
+    recipient = users_collection().find_one({"_id": ObjectId(payload.targetUserId)}, {"_id": 1})
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    if users_blocked_either_way(current["userId"], payload.targetUserId):
+        raise HTTPException(status_code=403, detail="Cannot send a gift to this user")
     gift = gifts_collection().find_one({"_id": ObjectId(payload.giftId)})
     if not gift:
         raise HTTPException(status_code=404, detail="Gift not found")
@@ -3068,7 +3213,7 @@ def send_gift(
     from db import get_db
     get_db()["sent_gifts"].insert_one(doc)
     try:
-        sio.emit("gift_received", {
+        await sio.emit("gift_received", {
             "giftId": payload.giftId,
             "giftName": gift.get("name", "Подарок"),
             "senderId": current["userId"],

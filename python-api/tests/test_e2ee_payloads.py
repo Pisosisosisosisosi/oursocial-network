@@ -115,6 +115,7 @@ class EncryptedPayloadTests(unittest.IsolatedAsyncioTestCase):
         messages = Mock()
         messages.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439015")
         with (
+            patch("main.users_blocked_either_way", return_value=False),
             patch("main.enforce_message_rate_limit"),
             patch("main.messages_collection", return_value=messages),
             patch.object(main.sio, "emit", new_callable=AsyncMock),

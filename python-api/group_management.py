@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -83,7 +84,21 @@ async def update_group_settings(group_id: str, payload: GroupSettingsRequest, cu
     if not changes:
         return {"status": "ok"}
     changes["updatedAt"] = datetime.now(timezone.utc)
-    groups_collection().update_one({"_id": group["_id"]}, {"$set": changes})
+    update_result = groups_collection().update_one(
+        {
+            "_id": group["_id"],
+            "$or": [
+                {"createdBy": current["userId"]},
+                {"members": {"$elemMatch": {
+                    "userId": current["userId"],
+                    "role": {"$in": ["owner", "admin"]},
+                }}},
+            ],
+        },
+        {"$set": changes},
+    )
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Group permissions changed; refresh and try again")
     updated = groups_collection().find_one({"_id": group["_id"]})
     await _notify_members(updated, group_id, "settings")
     return {"status": "ok", "title": updated["title"], "isPublic": bool(updated.get("isPublic", False))}
@@ -98,10 +113,19 @@ async def update_group_member_role(group_id: str, member_id: str, payload: Group
         raise HTTPException(status_code=404, detail="Group member not found")
     if member_id == current["userId"] or member_id == group.get("createdBy"):
         raise HTTPException(status_code=400, detail="The owner role cannot be changed here")
-    groups_collection().update_one(
-        {"_id": group["_id"], "members.userId": member_id},
+    update_result = groups_collection().update_one(
+        {
+            "_id": group["_id"],
+            "members.userId": member_id,
+            "$or": [
+                {"createdBy": current["userId"]},
+                {"members": {"$elemMatch": {"userId": current["userId"], "role": "owner"}}},
+            ],
+        },
         {"$set": {"members.$.role": payload.role, "updatedAt": datetime.now(timezone.utc)}},
     )
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Group ownership changed; refresh and try again")
     updated = groups_collection().find_one({"_id": group["_id"]})
     await _notify_members(updated, group_id, "members")
     return {"status": "ok", "userId": member_id, "role": payload.role}
@@ -125,10 +149,18 @@ async def transfer_group_ownership(group_id: str, payload: TransferOwnershipRequ
         elif item.get("userId") == payload.userId:
             item["role"] = "owner"
         members.append(item)
-    groups_collection().update_one(
-        {"_id": group["_id"], "createdBy": current["userId"]},
+    update_result = groups_collection().update_one(
+        {
+            "_id": group["_id"],
+            "$or": [
+                {"createdBy": current["userId"]},
+                {"members": {"$elemMatch": {"userId": current["userId"], "role": "owner"}}},
+            ],
+        },
         {"$set": {"members": members, "createdBy": payload.userId, "updatedAt": now}},
     )
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Group ownership changed; refresh and try again")
     updated = groups_collection().find_one({"_id": group["_id"]})
     await _notify_members(updated, group_id, "ownership")
     return {"status": "ok", "ownerId": payload.userId}

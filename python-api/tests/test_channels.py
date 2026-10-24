@@ -136,6 +136,107 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(added["reactions"], [{"userId": SUBSCRIBER_ID, "emoji": "❤️"}])
         self.assertEqual(removed["reactions"], [])
 
+    async def test_delete_channel_rejects_stale_owner(self) -> None:
+        collection = Mock()
+        collection.delete_one.return_value.deleted_count = 0
+        posts = Mock()
+
+        with (
+            patch("channels.channel_by_id", return_value=make_channel()),
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.channel_posts_collection", return_value=posts),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            with self.assertRaises(HTTPException) as error:
+                await channels.delete_channel(
+                    str(CHANNEL_ID), {"userId": OWNER_ID}
+                )
+
+        self.assertEqual(error.exception.status_code, 409)
+        collection.delete_one.assert_called_once_with(
+            {"_id": CHANNEL_ID, "ownerId": OWNER_ID}
+        )
+        posts.delete_many.assert_not_called()
+        notify.assert_not_awaited()
+
+    async def test_update_channel_rejects_stale_owner(self) -> None:
+        collection = Mock()
+        collection.update_one.return_value.matched_count = 0
+
+        with (
+            patch("channels.channel_by_id", return_value=make_channel()),
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            with self.assertRaises(HTTPException) as error:
+                await channels.update_channel(
+                    str(CHANNEL_ID),
+                    channels.UpdateChannelRequest(title="Updated title"),
+                    {"userId": OWNER_ID},
+                )
+
+        self.assertEqual(error.exception.status_code, 409)
+        collection.update_one.assert_called_once()
+        notify.assert_not_awaited()
+
+    async def test_public_subscribe_race_returns_persisted_membership(self):
+        channel_before = make_channel("public")
+        channel_before["members"] = [{
+            "userId": OWNER_ID,
+            "role": "owner",
+            "joinedAt": channel_before["createdAt"],
+        }]
+        channel_after = make_channel("public")
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 0
+        collection.find_one.return_value = channel_after
+        users = Mock()
+        users.find_one.return_value = {"username": "owner", "displayName": "Owner"}
+
+        with (
+            patch("channels.channel_by_id", return_value=channel_before),
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.users_collection", return_value=users),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            response = await channels.subscribe_channel(
+                str(CHANNEL_ID), {"userId": SUBSCRIBER_ID}
+            )
+
+        self.assertTrue(response["isSubscribed"])
+        self.assertEqual(response["memberCount"], 2)
+        notify.assert_not_awaited()
+        collection.find_one.assert_called_once_with({"_id": CHANNEL_ID})
+
+    async def test_invite_join_race_returns_persisted_membership(self):
+        channel_before = make_channel("private")
+        channel_before["members"] = [{"userId": OWNER_ID, "role": "owner", "joinedAt": channel_before["createdAt"]}]
+        channel_after = make_channel("private")
+        channel_after["members"] = channel_before["members"] + [{
+            "userId": SUBSCRIBER_ID,
+            "role": "subscriber",
+            "joinedAt": datetime.now(timezone.utc),
+        }]
+        collection = Mock()
+        collection.find_one.side_effect = [channel_before, channel_after]
+        collection.update_one.return_value.modified_count = 0
+        users = Mock()
+        users.find_one.return_value = {"username": "owner", "displayName": "Owner"}
+
+        with (
+            patch("channels.channels_collection", return_value=collection),
+            patch("channels.users_collection", return_value=users),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            response = await channels.join_channel_by_invite(
+                "invite-code", {"userId": SUBSCRIBER_ID}
+            )
+
+        self.assertTrue(response["isSubscribed"])
+        self.assertEqual(response["memberCount"], 2)
+        notify.assert_not_awaited()
+        self.assertEqual(collection.find_one.call_count, 2)
+
     def test_avatar_rejects_active_content_data_urls(self) -> None:
         with self.assertRaises(ValueError):
             channels.UpdateChannelRequest(avatarUrl="data:image/svg+xml,<svg></svg>")

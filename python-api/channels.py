@@ -226,13 +226,22 @@ async def join_channel_by_invite(invite_code: str, current=Depends(get_current_u
     user_id = current["userId"]
     if not get_member(channel, user_id):
         now = datetime.now(timezone.utc)
-        channels_collection().update_one(
+        update_result = channels_collection().update_one(
             {"_id": channel["_id"], "members.userId": {"$ne": user_id}},
             {"$push": {"members": {"userId": user_id, "role": "subscriber", "joinedAt": now}},
              "$set": {"updatedAt": now}},
         )
-        channel["members"].append({"userId": user_id, "role": "subscriber", "joinedAt": now})
-        await notify_members(channel, {"action": "member_joined", "channelId": str(channel["_id"])})
+        if update_result.modified_count == 1:
+            channel["members"].append({"userId": user_id, "role": "subscriber", "joinedAt": now})
+            channel["updatedAt"] = now
+            await notify_members(channel, {"action": "member_joined", "channelId": str(channel["_id"])})
+        else:
+            # Another request may have joined this user concurrently; return the persisted state.
+            channel = channels_collection().find_one({"_id": channel["_id"]})
+            if not channel:
+                raise HTTPException(status_code=404, detail="Channel not found")
+            if not get_member(channel, user_id):
+                raise HTTPException(status_code=409, detail="Could not join channel; please retry")
     return serialize_channel(channel, user_id)
 
 
@@ -263,7 +272,12 @@ async def update_channel(
     if updates.get("visibility") == "public":
         updates["inviteCode"] = None
     updates["updatedAt"] = datetime.now(timezone.utc)
-    channels_collection().update_one({"_id": channel["_id"]}, {"$set": updates})
+    update_result = channels_collection().update_one(
+        {"_id": channel["_id"], "ownerId": current["userId"]},
+        {"$set": updates},
+    )
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Channel ownership changed; reload and retry")
     channel.update(updates)
     await notify_members(channel, {"action": "updated", "channelId": channel_id})
     return serialize_channel(channel, current["userId"])
@@ -273,7 +287,11 @@ async def update_channel(
 async def delete_channel(channel_id: str, current=Depends(get_current_user)):
     channel = channel_by_id(channel_id)
     require_owner(channel, current["userId"])
-    channels_collection().delete_one({"_id": channel["_id"]})
+    delete_result = channels_collection().delete_one(
+        {"_id": channel["_id"], "ownerId": current["userId"]}
+    )
+    if delete_result.deleted_count != 1:
+        raise HTTPException(status_code=409, detail="Channel ownership changed; reload and retry")
     channel_posts_collection().delete_many({"channelId": channel_id})
     await notify_members(channel, {"action": "deleted", "channelId": channel_id})
     return {"status": "deleted"}
@@ -290,13 +308,24 @@ async def subscribe_channel(
     user_id = current["userId"]
     if not get_member(channel, user_id):
         now = datetime.now(timezone.utc)
-        channels_collection().update_one(
-            {"_id": channel["_id"], "members.userId": {"$ne": user_id}},
+        update_result = channels_collection().update_one(
+            {"_id": channel["_id"], "visibility": "public", "members.userId": {"$ne": user_id}},
             {"$push": {"members": {"userId": user_id, "role": "subscriber", "joinedAt": now}},
              "$set": {"updatedAt": now}},
         )
-        channel["members"].append({"userId": user_id, "role": "subscriber", "joinedAt": now})
-        await notify_members(channel, {"action": "member_joined", "channelId": channel_id})
+        if update_result.modified_count == 1:
+            channel["members"].append({"userId": user_id, "role": "subscriber", "joinedAt": now})
+            channel["updatedAt"] = now
+            await notify_members(channel, {"action": "member_joined", "channelId": channel_id})
+        else:
+            # Another request may have subscribed the user or the channel may have changed.
+            channel = channels_collection().find_one({"_id": channel["_id"]})
+            if not channel:
+                raise HTTPException(status_code=404, detail="Channel not found")
+            if channel.get("visibility") != "public":
+                raise HTTPException(status_code=403, detail="Private channels require an invite link")
+            if not get_member(channel, user_id):
+                raise HTTPException(status_code=409, detail="Could not subscribe to channel; please retry")
     return serialize_channel(channel, user_id)
 
 

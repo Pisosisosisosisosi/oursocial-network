@@ -33,9 +33,12 @@ JWT_EXPIRES_MINUTES : int
 from datetime import datetime, timedelta, timezone
 from os import getenv
 
+from bson import ObjectId
 from bcrypt import checkpw, gensalt, hashpw
 from fastapi import HTTPException, Header
 from jwt import ExpiredSignatureError, InvalidTokenError, decode as jwt_decode, encode as jwt_encode
+
+from db import users_collection
 
 
 JWT_SECRET: str = getenv("JWT_SECRET", "")
@@ -183,8 +186,16 @@ def get_current_user(authorization: str = Header(default=None)) -> dict:
 
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="No token provided")
-    token = authorization.split(" ", 1)[1]
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid token")
     payload = decode_token(token)
+    user_id = payload.get("userId") if isinstance(payload, dict) else None
+    if not isinstance(user_id, str) or not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = users_collection().find_one({"_id": ObjectId(user_id)}, {"_id": 1})
+    if not user:
+        raise HTTPException(status_code=401, detail="User account no longer exists")
     return payload
 
 
