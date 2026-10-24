@@ -287,7 +287,11 @@ async def update_channel(
 async def delete_channel(channel_id: str, current=Depends(get_current_user)):
     channel = channel_by_id(channel_id)
     require_owner(channel, current["userId"])
-    channels_collection().delete_one({"_id": channel["_id"]})
+    delete_result = channels_collection().delete_one(
+        {"_id": channel["_id"], "ownerId": current["userId"]}
+    )
+    if delete_result.deleted_count != 1:
+        raise HTTPException(status_code=409, detail="Channel ownership changed; reload and retry")
     channel_posts_collection().delete_many({"channelId": channel_id})
     await notify_members(channel, {"action": "deleted", "channelId": channel_id})
     return {"status": "deleted"}
