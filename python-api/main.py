@@ -39,7 +39,7 @@ from auth import (
     get_current_user,
 )
 from crypto import validate_public_key, make_key_document
-from realtime import sio
+from realtime import sio, users_blocked_either_way
 import socketio as socketio_server
 from channels import router as channels_router, channel_by_id, get_member, require_read_access
 from premium import router as premium_router, serialize_premium
@@ -1159,6 +1159,8 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
         raise HTTPException(status_code=400, detail="Invalid receiver id")
     if payload.receiverId == current["userId"]:
         raise HTTPException(status_code=400, detail="Cannot send a message to yourself")
+    if users_blocked_either_way(current["userId"], payload.receiverId):
+        raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
 
     file_name = ""
     content_type = ""
