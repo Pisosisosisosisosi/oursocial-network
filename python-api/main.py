@@ -3125,6 +3125,17 @@ async def send_gift(
     current=Depends(get_current_user),
 ):
     """Отправить анимированный подарок (Lottie) пользователю"""
+    if not ObjectId.is_valid(payload.giftId):
+        raise HTTPException(status_code=400, detail="Invalid gift id")
+    if not ObjectId.is_valid(payload.targetUserId):
+        raise HTTPException(status_code=400, detail="Invalid recipient id")
+    if payload.targetUserId == current["userId"]:
+        raise HTTPException(status_code=400, detail="Cannot send a gift to yourself")
+    recipient = users_collection().find_one({"_id": ObjectId(payload.targetUserId)}, {"_id": 1})
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    if users_blocked_either_way(current["userId"], payload.targetUserId):
+        raise HTTPException(status_code=403, detail="Cannot send a gift to this user")
     gift = gifts_collection().find_one({"_id": ObjectId(payload.giftId)})
     if not gift:
         raise HTTPException(status_code=404, detail="Gift not found")
