@@ -55,7 +55,10 @@ class SecurityEndpointTests(unittest.TestCase):
         group_id = "507f1f77bcf86cd799439013"
         legacy_group = {
             "_id": main.ObjectId(group_id),
-            "members": [{"userId": user_id, "role": "owner"}],
+            "members": [
+                {"userId": user_id, "role": "owner"},
+                {"userId": target_id, "role": "member"},
+            ],
         }
 
         with (
