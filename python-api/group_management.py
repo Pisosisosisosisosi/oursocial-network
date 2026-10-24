@@ -141,23 +141,31 @@ async def transfer_group_ownership(group_id: str, payload: TransferOwnershipRequ
     if not any(member.get("userId") == payload.userId for member in group.get("members", [])):
         raise HTTPException(status_code=404, detail="The new owner must already be a group member")
     now = datetime.now(timezone.utc)
-    members = []
-    for member in group.get("members", []):
-        item = dict(member)
-        if item.get("userId") == current["userId"]:
-            item["role"] = "admin"
-        elif item.get("userId") == payload.userId:
-            item["role"] = "owner"
-        members.append(item)
     update_result = groups_collection().update_one(
         {
             "_id": group["_id"],
+            # Re-check both members and ownership at write time.
+            "$and": [
+                {"members": {"$elemMatch": {"userId": current["userId"]}}},
+                {"members": {"$elemMatch": {"userId": payload.userId}}},
+            ],
             "$or": [
                 {"createdBy": current["userId"]},
                 {"members": {"$elemMatch": {"userId": current["userId"], "role": "owner"}}},
             ],
         },
-        {"$set": {"members": members, "createdBy": payload.userId, "updatedAt": now}},
+        {
+            "$set": {
+                "members.$[old_owner].role": "admin",
+                "members.$[new_owner].role": "owner",
+                "createdBy": payload.userId,
+                "updatedAt": now,
+            }
+        },
+        array_filters=[
+            {"old_owner.userId": current["userId"]},
+            {"new_owner.userId": payload.userId},
+        ],
     )
     if update_result.matched_count != 1:
         raise HTTPException(status_code=409, detail="Group ownership changed; refresh and try again")
