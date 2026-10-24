@@ -139,6 +139,42 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 403)
         events.return_value.insert_one.assert_not_called()
 
+    def test_friend_request_cannot_be_accepted_when_either_user_blocked(self):
+        request_id = "507f1f77bcf86cd799439013"
+        user_id = "507f1f77bcf86cd799439011"
+        sender_id = "507f1f77bcf86cd799439012"
+        request = {"_id": main.ObjectId(request_id), "fromUserId": sender_id, "toUserId": user_id, "status": "pending"}
+        payload = main.FriendRequestActionRequest(accept=True)
+        with (
+            patch("main.friend_requests_collection") as requests,
+            patch("main.users_blocked_either_way", return_value=True),
+            patch("main.users_collection") as users,
+        ):
+            requests.return_value.find_one.return_value = request
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(main.respond_to_friend_request(request_id, payload, {"userId": user_id}))
+        self.assertEqual(raised.exception.status_code, 403)
+        requests.return_value.update_one.assert_not_called()
+        users.return_value.update_one.assert_not_called()
+
+    def test_friend_request_already_processed_cannot_be_replayed(self):
+        request_id = "507f1f77bcf86cd799439013"
+        user_id = "507f1f77bcf86cd799439011"
+        sender_id = "507f1f77bcf86cd799439012"
+        request = {"_id": main.ObjectId(request_id), "fromUserId": sender_id, "toUserId": user_id, "status": "accepted"}
+        payload = main.FriendRequestActionRequest(accept=True)
+        with (
+            patch("main.friend_requests_collection") as requests,
+            patch("main.users_blocked_either_way", return_value=False),
+            patch("main.users_collection") as users,
+        ):
+            requests.return_value.find_one.return_value = request
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(main.respond_to_friend_request(request_id, payload, {"userId": user_id}))
+        self.assertEqual(raised.exception.status_code, 409)
+        requests.return_value.update_one.assert_not_called()
+        users.return_value.update_one.assert_not_called()
+
     def test_story_view_rejects_expired_or_missing_story(self):
         with patch("main.stories_collection") as stories:
             stories.return_value.update_one.return_value.matched_count = 0

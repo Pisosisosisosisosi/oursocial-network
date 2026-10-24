@@ -2632,17 +2632,30 @@ async def respond_to_friend_request(
     payload: FriendRequestActionRequest,
     current=Depends(get_current_user),
 ):
-    """Принять или отклонить заявку в друзья"""
+    """Принять или отклонить только активную заявку в друзья"""
     if not ObjectId.is_valid(request_id):
         raise HTTPException(status_code=400, detail="Invalid request id")
-    req = friend_requests_collection().find_one({"_id": ObjectId(request_id), "toUserId": current["userId"]})
+    request_object_id = ObjectId(request_id)
+    requests = friend_requests_collection()
+    req = requests.find_one({"_id": request_object_id, "toUserId": current["userId"]})
     if not req:
         raise HTTPException(status_code=404, detail="Friend request not found")
+    if req.get("status") != "pending":
+        raise HTTPException(status_code=409, detail="Friend request is no longer pending")
+
+    if payload.accept and users_blocked_either_way(current["userId"], req["fromUserId"]):
+        raise HTTPException(status_code=403, detail="Cannot accept a friend request while either user has blocked the other")
+
+    # Conditional transition prevents stale or concurrently handled requests from being processed twice.
+    new_status = "accepted" if payload.accept else "rejected"
+    updated_request = requests.update_one(
+        {"_id": request_object_id, "toUserId": current["userId"], "status": "pending"},
+        {"$set": {"status": new_status, "respondedAt": datetime.now(timezone.utc)}},
+    )
+    if updated_request.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Friend request is no longer pending")
+
     if payload.accept:
-        friend_requests_collection().update_one(
-            {"_id": ObjectId(request_id)},
-            {"$set": {"status": "accepted", "respondedAt": datetime.now(timezone.utc)}}
-        )
         current_user = users_collection().find_one({"_id": ObjectId(current["userId"])}, {"username": 1}) or {}
         requester = users_collection().find_one({"_id": ObjectId(req["fromUserId"])}, {"username": 1}) or {}
         for owner_id, contact_id, nickname in (
@@ -2671,11 +2684,6 @@ async def respond_to_friend_request(
             }, to=f"user:{req['fromUserId']}")
         except Exception:
             pass
-    else:
-        friend_requests_collection().update_one(
-            {"_id": ObjectId(request_id)},
-            {"$set": {"status": "rejected", "respondedAt": datetime.now(timezone.utc)}}
-        )
     return {"status": "ok", "accepted": payload.accept}
 
 
