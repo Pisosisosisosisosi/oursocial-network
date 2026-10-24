@@ -2434,9 +2434,10 @@ def create_scheduled_message(
     if has_receiver == has_group:
         raise HTTPException(status_code=400, detail="Choose exactly one message destination")
 
+    scheduled_group = None
     if has_group:
         # Scheduling is only available to current group members.
-        get_group_for_member(payload.groupId, current["userId"])
+        scheduled_group = get_group_for_member(payload.groupId, current["userId"])
     else:
         if not ObjectId.is_valid(payload.receiverId):
             raise HTTPException(status_code=400, detail="Invalid receiver id")
@@ -2464,9 +2465,10 @@ def create_scheduled_message(
     else:
         if payload.fileName or payload.contentType:
             raise HTTPException(status_code=400, detail="Attachment metadata must be encrypted on the client")
-        recipients = {current["userId"]}
-        if payload.receiverId:
-            recipients.add(payload.receiverId)
+        recipients = (
+            {member["userId"] for member in scheduled_group.get("members", [])}
+            if scheduled_group else {current["userId"], payload.receiverId}
+        )
         validate_v4_envelope(payload.fileData, MAX_ATTACHMENT_SIZE + 1024, recipients)
     doc = {
         "senderId": current["userId"],
