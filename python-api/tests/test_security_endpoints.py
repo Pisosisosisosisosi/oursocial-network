@@ -112,12 +112,32 @@ class SecurityEndpointTests(unittest.TestCase):
             patch("main.events_collection") as events,
         ):
             users.return_value.count_documents.return_value = 1
+            users.return_value.find_one.return_value = {"contacts": [{"userId": participant_id}]}
             events.return_value.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439013")
             result = main.create_event(payload, {"userId": user_id})
         self.assertEqual(result["status"], "ok")
         saved = events.return_value.insert_one.call_args.args[0]
         self.assertEqual(saved["participants"], [user_id, participant_id])
         self.assertEqual(saved["eventDate"].utcoffset(), main.timedelta(0))
+
+    def test_event_rejects_non_contact_participant(self):
+        user_id = "507f1f77bcf86cd799439011"
+        participant_id = "507f1f77bcf86cd799439012"
+        payload = main.EventCreateRequest(
+            title="Meeting",
+            eventDate="2099-01-01T12:00:00Z",
+            participants=[participant_id],
+        )
+        with (
+            patch("main.users_collection") as users,
+            patch("main.events_collection") as events,
+        ):
+            users.return_value.count_documents.return_value = 1
+            users.return_value.find_one.return_value = {"contacts": []}
+            with self.assertRaises(HTTPException) as raised:
+                main.create_event(payload, {"userId": user_id})
+        self.assertEqual(raised.exception.status_code, 403)
+        events.return_value.insert_one.assert_not_called()
 
     def test_story_view_rejects_expired_or_missing_story(self):
         with patch("main.stories_collection") as stories:
