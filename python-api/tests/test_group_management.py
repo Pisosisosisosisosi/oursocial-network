@@ -75,6 +75,60 @@ class GroupJoinConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["id"], str(GROUP_ID))
         notify.assert_not_awaited()
 
+    async def test_invite_join_enforces_member_limit_in_atomic_update(self):
+        before = make_group()
+        after = make_group(members=[
+            *before["members"],
+            {"userId": JOINER_ID, "role": "member", "joinedAt": datetime.now(timezone.utc)},
+        ])
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 1
+        collection.find_one.side_effect = [before, after]
+
+        with (
+            patch("group_management.groups_collection", return_value=collection),
+            patch("group_management._notify_members", new_callable=AsyncMock),
+        ):
+            response = await group_management.join_group_by_invite(
+                group_management.JoinInviteRequest(token=INVITE_TOKEN),
+                {"userId": JOINER_ID},
+            )
+
+        self.assertFalse(response["alreadyMember"])
+        query = collection.update_one.call_args.args[0]
+        self.assertEqual(query["inviteCode"], INVITE_TOKEN)
+        self.assertEqual(
+            query["$expr"],
+            {"$lt": [{"$size": {"$ifNull": ["$members", []]}}, 100]},
+        )
+
+    async def test_public_join_enforces_member_limit_in_atomic_update(self):
+        before = make_group(is_public=True)
+        after = make_group(is_public=True, members=[
+            *before["members"],
+            {"userId": JOINER_ID, "role": "member", "joinedAt": datetime.now(timezone.utc)},
+        ])
+        collection = Mock()
+        collection.update_one.return_value.modified_count = 1
+        collection.find_one.side_effect = [before, after]
+
+        with (
+            patch("group_management.groups_collection", return_value=collection),
+            patch("group_management._notify_members", new_callable=AsyncMock),
+        ):
+            response = await group_management.join_public_group(
+                str(GROUP_ID),
+                {"userId": JOINER_ID},
+            )
+
+        self.assertFalse(response["alreadyMember"])
+        query = collection.update_one.call_args.args[0]
+        self.assertTrue(query["isPublic"])
+        self.assertEqual(
+            query["$expr"],
+            {"$lt": [{"$size": {"$ifNull": ["$members", []]}}, 100]},
+        )
+
     async def test_public_join_rejects_group_that_became_private_during_join(self):
         before = make_group(is_public=True)
         after = make_group(is_public=False)

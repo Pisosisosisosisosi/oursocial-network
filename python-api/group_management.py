@@ -178,7 +178,13 @@ async def join_group_by_invite(payload: JoinInviteRequest, current=Depends(get_c
         raise HTTPException(status_code=409, detail="This group has reached its member limit")
     now = datetime.now(timezone.utc)
     update_result = groups_collection().update_one(
-        {"_id": group["_id"], "members.userId": {"$ne": user_id}},
+        {
+            "_id": group["_id"],
+            "inviteCode": payload.token,
+            "members.userId": {"$ne": user_id},
+            # Enforce the member limit atomically so concurrent joins cannot exceed 100.
+            "$expr": {"$lt": [{"$size": {"$ifNull": ["$members", []]}}, 100]},
+        },
         {"$push": {"members": {"userId": user_id, "joinedAt": now, "role": "member"}}, "$set": {"updatedAt": now}},
     )
     if update_result.modified_count == 1:
@@ -209,7 +215,13 @@ async def join_public_group(group_id: str, current=Depends(get_current_user)):
         raise HTTPException(status_code=409, detail="This group has reached its member limit")
     now = datetime.now(timezone.utc)
     update_result = groups_collection().update_one(
-        {"_id": group["_id"], "isPublic": True, "members.userId": {"$ne": user_id}},
+        {
+            "_id": group["_id"],
+            "isPublic": True,
+            "members.userId": {"$ne": user_id},
+            # Enforce the member limit atomically so concurrent joins cannot exceed 100.
+            "$expr": {"$lt": [{"$size": {"$ifNull": ["$members", []]}}, 100]},
+        },
         {"$push": {"members": {"userId": user_id, "joinedAt": now, "role": "member"}}, "$set": {"updatedAt": now}},
     )
     if update_result.modified_count == 1:
