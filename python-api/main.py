@@ -3068,10 +3068,14 @@ def request_auto_delete_account(
 @app.post("/bots/{bot_id}/commands")
 def add_bot_command(bot_id: str, payload: BotCommandRequest, current=Depends(get_current_user)):
     """Добавить команду для бота"""
-    bots_collection().update_one(
+    if not ObjectId.is_valid(bot_id):
+        raise HTTPException(status_code=400, detail="Invalid bot id")
+    result = bots_collection().update_one(
         {"_id": ObjectId(bot_id), "ownerId": current["userId"]},
         {"$push": {"commands": {"command": payload.command, "response": payload.response, "addedAt": datetime.now(timezone.utc)}}}
     )
+    if result.matched_count != 1:
+        raise HTTPException(status_code=404, detail="Bot not found")
     return {"status": "ok"}
 
 
