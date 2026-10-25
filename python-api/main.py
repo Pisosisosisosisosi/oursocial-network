@@ -7,6 +7,7 @@ from urllib.parse import quote_plus
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from pymongo import ReturnDocument
+from pymongo.errors import PyMongoError
 from typing import Literal, Optional
 import base64
 import binascii
@@ -24,7 +25,7 @@ from collections import defaultdict, deque
 from threading import Lock
 
 from db import (
-    users_collection, keys_collection, connect_db, groups_collection,
+    users_collection, keys_collection, connect_db, get_db, groups_collection,
     email_verifications_collection, verified_email_tokens_collection,
     messages_collection, stories_collection, channels_collection,
     channel_posts_collection, polls_collection, votes_collection,
@@ -227,6 +228,16 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
+@app.get("/ready")
+def readiness():
+    """Readiness check: report healthy only when MongoDB responds to ping."""
+    try:
+        get_db().command("ping")
+    except PyMongoError:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"status": "ready", "database": "connected"}
 
 
 # ---------- Auth ----------
