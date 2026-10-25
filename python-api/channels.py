@@ -456,22 +456,58 @@ async def toggle_channel_post_reaction(
     if not get_member(channel, current["userId"]):
         raise HTTPException(status_code=403, detail="Subscribe to react to channel posts")
     post = find_channel_post(channel_id, post_id)
-    reactions = list(post.get("reactions", []))
-    existing = next(
-        (reaction for reaction in reactions if reaction["userId"] == current["userId"]),
-        None,
+    user_id = current["userId"]
+
+    # Calculate the toggle against the latest persisted reactions in MongoDB,
+    # rather than overwriting the array from a potentially stale read.
+    remove_current_user = {
+        "$filter": {
+            "input": {"$ifNull": ["$reactions", []]},
+            "as": "reaction",
+            "cond": {"$ne": ["$$reaction.userId", user_id]},
+        }
+    }
+    current_user_reactions = {
+        "$filter": {
+            "input": {"$ifNull": ["$reactions", []]},
+            "as": "reaction",
+            "cond": {"$eq": ["$$reaction.userId", user_id]},
+        }
+    }
+    current_emojis = {
+        "$map": {
+            "input": current_user_reactions,
+            "as": "reaction",
+            "in": "$$reaction.emoji",
+        }
+    }
+    update_result = channel_posts_collection().update_one(
+        {"_id": post["_id"], "channelId": channel_id},
+        [
+            {
+                "$set": {
+                    "reactions": {
+                        "$cond": [
+                            {"$eq": [{"$arrayElemAt": [current_emojis, 0]}, payload.emoji]},
+                            remove_current_user,
+                            {
+                                "$concatArrays": [
+                                    remove_current_user,
+                                    [{"userId": user_id, "emoji": payload.emoji}],
+                                ]
+                            },
+                        ]
+                    }
+                }
+            }
+        ],
     )
-    if existing and existing["emoji"] == payload.emoji:
-        reactions = [reaction for reaction in reactions if reaction["userId"] != current["userId"]]
-    else:
-        reactions = [reaction for reaction in reactions if reaction["userId"] != current["userId"]]
-        reactions.append({"userId": current["userId"], "emoji": payload.emoji})
-    channel_posts_collection().update_one(
-        {"_id": post["_id"]},
-        {"$set": {"reactions": reactions}},
-    )
-    post["reactions"] = reactions
-    serialized = serialize_post(post)
+    if update_result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Post changed; refresh and retry")
+
+    # Broadcast the persisted result, not the stale pre-update snapshot.
+    updated_post = find_channel_post(channel_id, post_id)
+    serialized = serialize_post(updated_post)
     await notify_members(
         channel,
         {"action": "post_updated", "channelId": channel_id, "post": serialized},
