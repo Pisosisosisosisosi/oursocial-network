@@ -238,6 +238,31 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertEqual(emit.await_count, 2)
         self.assertEqual(emit.await_args_list[0].args[1]["groupId"], group_id)
 
+    def test_scheduled_delivery_stays_retryable_when_realtime_emit_fails(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        sender_id = "507f1f77bcf86cd799439011"
+        receiver_id = "507f1f77bcf86cd799439012"
+        item = {
+            "_id": main.ObjectId(scheduled_id), "senderId": sender_id,
+            "receiverId": receiver_id, "text": "skyline-e2e:v3:payload",
+            "type": "text",
+        }
+        messages = Mock()
+        messages.find_one.return_value = None
+        messages.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439015")
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.users_collection") as users,
+            patch("main.users_blocked_either_way", return_value=False),
+            patch("main.sio.emit", new_callable=AsyncMock, side_effect=RuntimeError("socket unavailable")),
+        ):
+            users.return_value.find_one.return_value = {"_id": main.ObjectId(receiver_id)}
+            with self.assertRaises(RuntimeError):
+                asyncio.run(main.deliver_scheduled_message(item))
+        self.assertEqual(messages.insert_one.call_count, 1)
+        scheduled.return_value.update_one.assert_not_called()
+
     def test_scheduled_message_requires_exactly_one_destination(self):
         payload = main.ScheduledMessageRequest(
             receiverId="507f1f77bcf86cd799439012",
