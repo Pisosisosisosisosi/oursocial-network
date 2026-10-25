@@ -145,9 +145,6 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const showToast = useToast();
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(requestedGroupId);
-  useEffect(() => {
-    if (requestedGroupId && requestedGroupId !== activeGroupId) setActiveGroupId(requestedGroupId);
-  }, [requestedGroupId, activeGroupId]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingHistory, setSearchingHistory] = useState(false);
@@ -485,7 +482,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     }
   };
 
-  const loadPublicGroups = async () => {
+  const loadPublicGroups = useCallback(async () => {
     try {
       const response = await api.get<typeof publicGroups>('/groups/discover');
       setPublicGroups(response.data);
@@ -494,11 +491,11 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
       console.error('Не удалось загрузить публичные группы:', error);
       showToast('Не удалось загрузить публичные группы.', 'error');
     }
-  };
+  }, [showToast]);
 
   useEffect(() => {
     if (searchParams.get('discover') === '1') void loadPublicGroups();
-  }, [searchParams]);
+  }, [searchParams, loadPublicGroups]);
 
   const joinPublicGroup = async (groupId: string) => {
     setJoiningPublicGroup(groupId);
