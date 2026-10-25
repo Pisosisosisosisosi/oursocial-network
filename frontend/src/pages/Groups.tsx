@@ -311,6 +311,17 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
         }
       }
     };
+    const handleMessageDeletedForAll = (event: { messageId: string; groupId?: string }) => {
+      if (!event?.messageId || !event.groupId) return;
+      void loadGroups().catch((error: unknown) => {
+        console.error('Не удалось обновить список групп после удаления сообщения:', error);
+      });
+      if (event.groupId !== activeGroupKey) return;
+      setMessages((current) => current.map((message) => message.id === event.messageId
+        ? { ...message, text: 'Сообщение удалено', type: 'text', fileName: '', contentType: '', fileData: '' }
+        : message,
+      ));
+    };
     const handleGroupChanged = () => {
       void loadGroups().catch((error: unknown) => {
         console.error('Не удалось обновить список групп:', error);
@@ -318,9 +329,11 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
       });
     };
     socket.on('message_changed', handleMessage);
+    socket.on('message_deleted_for_all', handleMessageDeletedForAll);
     socket.on('group_changed', handleGroupChanged);
     return () => {
       socket.off('message_changed', handleMessage);
+      socket.off('message_deleted_for_all', handleMessageDeletedForAll);
       socket.off('group_changed', handleGroupChanged);
     };
   }, [activeGroupKey, groups, loadGroups, loadMessages, showToast, user?.id]);
