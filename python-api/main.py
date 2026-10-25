@@ -220,7 +220,8 @@ async def deliver_scheduled_message(item: dict) -> None:
             group_id = item["groupId"]
             groups_collection().update_one(
                 {"_id": ObjectId(group_id)},
-                {"$set": {"updatedAt": existing["createdAt"]}},
+                # Recovery may run late; never move the group's activity time backwards.
+                {"$max": {"updatedAt": existing["createdAt"]}},
             )
             event["groupId"] = group_id
             for member_id in group_message_recipients(group_id):
