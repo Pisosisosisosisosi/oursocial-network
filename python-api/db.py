@@ -109,3 +109,7 @@ def gifts_collection():
 
 def user_settings_collection():
     return get_db()["user_settings"]
+
+
+def chat_settings_collection():
+    return get_db()["chat_settings"]
