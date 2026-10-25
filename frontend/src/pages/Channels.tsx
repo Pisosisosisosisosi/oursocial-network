@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Copy, Download, FileText, Hash, LockKeyhole, Paperclip, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
+import VoiceMessagePlayer from '../components/chat/VoiceMessagePlayer';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { getSocket } from '../api/socket';
@@ -32,6 +33,10 @@ interface ChannelPost {
   channelId: string;
   senderId: string;
   text: string;
+  type?: 'text' | 'image' | 'file';
+  fileName?: string;
+  contentType?: string;
+  fileData?: string;
   reactions: { userId: string; emoji: string }[];
   pinned: boolean;
   pinnedAt: string | null;
@@ -86,6 +91,8 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [channelAvatarUrl, setChannelAvatarUrl] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [draft, setDraft] = useState('');
+  const [postAttachment, setPostAttachment] = useState<File | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
   const [membersOpen, setMembersOpen] = useState(false);
@@ -373,18 +380,37 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
 
   const publishPost = async (event: FormEvent) => {
     event.preventDefault();
-    if (!activeChannel || !draft.trim()) return;
+    if (!activeChannel || (!draft.trim() && !postAttachment) || busy) return;
     setBusy(true);
     try {
-      const response = await api.post<ChannelPost>(`/channels/${activeChannel.id}/posts`, { text: draft });
+      let attachmentPayload: { fileName?: string; contentType?: string; fileData?: string } = {};
+      if (postAttachment) {
+        const allowedTypes = new Set([
+          'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+          'application/pdf', 'text/plain', 'text/csv', 'application/zip',
+          'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
+        ]);
+        if (!allowedTypes.has(postAttachment.type)) throw new Error('Этот формат файла нельзя опубликовать в канале.');
+        if (!postAttachment.size || postAttachment.size > 2 * 1024 * 1024) throw new Error('Размер вложения должен быть от 1 байта до 2 МБ.');
+        const fileData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Не удалось прочитать вложение.'));
+          reader.onerror = () => reject(new Error('Не удалось прочитать вложение.'));
+          reader.readAsDataURL(postAttachment);
+        });
+        attachmentPayload = { fileName: postAttachment.name, contentType: postAttachment.type, fileData };
+      }
+      const response = await api.post<ChannelPost>(`/channels/${activeChannel.id}/posts`, { text: draft, ...attachmentPayload });
       scrollToLatestPostRef.current = true;
       setPosts((current) => sortChannelPosts(current.some((post) => post.id === response.data.id)
         ? current.map((post) => post.id === response.data.id ? response.data : post)
         : [...current, response.data]));
       setDraft('');
+      setPostAttachment(null);
+      showToast('Публикация опубликована.', 'success');
     } catch (error) {
       console.error('Не удалось опубликовать сообщение:', error);
-      showToast('Не удалось опубликовать сообщение.', 'error');
+      showToast(error instanceof Error ? error.message : 'Не удалось опубликовать сообщение.', 'error');
     } finally {
       setBusy(false);
     }
@@ -606,7 +632,10 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
                         <button type="button" onClick={() => void deletePost(post)} title="Удалить публикацию" aria-label="Удалить публикацию" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"><Trash2 size={13} /></button>
                       </div>}
                     </div>
-                    <div className="chat-message-content whitespace-pre-wrap break-words text-xs leading-relaxed">{post.text}</div>
+                    {post.text && <div className="chat-message-content whitespace-pre-wrap break-words text-xs leading-relaxed">{post.text}</div>}
+                    {post.fileData && post.contentType?.startsWith('image/') && <a href={post.fileData} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl"><img src={post.fileData} alt={post.fileName || 'Изображение из публикации'} loading="lazy" className="max-h-[420px] max-w-full rounded-xl object-contain" /></a>}
+                    {post.fileData && post.contentType?.startsWith('audio/') && <div className="mt-2"><VoiceMessagePlayer src={post.fileData} fileName={post.fileName} /></div>}
+                    {post.fileData && !post.contentType?.startsWith('image/') && !post.contentType?.startsWith('audio/') && <a href={post.fileData} download={post.fileName || 'attachment'} className="mt-2 flex items-center gap-3 rounded-xl border border-white/[0.08] bg-black/15 p-3 transition hover:border-accent/30"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><FileText size={18} /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{post.fileName || 'Вложение'}</span><span className="mt-1 block text-[10px] text-slate-500">{post.contentType || 'Файл'}</span></span><Download size={15} className="shrink-0 text-slate-400" /></a>
                     <div className="mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono text-t-secondary/70"><time>{formatAppTime(post.createdAt)}</time></div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/[0.06] pt-2">
                       {counts.map(({ emoji, count, mine }) => <button key={emoji} type="button" disabled={!activeChannel.isSubscribed} onClick={() => void toggleReaction(post, emoji)} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] transition disabled:cursor-not-allowed disabled:opacity-60 ${mine ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-white/[0.025] text-slate-300 hover:border-white/20'}`}><span>{emoji}</span>{count > 0 && <span>{count}</span>}</button>)}
@@ -619,9 +648,12 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           </div>
 
           {activeChannel.isOwner && <form onSubmit={(event) => void publishPost(event)} className="glass-panel relative z-10 mx-3 mb-3 mt-2 rounded-2xl p-1.5 shadow-2xl transition-all focus-within:ring-2 focus-within:ring-accent/30 sm:mx-5 sm:p-2">
+            {postAttachment && <div className="mx-auto mb-1 flex max-w-2xl items-center gap-2 rounded-xl border border-accent/20 bg-accent/[0.06] px-3 py-2"><Paperclip size={14} className="shrink-0 text-accent" /><span className="min-w-0 flex-1 truncate text-[11px] text-t-primary">{postAttachment.name} <span className="text-t-secondary">· {(postAttachment.size / 1024 / 1024).toFixed(2)} МБ</span></span><button type="button" onClick={() => setPostAttachment(null)} aria-label="Убрать вложение" className="rounded-lg p-1 text-t-secondary hover:bg-white/5 hover:text-rose-300"><X size={14} /></button></div>}
             <div className="mx-auto flex max-w-2xl items-end gap-2">
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10_000} rows={1} placeholder="Опубликовать сообщение для подписчиков…" className="max-h-36 min-h-10 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-600" />
-              <button type="submit" disabled={busy || !draft.trim()} aria-label="Опубликовать" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"><Send size={16} /></button>
+              <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav" className="hidden" onChange={(event) => { const file = event.target.files?.[0] || null; event.target.value = ''; if (!file) return; if (file.size > 2 * 1024 * 1024) { showToast('Размер вложения не должен превышать 2 МБ.', 'error'); return; } setPostAttachment(file); }} />
+              <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={busy} aria-label="Прикрепить файл к публикации" title="Фото, аудио или файл до 2 МБ" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-t-secondary transition hover:bg-white/[0.06] hover:text-accent disabled:opacity-40"><Paperclip size={17} /></button>
+              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10_000} rows={1} placeholder="Напишите публикацию или прикрепите файл…" className="max-h-36 min-h-10 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-600" />
+              <button type="submit" disabled={busy || (!draft.trim() && !postAttachment)} aria-label="Опубликовать" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{busy ? <span className="h-4 w-4 animate-spin rounded-full border border-white/40 border-t-white" /> : <Send size={16} />}</button>
             </div>
           </form>}
         </>}
