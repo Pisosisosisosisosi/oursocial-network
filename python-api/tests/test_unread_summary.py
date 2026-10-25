@@ -46,3 +46,26 @@ class UnreadSummaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ContactsUnreadPipelineTests(unittest.TestCase):
+    def test_contact_unread_aggregation_excludes_deleted_and_expired_messages(self):
+        user_id = "507f1f77bcf86cd799439011"
+        users = Mock()
+        users.find_one.return_value = {"contacts": [], "hiddenChats": []}
+        users.find.return_value = []
+        messages = Mock()
+        messages.aggregate.return_value = []
+
+        with (
+            patch("main.users_collection", return_value=users),
+            patch("main.messages_collection", return_value=messages),
+        ):
+            result = main.get_contacts({"userId": user_id})
+
+        self.assertEqual(result, [])
+        match = messages.aggregate.call_args.args[0][0]["$match"]
+        self.assertEqual(match["deletedForAll"], {"$ne": True})
+        expiry = match["$and"][0]["$or"]
+        self.assertEqual(expiry[0], {"expiresAt": {"$exists": False}})
+        self.assertIn("$gt", expiry[1]["expiresAt"])
+
