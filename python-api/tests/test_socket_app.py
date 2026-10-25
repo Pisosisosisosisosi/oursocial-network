@@ -79,6 +79,26 @@ class SocketAppTests(unittest.IsolatedAsyncioTestCase):
         normalized_headers = {key.lower(): value for key, value in response_headers.items()}
         self.assertEqual(normalized_headers.get(b"access-control-allow-origin"), origin.encode(), response_headers)
 
+    async def test_socket_io_allows_legacy_custom_domain_origin(self) -> None:
+        origin = "https://pipipipipi.3utilities.com"
+        messages = await asgi_get(
+            "/socket.io/",
+            "EIO=4&transport=polling",
+            headers=[(b"host", b"testserver"), (b"origin", origin.encode())],
+        )
+
+        response = next(message for message in messages if message["type"] == "http.response.start")
+        body = b"".join(
+            message.get("body", b"")
+            for message in messages
+            if message["type"] == "http.response.body"
+        )
+        response_headers = dict(response.get("headers", []))
+        normalized_headers = {key.lower(): value for key, value in response_headers.items()}
+        self.assertEqual(response["status"], 200)
+        self.assertTrue(body.startswith(b"0"))
+        self.assertEqual(normalized_headers.get(b"access-control-allow-origin"), origin.encode(), response_headers)
+
     async def test_socket_io_rejects_unconfigured_origin(self) -> None:
         messages = await asgi_get(
             "/socket.io/",
