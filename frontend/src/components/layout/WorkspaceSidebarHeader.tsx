@@ -1,5 +1,5 @@
 import { Search, Settings as SettingsIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getSocket } from '../../api/socket';
@@ -10,6 +10,21 @@ interface WorkspaceSidebarHeaderProps {
   searchPlaceholder: string;
 }
 
+function subscribeSocketStatus(onStoreChange: () => void) {
+  const socket = getSocket();
+  if (!socket) return () => undefined;
+  socket.on('connect', onStoreChange);
+  socket.on('disconnect', onStoreChange);
+  return () => {
+    socket.off('connect', onStoreChange);
+    socket.off('disconnect', onStoreChange);
+  };
+}
+
+function getSocketStatusSnapshot() {
+  return Boolean(getSocket()?.connected);
+}
+
 export default function WorkspaceSidebarHeader({
   searchValue,
   onSearchChange,
@@ -17,21 +32,7 @@ export default function WorkspaceSidebarHeader({
 }: WorkspaceSidebarHeaderProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [isOnline, setIsOnline] = useState(() => Boolean(getSocket()?.connected));
-
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-    const handleConnect = () => setIsOnline(true);
-    const handleDisconnect = () => setIsOnline(false);
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
-    setIsOnline(socket.connected);
-    return () => {
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
-    };
-  }, []);
+  const isOnline = useSyncExternalStore(subscribeSocketStatus, getSocketStatusSnapshot, () => false);
 
   return (
     <>
