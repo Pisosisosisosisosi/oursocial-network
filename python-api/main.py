@@ -32,7 +32,7 @@ from db import (
     channel_posts_collection, polls_collection, votes_collection,
     events_collection, friend_requests_collection, blocked_users_collection,
     saved_messages_collection, drafts_collection, scheduled_messages_collection,
-    quick_replies_collection, user_settings_collection,
+    quick_replies_collection, user_settings_collection, chat_settings_collection,
     login_history_collection,
     reports_collection, bots_collection, gifts_collection,
 )
@@ -316,6 +316,11 @@ async def deliver_scheduled_message(item: dict) -> None:
             "reactions": [], "pinned": False, "createdAt": now, "read": False,
             "scheduledMessageId": scheduled_id,
         }
+
+    if not group:
+        expire_after = direct_chat_expiration_minutes(sender_id, item["receiverId"])
+        if expire_after:
+            message["expiresAt"] = now + timedelta(minutes=expire_after)
 
     try:
         result = messages.insert_one(message)
@@ -1426,6 +1431,19 @@ def group_message_recipients(group_id: str) -> list[str]:
     return [member["userId"] for member in (group or {}).get("members", []) if member.get("userId")]
 
 
+def direct_chat_expiration_minutes(user_a: str, user_b: str) -> int:
+    participants = sorted([str(user_a), str(user_b)])
+    settings = chat_settings_collection().find_one({"kind": "direct", "participants": participants}, {"disappearingMessages": 1}) or {}
+    disappearing = settings.get("disappearingMessages", {})
+    if not disappearing.get("enabled"):
+        return 0
+    try:
+        minutes = int(disappearing.get("expireAfterMinutes", 0))
+    except (TypeError, ValueError):
+        return 0
+    return minutes if 1 <= minutes <= 43200 else 0
+
+
 def enforce_message_rate_limit(user_id: str) -> None:
     now = time.monotonic()
     with message_rate_lock:
@@ -1476,6 +1494,7 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
     enforce_message_rate_limit(current["userId"])
 
     messages = messages_collection()
+    now = datetime.now(timezone.utc)
     doc = {
         "senderId": current["userId"],
         "receiverId": payload.receiverId,
@@ -1487,10 +1506,13 @@ async def send_message(payload: MessageRequest, current=Depends(get_current_user
         "fileData": file_data,
         "reactions": [],
         "pinned": False,
-        "createdAt": datetime.now(timezone.utc),
+        "createdAt": now,
         "read": False,
         "replyTo": reply_to,
     }
+    expire_after = direct_chat_expiration_minutes(current["userId"], payload.receiverId)
+    if expire_after:
+        doc["expiresAt"] = now + timedelta(minutes=expire_after)
     result = messages.insert_one(doc)
     doc["_id"] = result.inserted_id
     await sio.emit(
@@ -1529,9 +1551,15 @@ async def get_messages(
     my_id = current["userId"]
 
     participant_filter = {
-        "$or": [
-            {"senderId": my_id, "receiverId": user_id},
-            {"senderId": user_id, "receiverId": my_id},
+        "$and": [
+            {"$or": [
+                {"senderId": my_id, "receiverId": user_id},
+                {"senderId": user_id, "receiverId": my_id},
+            ]},
+            {"$or": [
+                {"expiresAt": {"$exists": False}},
+                {"expiresAt": {"$gt": datetime.now(timezone.utc)}},
+            ]},
         ]
     }
     owner = users_collection().find_one(
@@ -2286,7 +2314,8 @@ class MessageReplyRequest(BaseModel):
 
 class DisappearingMessagesRequest(BaseModel):
     chatId: str = Field(min_length=1, max_length=64)
-    expireAfterMinutes: int = Field(ge=1, le=43200)
+    # Zero disables the timer; positive values expire messages after that many minutes.
+    expireAfterMinutes: int = Field(ge=0, le=43200)
 
 class SavedMessageRequest(BaseModel):
     messageId: str = Field(min_length=1, max_length=64)
@@ -2424,13 +2453,24 @@ def set_disappearing_messages(
             {"createdBy": current["userId"]},
         ]
     })
-    if not chat:
+    enabled = payload.expireAfterMinutes > 0
+    if chat:
+        chats.update_one(
+            {"_id": ObjectId(payload.chatId)},
+            {"$set": {"disappearingMessages": {"expireAfterMinutes": payload.expireAfterMinutes, "enabled": enabled}}}
+        )
+        return {"status": "ok", "enabled": enabled, "expireAfterMinutes": payload.expireAfterMinutes}
+    if payload.chatId == current["userId"] or not users_collection().find_one({"_id": ObjectId(payload.chatId)}, {"_id": 1}):
         raise HTTPException(status_code=404, detail="Chat not found")
-    chats.update_one(
-        {"_id": ObjectId(payload.chatId)},
-        {"$set": {"disappearingMessages": {"expireAfterMinutes": payload.expireAfterMinutes, "enabled": True}}}
+    if users_blocked_either_way(current["userId"], payload.chatId):
+        raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
+    participants = sorted([current["userId"], payload.chatId])
+    chat_settings_collection().update_one(
+        {"kind": "direct", "participants": participants},
+        {"$set": {"disappearingMessages": {"expireAfterMinutes": payload.expireAfterMinutes, "enabled": enabled}, "updatedAt": datetime.now(timezone.utc)}},
+        upsert=True,
     )
-    return {"status": "ok", "expireAfterMinutes": payload.expireAfterMinutes}
+    return {"status": "ok", "enabled": enabled, "expireAfterMinutes": payload.expireAfterMinutes}
 
 
 @app.post("/messages/{message_id}/delete-for-all")
@@ -2535,6 +2575,10 @@ async def forward_message(
         "deleted": False,
         "isEdited": False,
     }
+    if not group_id:
+        expire_after = direct_chat_expiration_minutes(current["userId"], receiver_id)
+        if expire_after:
+            forwarded_doc["expiresAt"] = now + timedelta(minutes=expire_after)
     inserted = messages_collection().insert_one(forwarded_doc)
     forwarded_doc["_id"] = inserted.inserted_id
     if group:
@@ -2627,6 +2671,10 @@ async def reply_to_message(
         "deleted": False,
         "isEdited": False,
     }
+    if not group_id:
+        expire_after = direct_chat_expiration_minutes(current["userId"], receiver_id)
+        if expire_after:
+            reply_doc["expiresAt"] = now + timedelta(minutes=expire_after)
     result = messages_collection().insert_one(reply_doc)
     reply_doc["_id"] = result.inserted_id
     if group_id:
@@ -2673,13 +2721,16 @@ def get_disappearing_settings(
             {"createdBy": current["userId"]},
         ],
     })
-    if not chat:
+    if chat:
+        dm = chat.get("disappearingMessages", {})
+        return {"enabled": dm.get("enabled", False), "expireAfterMinutes": dm.get("expireAfterMinutes", 0)}
+    if chat_id == current["userId"] or not users_collection().find_one({"_id": ObjectId(chat_id)}, {"_id": 1}):
         raise HTTPException(status_code=404, detail="Chat not found")
-    dm = chat.get("disappearingMessages", {})
-    return {
-        "enabled": dm.get("enabled", False),
-        "expireAfterMinutes": dm.get("expireAfterMinutes", 0),
-    }
+    if users_blocked_either_way(current["userId"], chat_id):
+        raise HTTPException(status_code=403, detail="Messaging is unavailable for this user")
+    settings = chat_settings_collection().find_one({"kind": "direct", "participants": sorted([current["userId"], chat_id])}) or {}
+    dm = settings.get("disappearingMessages", {})
+    return {"enabled": dm.get("enabled", False), "expireAfterMinutes": dm.get("expireAfterMinutes", 0)}
 
 
 @app.post("/drafts")

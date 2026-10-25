@@ -118,6 +118,7 @@ class EncryptedPayloadTests(unittest.IsolatedAsyncioTestCase):
             patch("main.users_blocked_either_way", return_value=False),
             patch("main.enforce_message_rate_limit"),
             patch("main.messages_collection", return_value=messages),
+            patch("main.direct_chat_expiration_minutes", return_value=0),
             patch.object(main.sio, "emit", new_callable=AsyncMock),
         ):
             await main.send_message(
