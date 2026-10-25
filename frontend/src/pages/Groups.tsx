@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Copy, Crown, Download, FileText, Forward, Globe, Lock, Mic, Paperclip, Plus, Reply, Search, Send, Settings, ShieldCheck, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { ArrowLeft, Copy, Crown, Download, FileText, Forward, Globe, Lock, LogOut, Mic, Paperclip, Plus, Reply, Search, Send, Settings, ShieldCheck, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
 import VoiceMessagePlayer from '../components/chat/VoiceMessagePlayer';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -520,7 +520,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
         setSettingsOpen(false);
         showToast('Вы вышли из группы.', 'success');
       } else {
-        showToast(`@ ${member.username} удалён(а) из группы.`.replace('@ ', '@'), 'success');
+        showToast(`@${member.username} удалён(а) из группы.`, 'success');
       }
     } catch (error) {
       console.error('Не удалось изменить состав группы:', error);
@@ -944,7 +944,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
                     <button type="button" disabled={savingSettings} onClick={() => void toggleGroupPrivacy()} className="w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-t-secondary hover:border-accent/30 hover:text-accent disabled:opacity-50">{activeGroup.isPublic ? 'Сделать группу приватной' : 'Сделать группу публичной'}</button>
                   </> : <p className="text-[11px] text-slate-500">Изменять настройки группы могут администраторы и владелец. Назначать администраторов и передавать владение может только владелец.</p>}
                 </div>
-                {activeGroup.currentUserRole !== 'owner' && <button type="button" onClick={() => { const self = activeGroup.members.find((member) => member.userId === userId); if (self) void removeGroupMember(self); }} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-400/20 px-3 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-400/10"><UserRoundX size={14} /> Выйти из группы</button>}
+                {activeGroup.currentUserRole !== 'owner' && <button type="button" onClick={() => { const self = activeGroup.members.find((member) => member.userId === userId); if (self) void removeGroupMember(self); }} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-400/20 px-3 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-400/10"><LogOut size={14} /> Выйти из группы</button>}
               </section>
               </>)}
 
