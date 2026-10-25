@@ -32,6 +32,11 @@ def make_channel(visibility: str = "public") -> dict:
 
 
 class ChannelTests(unittest.IsolatedAsyncioTestCase):
+    def test_channel_reaction_schema_accepts_all_supported_reactions(self) -> None:
+        for emoji in ("❤️", "👍", "😂", "🔥", "🎉", "😢"):
+            with self.subTest(emoji=emoji):
+                self.assertEqual(channels.ChannelReactionRequest(emoji=emoji).emoji, emoji)
+
     def test_private_channel_is_hidden_from_non_members(self) -> None:
         with self.assertRaises(HTTPException) as error:
             channels.require_read_access(make_channel("private"), "507f1f77bcf86cd799439015")
