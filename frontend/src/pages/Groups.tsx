@@ -78,9 +78,12 @@ function bytesToDataUrl(data: Uint8Array, contentType: string): string {
 }
 
 async function decryptGroupMessage(message: GroupMessage, userId: string): Promise<GroupMessage> {
-  if (!message.text.startsWith('skyline-e2e:v4:')) return message;
+  const encryptedPayload = message.text.startsWith('skyline-e2e:v4:')
+    ? message.text
+    : message.fileData?.startsWith('skyline-e2e:v4:') ? message.fileData : null;
+  if (!encryptedPayload) return message;
   try {
-    const plaintext = await decryptBytes(message.text, userId);
+    const plaintext = await decryptBytes(encryptedPayload, userId);
     const attachment = unpackAttachmentPayload(plaintext);
     if (attachment) {
       const { fileName, contentType } = attachment.metadata;
