@@ -1,6 +1,10 @@
 import unittest
+from unittest.mock import patch
 
-from main import app
+from fastapi import HTTPException
+from pymongo.errors import PyMongoError
+
+from main import app, readiness
 
 
 async def asgi_get(
@@ -122,6 +126,24 @@ class SocketAppTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response["status"], 200)
         self.assertEqual(body, b'{"status":"healthy"}')
+
+
+class ReadinessTests(unittest.TestCase):
+    @patch("main.get_db")
+    def test_readiness_returns_ready_when_database_ping_succeeds(self, get_db_mock) -> None:
+        get_db_mock.return_value.command.return_value = {"ok": 1}
+
+        self.assertEqual(readiness(), {"status": "ready", "database": "connected"})
+        get_db_mock.return_value.command.assert_called_once_with("ping")
+
+    @patch("main.get_db")
+    def test_readiness_returns_503_when_database_ping_fails(self, get_db_mock) -> None:
+        get_db_mock.return_value.command.side_effect = PyMongoError("database unavailable")
+
+        with self.assertRaises(HTTPException) as error:
+            readiness()
+
+        self.assertEqual(error.exception.status_code, 503)
 
 
 if __name__ == "__main__":
