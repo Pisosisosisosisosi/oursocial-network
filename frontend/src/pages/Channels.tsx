@@ -59,6 +59,11 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const showToast = useToast();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(searchParams.get('channel'));
+
+  useEffect(() => {
+    const channelIdFromUrl = searchParams.get('channel');
+    setActiveChannelId((current) => current === channelIdFromUrl ? current : channelIdFromUrl);
+  }, [searchParams]);
   const [posts, setPosts] = useState<ChannelPost[]>([]);
   const [loadedPostChannelId, setLoadedPostChannelId] = useState<string | null>(null);
   const [invitePreviewState, setInvitePreviewState] = useState<{ code: string; preview: InvitePreview } | null>(null);
@@ -75,7 +80,18 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
 
-  useEffect(() => { if (searchParams.get('create') === '1') { setVisibility('public'); setCreating(true); setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true }); } if (searchParams.get('discover') === '1') setListMode('discover'); }, [searchParams, setSearchParams]);
+  useEffect(() => {
+    if (searchParams.get('create') === '1') {
+      setVisibility('public');
+      setCreating(true);
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete('create');
+        return next;
+      }, { replace: true });
+    }
+    setListMode(searchParams.get('discover') === '1' ? 'discover' : 'mine');
+  }, [searchParams, setSearchParams]);
 
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) || null;
   const activePosts = loadedPostChannelId === activeChannel?.id ? posts : [];
@@ -199,7 +215,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
 
   const selectChannel = (channelId: string) => {
     setActiveChannelId(channelId);
-    setSearchParams({ channel: channelId });
+    setSearchParams({ channel: channelId, ...(searchParams.get('discover') === '1' ? { discover: '1' } : {}) });
     setInviteLink('');
   };
 
@@ -277,7 +293,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       setChannels((current) => current.filter((channel) => channel.id !== activeChannel.id));
       setActiveChannelId(null);
       setPosts([]);
-      setSearchParams({});
+      setSearchParams(searchParams.get('discover') === '1' ? { discover: '1' } : {});
       setEditing(false);
       showToast('Канал удалён.', 'success');
     } catch (error) {
@@ -392,7 +408,9 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     try {
       const response = await api.post<Channel>(`/channels/invites/${inviteCode}/join`);
       await loadChannels();
-      navigate(`/channels?channel=${response.data.id}`, { replace: true });
+      const nextParams = new URLSearchParams({ channel: response.data.id });
+      if (searchParams.get('discover') === '1') nextParams.set('discover', '1');
+      navigate(`/channels?${nextParams.toString()}`, { replace: true });
       showToast('Вы присоединились к каналу.', 'success');
     } catch (error) {
       console.error('Не удалось присоединиться к каналу:', error);
@@ -444,8 +462,8 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
         </header>
         <div className="border-b border-white/[0.08] p-3">
           <div className="grid grid-cols-2 rounded-xl bg-slate-950/50 p-1">
-            <button type="button" onClick={() => setListMode('mine')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'mine' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Мои каналы</button>
-            <button type="button" onClick={() => setListMode('discover')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'discover' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Найти каналы</button>
+            <button type="button" onClick={() => setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('discover'); return next; })} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'mine' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Мои каналы</button>
+            <button type="button" onClick={() => setSearchParams((current) => { const next = new URLSearchParams(current); next.set('discover', '1'); return next; })} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'discover' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Найти каналы</button>
           </div>
         </div>
         <UnifiedWorkspaceList search={search} activeKind="channel" activeId={activeChannelId} includeDiscover={listMode === 'discover'} />
@@ -462,7 +480,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           </div>
         ) : <>
           <header className="relative z-10 flex items-center gap-3 border-b border-slate-800/60 p-2.5 glass-panel sm:p-4">
-            <button type="button" onClick={() => { setActiveChannelId(null); setSearchParams({}); }} aria-label="Назад к каналам" className="rounded-xl p-2 text-t-secondary hover:bg-white/5 md:hidden"><ArrowLeft size={18} /></button>
+            <button type="button" onClick={() => { setActiveChannelId(null); setSearchParams(searchParams.get('discover') === '1' ? { discover: '1' } : {}); }} aria-label="Назад к каналам" className="rounded-xl p-2 text-t-secondary hover:bg-white/5 md:hidden"><ArrowLeft size={18} /></button>
             <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-accent/15 text-accent">
               {activeChannel.avatarUrl ? <img src={activeChannel.avatarUrl} alt="" className="h-full w-full object-cover" /> : activeChannel.visibility === 'private' ? <LockKeyhole size={18} /> : <Radio size={19} />}
             </div>
