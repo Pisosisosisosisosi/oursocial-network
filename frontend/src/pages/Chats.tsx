@@ -1352,10 +1352,6 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
               {onlineUsers.size} в сети
             </span>
           </h3>
-          {!normalizedQuery && <div className="mb-2 flex items-center gap-1 px-2">
-            <button type="button" onClick={() => navigate('/groups')} className="rounded-lg px-2 py-1 text-[9px] font-medium text-t-secondary transition hover:bg-white/[0.05] hover:text-accent">+ Группа</button>
-            <button type="button" onClick={() => navigate('/channels')} className="rounded-lg px-2 py-1 text-[9px] font-medium text-t-secondary transition hover:bg-white/[0.05] hover:text-accent">+ Канал</button>
-          </div>}
           {!normalizedQuery && <div className="mb-2 flex gap-1 overflow-x-auto px-2 pb-1">
             {([['all', 'Все'], ['unread', 'Непрочитанные']] as const).map(([filter, label]) => <button key={filter} type="button" onClick={() => setListFilter(filter)} aria-pressed={listFilter === filter} className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition ${listFilter === filter ? 'bg-accent/15 text-accent' : 'text-slate-500 hover:bg-white/[0.05] hover:text-slate-200'}`}>{label}</button>)}
           </div>}
