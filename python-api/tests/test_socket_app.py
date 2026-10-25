@@ -1,10 +1,12 @@
 import unittest
+import os
+import unittest
 from unittest.mock import patch
 
 from fastapi import HTTPException
 from pymongo.errors import PyMongoError
 
-from main import app, readiness
+from main import app, get_frontend_base_url, readiness
 
 
 async def asgi_get(
@@ -126,6 +128,25 @@ class SocketAppTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response["status"], 200)
         self.assertEqual(body, b'{"status":"healthy"}')
+
+
+class FrontendBaseUrlTests(unittest.TestCase):
+    def test_frontend_base_url_uses_first_valid_url_from_cors_list(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"FRONTEND_URL": "https://example.github.io/oursocial-network,https://custom.example"},
+        ):
+            self.assertEqual(
+                get_frontend_base_url(),
+                "https://example.github.io/oursocial-network",
+            )
+
+    def test_frontend_base_url_ignores_invalid_leading_entry(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"FRONTEND_URL": "not-a-url,https://custom.example/app/"},
+        ):
+            self.assertEqual(get_frontend_base_url(), "https://custom.example/app")
 
 
 class ReadinessTests(unittest.TestCase):
