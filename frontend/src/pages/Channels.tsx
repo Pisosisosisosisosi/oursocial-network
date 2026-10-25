@@ -76,6 +76,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- The route query is an external navigation signal that opens the create form and selects list mode. */
   useEffect(() => {
     if (searchParams.get('create') === '1') {
       setVisibility('public');
@@ -88,6 +89,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     }
     setListMode(searchParams.get('discover') === '1' ? 'discover' : 'mine');
   }, [searchParams, setSearchParams]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) || null;
   const activePosts = loadedPostChannelId === activeChannel?.id ? posts : [];
@@ -158,6 +160,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     return () => controller.abort();
   }, [inviteCode, loadInvitePreview]);
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Synchronize channel selection and cleared embedded state with router navigation. */
   useEffect(() => {
     const requested = searchParams.get('channel');
     if (requested && channels.some((channel) => channel.id === requested) && requested !== activeChannelId) {
@@ -169,7 +172,9 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       setLoadedPostChannelId(null);
     }
   }, [searchParams, channels, activeChannelId, embedded]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Loading posts is an asynchronous side effect for the selected channel. */
   useEffect(() => {
     if (!activeChannelId || inviteCode) return;
     void loadPosts(activeChannelId).catch((error: unknown) => {
@@ -177,6 +182,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       showToast('Не удалось загрузить публикации канала.', 'error');
     });
   }, [activeChannelId, inviteCode, loadPosts, showToast]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const socket = getSocket();
