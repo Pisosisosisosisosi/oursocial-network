@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X, Zap } from 'lucide-react';
+import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Mic, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X, Zap } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -47,6 +47,7 @@ const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'] as const;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'application/pdf', 'text/plain', 'text/csv', 'application/zip',
+  'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
 ]);
 
 function highlightText(text: string, query: string) {
@@ -206,6 +207,9 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [scheduledDialogOpen, setScheduledDialogOpen] = useState(false);
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
   const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [recordingVoice, setRecordingVoice] = useState(false);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -975,7 +979,11 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const handleAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file || !activeChat || sending) return;
+    if (file) await sendAttachmentFile(file);
+  };
+
+  const sendAttachmentFile = async (file: File) => {
+    if (!activeChat || sending) return;
     if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     const targetChat = activeChat;
     const replyTarget = replyingMessage;
@@ -1109,6 +1117,48 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
       showToast(detail, 'error');
     }
   };
+  const startVoiceRecording = async () => {
+    if (recordingVoice || sending) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      showToast('Запись голосовых сообщений не поддерживается этим браузером.', 'error');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ['audio/webm', 'audio/ogg', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      voiceChunksRef.current = [];
+      recorder.ondataavailable = (event) => { if (event.data.size) voiceChunksRef.current.push(event.data); };
+      recorder.onerror = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoice(false);
+        showToast('Не удалось записать голосовое сообщение.', 'error');
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoice(false);
+        const type = (recorder.mimeType || 'audio/webm').split(';')[0];
+        const blob = new Blob(voiceChunksRef.current, { type });
+        voiceChunksRef.current = [];
+        if (!blob.size) return;
+        const extension = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
+        void sendAttachmentFile(new File([blob], `voice-message.${extension}`, { type }));
+      };
+      voiceRecorderRef.current = recorder;
+      recorder.start();
+      setRecordingVoice(true);
+      showToast('Запись началась. Нажмите микрофон ещё раз, чтобы отправить.', 'success');
+    } catch {
+      showToast('Нет доступа к микрофону. Разрешите его в браузере.', 'error');
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    voiceRecorderRef.current = null;
+  };
+
   const handleDeleteMessage = async (message: ChatMessage) => {
     if (!window.confirm('Удалить это сообщение без возможности восстановления?')) return;
     try {
@@ -1688,6 +1738,8 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                                 <img src={m.fileData} alt={m.fileName || 'Изображение'} className="max-h-[55vh] max-w-full rounded-lg object-contain sm:max-h-72" />
                               </button>
                             : <a href={m.fileData} download={m.fileName || 'image'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{m.fileName || 'Скачать изображение'}</span></a>
+                        ) : m.type === 'file' && m.fileData && m.contentType?.startsWith('audio/') ? (
+                          <audio controls preload="metadata" src={m.fileData} className="mb-2 max-w-full" aria-label={m.fileName || 'Голосовое сообщение'} />
                         ) : m.type === 'file' && m.fileData ? (
                           <a href={m.fileData} download={m.fileName || 'attachment'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20">
                             <FileText size={20} />
@@ -1765,7 +1817,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                   <span className="inline-flex items-center gap-1.5">{typingUser}<span className="typing-dots"><span /><span /><span /></span></span>
                 </div>
               )}
-              <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void handleAttachment(event)} className="hidden" />
+              <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav" onChange={(event) => void handleAttachment(event)} className="hidden" />
               {replyingMessage && (
                 <div className="mb-2 flex items-center gap-3 rounded-2xl border-l-2 border-accent bg-white/[0.04] px-3.5 py-2.5 animate-slide-up">
                   <Reply size={15} className="shrink-0 text-accent" />
@@ -1799,6 +1851,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                     {quickRepliesOpen && <div className="absolute bottom-full left-0 z-40 mb-2 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-xl"><div className="flex items-center justify-between px-2 py-1.5"><span className="text-xs font-semibold text-slate-200">Быстрые ответы</span><button type="button" onClick={() => void handleSaveQuickReply()} className="text-[10px] font-medium text-accent hover:underline">Сохранить текст</button></div>{quickRepliesLoading ? <p className="px-2 py-3 text-xs text-slate-500">Загрузка…</p> : quickReplies.length ? quickReplies.map((reply) => <button key={reply.id} type="button" onClick={() => { handleTextChange(reply.text); setQuickRepliesOpen(false); textInputRef.current?.focus(); }} className="block w-full rounded-xl px-2.5 py-2 text-left transition hover:bg-white/[0.07]"><span className="block truncate text-xs font-medium text-slate-200">{reply.emoji ? `${reply.emoji} ` : ''}{reply.title}</span><span className="mt-0.5 block truncate text-[10px] text-slate-500">{reply.text}</span></button>) : <p className="px-2 py-3 text-xs text-slate-500">Нет сохранённых ответов. Введите текст и нажмите «Сохранить текст».</p>}</div>}
                   </div>
                   <button type="button" onClick={() => setScheduleDialogOpen(true)} disabled={sending || !text.trim()} title="Запланировать отправку" aria-label="Запланировать отправку" className="p-2.5 rounded-xl text-t-secondary hover:text-accent hover:bg-accent/10 transition-all disabled:opacity-50"><CalendarClock size={18} /></button>
+                  <button type="button" onClick={() => { if (recordingVoice) stopVoiceRecording(); else void startVoiceRecording(); }} disabled={sending} className={`p-2.5 rounded-xl transition-all disabled:opacity-50 ${recordingVoice ? 'animate-pulse bg-rose-500/15 text-rose-300' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title={recordingVoice ? 'Остановить и отправить голосовое' : 'Записать голосовое сообщение'} aria-label={recordingVoice ? 'Отправить голосовое сообщение' : 'Записать голосовое сообщение'}><Mic size={18} /></button>
                   <textarea
                     ref={textInputRef}
                     value={text}
