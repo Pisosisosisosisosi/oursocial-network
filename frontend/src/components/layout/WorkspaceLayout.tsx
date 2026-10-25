@@ -46,7 +46,7 @@ export default function WorkspaceLayout() {
         <div className="flex items-center justify-between px-4 pb-1 pt-3"><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Все переписки</span>
           <button type="button" onClick={() => navigate(showDiscover ? '/channels' : '/channels?discover=1')} className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-accent"><Radio size={12} /> {showDiscover ? 'Мои каналы' : 'Найти каналы'}</button></div>
         <UnifiedWorkspaceList search={search} activeKind={activeKind} activeId={activeId} includeDiscover={showDiscover} />
-        <div className="group absolute bottom-4 left-4 z-50">
+        <div className="absolute bottom-4 left-4 z-50" onMouseEnter={() => setCreateMenuOpen(true)} onMouseLeave={() => setCreateMenuOpen(false)}>
           <button
             type="button"
             aria-label="Создать новую переписку"
@@ -60,7 +60,7 @@ export default function WorkspaceLayout() {
           </button>
           <div
             id="workspace-create-menu"
-            className={`absolute bottom-0 left-14 w-[264px] transition-all duration-200 ease-out ${createMenuOpen ? 'pointer-events-auto translate-y-0 translate-x-0 opacity-100' : 'pointer-events-none translate-y-2 translate-x-1 opacity-0 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:translate-x-0 group-focus-within:opacity-100'}`}
+            className={`absolute bottom-0 left-14 w-[264px] transition-all duration-200 ease-out ${createMenuOpen ? 'pointer-events-auto translate-y-0 translate-x-0 opacity-100' : 'pointer-events-none translate-y-2 translate-x-1 opacity-0'}`}
           >
             <div className="overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0e1726]/[0.98] p-2 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
               <div className="px-3 pb-2.5 pt-2">
