@@ -280,7 +280,7 @@ async def deliver_scheduled_message(item: dict) -> None:
 
     event = {"messageId": str(message["_id"]), "senderId": sender_id, "action": "created"}
     if group:
-        groups_collection().update_one({"_id": group["_id"]}, {"$set": {"updatedAt": message["createdAt"]}})
+        groups_collection().update_one({"_id": group["_id"]}, {"$max": {"updatedAt": message["createdAt"]}})
         event["groupId"] = item["groupId"]
     else:
         event["receiverId"] = item["receiverId"]
