@@ -110,10 +110,16 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
         .then((response) => { if (!disposed) setChannels(response.data); })
         .catch((error: unknown) => console.error('Не удалось обновить список каналов:', error));
     };
-    const handleMessageChanged = (event: { action?: string; groupId?: string }) => {
-      if (event.action !== 'created') return;
+    const refreshForMessageEvent = (event: { groupId?: string }) => {
       if (event.groupId) refreshGroups();
       else refreshContacts();
+    };
+    const handleMessageChanged = (event: { action?: string; groupId?: string }) => {
+      if (event.action !== 'created') return;
+      refreshForMessageEvent(event);
+    };
+    const handleMessageDeletedForAll = (event: { groupId?: string }) => {
+      refreshForMessageEvent(event);
     };
     const handleChannelChanged = () => refreshChannels();
     const handleGroupChanged = () => refreshGroups();
@@ -124,12 +130,14 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
     };
 
     socket.on('message_changed', handleMessageChanged);
+    socket.on('message_deleted_for_all', handleMessageDeletedForAll);
     socket.on('channel_changed', handleChannelChanged);
     socket.on('group_changed', handleGroupChanged);
     socket.on('connect', handleReconnect);
     return () => {
       disposed = true;
       socket.off('message_changed', handleMessageChanged);
+      socket.off('message_deleted_for_all', handleMessageDeletedForAll);
       socket.off('channel_changed', handleChannelChanged);
       socket.off('group_changed', handleGroupChanged);
       socket.off('connect', handleReconnect);
