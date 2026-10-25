@@ -13,6 +13,8 @@ interface GroupItem {
   avatarUrl?: string;
   memberCount: number;
   lastMessageAt?: string | null;
+  updatedAt?: string;
+  createdAt?: string;
 }
 interface ChannelItem {
   id: string;
@@ -23,6 +25,8 @@ interface ChannelItem {
   isSubscribed: boolean;
   visibility: 'public' | 'private';
   lastMessageAt?: string | null;
+  updatedAt?: string;
+  createdAt?: string;
 }
 type Entry =
   | { kind: 'chat'; id: string; title: string; subtitle: string; time?: string | null; contact: Contact }
@@ -46,10 +50,12 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ entry: Entry; x: number; y: number } | null>(null);
-  const [mutedKeys, setMutedKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('skyline:muted-workspace-items') || '[]') as string[]); } catch { return new Set(); } });
+  const mutedStorageKey = `skyline:muted-workspace-items:${user?.id || 'anonymous'}`;
+  const [mutedKeys, setMutedKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${user?.id || 'anonymous'}`) || '[]') as string[]); } catch { return new Set(); } });
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('skyline:hidden-workspace-items') || '[]') as string[]); } catch { return new Set(); } });
+  useEffect(() => { try { setMutedKeys(new Set(JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${user?.id || 'anonymous'}`) || '[]') as string[])); } catch { setMutedKeys(new Set()); } }, [user?.id]);
   const entryKey = (entry: Entry) => entry.kind + ':' + entry.id;
-  const toggleMute = (entry: Entry) => { const key = entryKey(entry); setMutedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); try { localStorage.setItem('skyline:muted-workspace-items', JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
+  const toggleMute = (entry: Entry) => { const key = entryKey(entry); setMutedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); try { localStorage.setItem(mutedStorageKey, JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
   const hideEntry = (entry: Entry) => { const key = entryKey(entry); setHiddenKeys((current) => { const next = new Set(current); next.add(key); try { localStorage.setItem('skyline:hidden-workspace-items', JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
   const reportEntry = async (entry: Entry) => { const reason = window.prompt('Укажите причину жалобы на «' + entry.title + '»:'); if (!reason || !reason.trim()) return; try { const targetType = entry.kind === 'chat' ? 'user' : entry.kind; await socialApi.report(targetType, entry.id, reason.trim()); window.alert('Жалоба отправлена на рассмотрение.'); } catch (error) { console.error('Не удалось отправить жалобу:', error); window.alert('Не удалось отправить жалобу. Попробуйте позже.'); } finally { setContextMenu(null); } };
 
@@ -171,14 +177,14 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       });
     const groupEntries: Entry[] = groups.map((group) => ({
       kind: 'group', id: group.id, title: group.title,
-      subtitle: `${group.memberCount} участников${group.description ? ` · ${group.description}` : ''}`, time: group.lastMessageAt, group,
+      subtitle: `${group.memberCount} участников${group.description ? ` · ${group.description}` : ''}`, time: group.lastMessageAt || group.updatedAt || group.createdAt, group,
     }));
     const channelEntries: Entry[] = channels
       .filter((channel) => channel.isSubscribed || includeDiscover || (query.length > 0 && channel.visibility === 'public'))
       .map((channel) => ({
       kind: 'channel', id: channel.id, title: channel.title,
       subtitle: `${channel.memberCount} подписчиков · ${channel.description || 'Канал Skyline'}`,
-      time: channel.lastMessageAt, channel,
+      time: channel.lastMessageAt || channel.updatedAt || channel.createdAt, channel,
     }));
     return [...chats, ...externalUserEntries, ...groupEntries, ...channelEntries]
       .filter((entry) => !hiddenKeys.has(entryKey(entry)))
@@ -200,7 +206,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
   return (
     <div className="stagger min-h-0 flex-1 overflow-y-auto p-2" aria-label="Все переписки">
       {entries.map((entry) => {
-        const active = entry.kind === activeKind && entry.id === activeId;
+        const active = entry.kind === activeKind && (entry.id === activeId || (entry.kind === 'chat' && entry.contact.username === activeId));
         return (
           <button
             key={`${entry.kind}:${entry.id}`}
