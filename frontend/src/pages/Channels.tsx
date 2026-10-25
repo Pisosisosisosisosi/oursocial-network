@@ -47,7 +47,7 @@ interface InvitePreview {
   ownerName: string;
 }
 
-const REACTIONS = ['❤️', '👍', '😂'];
+const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'];
 
 function sortChannelPosts(items: ChannelPost[]) {
   return [...items].sort((a, b) => Number(b.pinned) - Number(a.pinned)
