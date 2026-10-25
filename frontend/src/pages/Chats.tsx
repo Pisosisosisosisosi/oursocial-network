@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Mic, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X, Zap } from 'lucide-react';
+import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Hourglass, Mic, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X, Zap } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -207,6 +207,9 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [scheduledDialogOpen, setScheduledDialogOpen] = useState(false);
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
   const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [disappearingDialogOpen, setDisappearingDialogOpen] = useState(false);
+  const [disappearingMinutes, setDisappearingMinutes] = useState(0);
+  const [disappearingLoading, setDisappearingLoading] = useState(false);
   const [savedMessagesOpen, setSavedMessagesOpen] = useState(false);
   const [savedMessages, setSavedMessages] = useState<Array<{ savedId: string; savedAt: string; message: ChatMessage }>>([]);
   const [savedMessagesLoading, setSavedMessagesLoading] = useState(false);
@@ -1110,6 +1113,31 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     finally { setSavedMessagesLoading(false); }
   };
 
+  const openDisappearingSettings = async () => {
+    if (!activeChat) return;
+    setDisappearingDialogOpen(true);
+    setDisappearingLoading(true);
+    try {
+      const response = await messagesApi.getDisappearing(String(activeChat.id));
+      setDisappearingMinutes(response.data?.enabled ? Number(response.data.expireAfterMinutes) || 0 : 0);
+    } catch { showToast('Не удалось загрузить настройки исчезающих сообщений.', 'error'); }
+    finally { setDisappearingLoading(false); }
+  };
+
+  const saveDisappearingSettings = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!activeChat) return;
+    setDisappearingLoading(true);
+    try {
+      await messagesApi.setDisappearing(String(activeChat.id), disappearingMinutes);
+      setDisappearingDialogOpen(false);
+      showToast(disappearingMinutes ? 'Таймер исчезновения сообщений включён.' : 'Таймер исчезновения сообщений выключен.', 'success');
+    } catch (error) {
+      const detail = isAxiosError(error) && error.response?.data?.detail ? String(error.response.data.detail) : 'Не удалось сохранить настройки таймера.';
+      showToast(detail, 'error');
+    } finally { setDisappearingLoading(false); }
+  };
+
   const openScheduledMessages = async () => {
     setScheduledDialogOpen(true); setScheduledLoading(true);
     try { const response = await messagesApi.getScheduledMessages(); setScheduledMessages(response.data.items || []); }
@@ -1640,6 +1668,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                     <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
                   </button>
                   <button type="button" onClick={() => void openSavedMessages()} title="Избранное" aria-label="Открыть сохранённые сообщения" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Bookmark size={15} /></button>
+                  <button type="button" onClick={() => void openDisappearingSettings()} title="Исчезающие сообщения" aria-label="Настроить таймер исчезающих сообщений" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Hourglass size={15} /></button>
                   <button type="button" onClick={() => void openScheduledMessages()} title="Запланированные сообщения" aria-label="Запланированные сообщения" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><CalendarClock size={15} /></button>
                   <div className="flex shrink-0 items-center gap-1">
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
@@ -2178,6 +2207,15 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
           document.body,
         );
       })()}
+      {disappearingDialogOpen && createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Исчезающие сообщения">
+          <form onSubmit={saveDisappearingSettings} className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-base font-semibold text-white">Исчезающие сообщения</h2><p className="mt-1 text-xs text-slate-400">Таймер применяется к новым сообщениям в этом личном чате.</p></div><button type="button" onClick={() => setDisappearingDialogOpen(false)} aria-label="Закрыть" className="rounded-xl p-2 text-slate-400 hover:bg-white/10"><X size={17} /></button></div>
+            {disappearingLoading ? <p className="py-5 text-center text-xs text-slate-500">Загрузка настроек…</p> : <><label className="block text-xs text-slate-300">Удалять сообщения через<select value={disappearingMinutes} onChange={(event) => setDisappearingMinutes(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-white/10 bg-slate-900 p-3 text-sm text-white outline-none focus:border-accent/50"><option value={0}>Выключено</option><option value={1}>1 минуту</option><option value={5}>5 минут</option><option value={60}>1 час</option><option value={1440}>1 день</option><option value={10080}>7 дней</option><option value={43200}>30 дней</option></select></label><p className="mt-3 text-[10px] leading-relaxed text-slate-500">Настройка общая для этой переписки. Истёкшие сообщения скрываются из истории и удаляются базой данных автоматически.</p></>}
+            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setDisappearingDialogOpen(false)} className="rounded-xl px-4 py-2 text-xs text-slate-300 hover:bg-white/10">Отмена</button><button type="submit" disabled={disappearingLoading} className="rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-slate-950 disabled:opacity-50">Сохранить</button></div>
+          </form>
+        </div>, document.body,
+      )}
       {savedMessagesOpen && createPortal(
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Избранное">
           <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
