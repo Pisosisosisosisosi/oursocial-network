@@ -193,14 +193,50 @@ class SecurityEndpointTests(unittest.TestCase):
 
     def test_scheduled_message_worker_recovers_existing_delivery_without_duplicate(self):
         scheduled_id = "507f1f77bcf86cd799439014"
-        item = {"_id": main.ObjectId(scheduled_id), "senderId": "507f1f77bcf86cd799439011"}
+        sender_id = "507f1f77bcf86cd799439011"
+        receiver_id = "507f1f77bcf86cd799439012"
+        item = {"_id": main.ObjectId(scheduled_id), "senderId": sender_id, "receiverId": receiver_id}
         existing = {"_id": main.ObjectId("507f1f77bcf86cd799439015"), "createdAt": main.datetime.now(main.timezone.utc)}
         messages = Mock()
         messages.find_one.return_value = existing
-        with patch("main.scheduled_messages_collection") as scheduled, patch("main.messages_collection", return_value=messages):
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.sio.emit", new_callable=AsyncMock) as emit,
+        ):
             asyncio.run(main.deliver_scheduled_message(item))
         messages.insert_one.assert_not_called()
         self.assertEqual(scheduled.return_value.update_one.call_args.args[1]["$set"]["status"], "sent")
+        self.assertEqual(emit.await_count, 2)
+        self.assertEqual(emit.await_args_list[0].args[1]["messageId"], str(existing["_id"]))
+
+    def test_scheduled_group_message_recovery_notifies_current_members(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        group_id = "507f1f77bcf86cd799439013"
+        sender_id = "507f1f77bcf86cd799439011"
+        item = {
+            "_id": main.ObjectId(scheduled_id), "senderId": sender_id,
+            "groupId": group_id,
+        }
+        existing = {
+            "_id": main.ObjectId("507f1f77bcf86cd799439015"),
+            "createdAt": main.datetime.now(main.timezone.utc),
+        }
+        messages = Mock()
+        messages.find_one.return_value = existing
+        members = [sender_id, "507f1f77bcf86cd799439012"]
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.groups_collection") as groups,
+            patch("main.group_message_recipients", return_value=members),
+            patch("main.sio.emit", new_callable=AsyncMock) as emit,
+        ):
+            asyncio.run(main.deliver_scheduled_message(item))
+        messages.insert_one.assert_not_called()
+        groups.return_value.update_one.assert_called_once()
+        self.assertEqual(emit.await_count, 2)
+        self.assertEqual(emit.await_args_list[0].args[1]["groupId"], group_id)
 
     def test_scheduled_message_requires_exactly_one_destination(self):
         payload = main.ScheduledMessageRequest(
