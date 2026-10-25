@@ -165,14 +165,12 @@ function AppRoutes() {
         <Route index element={<Navigate to="/chats" replace />} />
         <Route path="chats" element={<Chats embedded />} />
         <Route path="groups" element={<Groups embedded />} />
-        <Route path="channels" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем каналы…</div>}><Channels embedded /></Suspense>} />
+        <Route path="channels" element={<Channels embedded />} />
       </Route>
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
-      <Route path="/premium" element={user
-        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем Skyline Premium…</div>}><Premium /></Suspense>
-        : <Navigate to="/login" replace />} />
+      <Route path="/premium" element={user ? <Premium /> : <Navigate to="/login" replace />} />
       <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
-      <Route path="/join/:inviteCode" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем канал…</div>}><Channels /></Suspense>} />
+      <Route path="/join/:inviteCode" element={<Channels />} />
       <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>
