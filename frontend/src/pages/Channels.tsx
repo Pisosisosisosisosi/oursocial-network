@@ -75,7 +75,18 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
 
-  useEffect(() => { if (searchParams.get('create') === '1') { setVisibility('public'); setCreating(true); setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true }); } if (searchParams.get('discover') === '1') setListMode('discover'); }, [searchParams, setSearchParams]);
+  useEffect(() => {
+    if (searchParams.get('create') === '1') {
+      setVisibility('public');
+      setCreating(true);
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete('create');
+        return next;
+      }, { replace: true });
+    }
+    setListMode(searchParams.get('discover') === '1' ? 'discover' : 'mine');
+  }, [searchParams, setSearchParams]);
 
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) || null;
   const activePosts = loadedPostChannelId === activeChannel?.id ? posts : [];
@@ -444,8 +455,8 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
         </header>
         <div className="border-b border-white/[0.08] p-3">
           <div className="grid grid-cols-2 rounded-xl bg-slate-950/50 p-1">
-            <button type="button" onClick={() => setListMode('mine')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'mine' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Мои каналы</button>
-            <button type="button" onClick={() => setListMode('discover')} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'discover' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Найти каналы</button>
+            <button type="button" onClick={() => setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('discover'); return next; })} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'mine' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Мои каналы</button>
+            <button type="button" onClick={() => setSearchParams((current) => { const next = new URLSearchParams(current); next.set('discover', '1'); return next; })} className={`rounded-lg px-3 py-2 text-xs font-medium transition ${listMode === 'discover' ? 'bg-accent/20 text-accent' : 'text-slate-500 hover:text-slate-300'}`}>Найти каналы</button>
           </div>
         </div>
         <UnifiedWorkspaceList search={search} activeKind="channel" activeId={activeChannelId} includeDiscover={listMode === 'discover'} />
