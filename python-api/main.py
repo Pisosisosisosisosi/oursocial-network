@@ -86,7 +86,7 @@ def enforce_login_rate_limit(request: Request) -> None:
                 login_attempt_timestamps.pop(ip, None)
 
 
-DEFAULT_FRONTEND_URL = "https://pisosisosisosisosi.github.io/oursocial-network"
+DEFAULT_FRONTEND_URL = "https://pisosisosisosisosi.github.io/oursocial-network,https://pipipipipi.3utilities.com"
 configured_frontend_origins = []
 for frontend_url in os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL).split(","):
     parsed_frontend_url = urlsplit(frontend_url.strip())
