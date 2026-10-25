@@ -51,12 +51,21 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
   const [loading, setLoading] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ entry: Entry; x: number; y: number } | null>(null);
   const mutedStorageKey = `skyline:muted-workspace-items:${user?.id || 'anonymous'}`;
+  const hiddenStorageKey = `skyline:hidden-workspace-items:${user?.id || 'anonymous'}`;
   const [mutedKeys, setMutedKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${user?.id || 'anonymous'}`) || '[]') as string[]); } catch { return new Set(); } });
-  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('skyline:hidden-workspace-items') || '[]') as string[]); } catch { return new Set(); } });
-  useEffect(() => { try { setMutedKeys(new Set(JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${user?.id || 'anonymous'}`) || '[]') as string[])); } catch { setMutedKeys(new Set()); } }, [user?.id]);
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(`skyline:hidden-workspace-items:${user?.id || 'anonymous'}`) || '[]') as string[]); } catch { return new Set(); } });
+  useEffect(() => {
+    try {
+      setMutedKeys(new Set(JSON.parse(localStorage.getItem(mutedStorageKey) || '[]') as string[]));
+      setHiddenKeys(new Set(JSON.parse(localStorage.getItem(hiddenStorageKey) || '[]') as string[]));
+    } catch {
+      setMutedKeys(new Set());
+      setHiddenKeys(new Set());
+    }
+  }, [mutedStorageKey, hiddenStorageKey]);
   const entryKey = (entry: Entry) => entry.kind + ':' + entry.id;
   const toggleMute = (entry: Entry) => { const key = entryKey(entry); setMutedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); try { localStorage.setItem(mutedStorageKey, JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
-  const hideEntry = (entry: Entry) => { const key = entryKey(entry); setHiddenKeys((current) => { const next = new Set(current); next.add(key); try { localStorage.setItem('skyline:hidden-workspace-items', JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
+  const hideEntry = (entry: Entry) => { const key = entryKey(entry); setHiddenKeys((current) => { const next = new Set(current); next.add(key); try { localStorage.setItem(hiddenStorageKey, JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
   const reportEntry = async (entry: Entry) => { const reason = window.prompt('Укажите причину жалобы на «' + entry.title + '»:'); if (!reason || !reason.trim()) return; try { const targetType = entry.kind === 'chat' ? 'user' : entry.kind; await socialApi.report(targetType, entry.id, reason.trim()); window.alert('Жалоба отправлена на рассмотрение.'); } catch (error) { console.error('Не удалось отправить жалобу:', error); window.alert('Не удалось отправить жалобу. Попробуйте позже.'); } finally { setContextMenu(null); } };
 
   useEffect(() => {
