@@ -1018,6 +1018,31 @@ class DeleteForAllRealtimeEventTests(unittest.TestCase):
             main.login_attempt_timestamps.clear()
 
 
+    def test_login_rate_limit_expires_attempts_after_window(self):
+        main.login_attempt_timestamps.clear()
+        request = Request({
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/auth/login",
+            "raw_path": b"/auth/login",
+            "query_string": b"",
+            "headers": [],
+            "client": ("203.0.113.13", 12345),
+            "server": ("testserver", 80),
+        })
+        try:
+            with patch("main.time.monotonic", side_effect=[100.0, 100.0 + main.LOGIN_RATE_WINDOW_SECONDS]):
+                main.enforce_login_rate_limit(request)
+                # The first attempt is exactly outside the rolling window now.
+                main.enforce_login_rate_limit(request)
+
+            self.assertEqual(len(main.login_attempt_timestamps["203.0.113.13"]), 1)
+        finally:
+            main.login_attempt_timestamps.clear()
+
+
     def test_login_route_enforces_rate_limit_before_database_access(self):
         request = Request({
             "type": "http",
