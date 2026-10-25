@@ -72,7 +72,16 @@ function GlobalNotifications() {
         console.warn('Не удалось показать desktop-уведомление:', error);
       }
     };
-    const handleGroupMention = (event: { groupTitle?: string; senderUsername?: string }) => {
+    const handleGroupMention = (event: { groupId?: string; groupTitle?: string; senderUsername?: string }) => {
+      let mutedItems: string[] = [];
+      try {
+        const stored = JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${userId}`) || '[]');
+        if (Array.isArray(stored)) mutedItems = stored.filter((item): item is string => typeof item === 'string');
+      } catch {
+        mutedItems = [];
+      }
+      if (event.groupId && mutedItems.includes(`group:${event.groupId}`)) return;
+
       const title = `Упоминание в группе «${event.groupTitle || 'Общая группа'}»`;
       const body = `@${event.senderUsername || 'пользователь'} упомянул вас.`;
       showToast(`${title}: ${body}`, 'info');
