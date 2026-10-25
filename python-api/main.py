@@ -318,7 +318,28 @@ async def startup():
     saved_messages_collection().create_index("userId")
     scheduled_messages_collection().create_index("sendAt")
     polls_collection().create_index("creatorId")
-    votes_collection().create_index([("pollId", 1), ("userId", 1)])
+    vote_index_info = votes_collection().index_information()
+    has_unique_vote_index = any(
+        index.get("unique") and index.get("key") == [("pollId", 1), ("userId", 1)]
+        for index in vote_index_info.values()
+    )
+    if not has_unique_vote_index:
+        # Keep the most recent vote for each user/poll pair before enforcing uniqueness.
+        duplicates = votes_collection().aggregate([
+            {"$match": {"pollId": {"$type": "string"}, "userId": {"$type": "string"}}},
+            {"$sort": {"pollId": 1, "userId": 1, "votedAt": -1, "_id": -1}},
+            {"$group": {"_id": {"pollId": "$pollId", "userId": "$userId"}, "ids": {"$push": "$_id"}}},
+            {"$match": {"ids.1": {"$exists": True}}},
+        ], allowDiskUse=True)
+        for duplicate in duplicates:
+            votes_collection().delete_many({"_id": {"$in": duplicate["ids"][1:]}})
+        if "pollId_1_userId_1" in vote_index_info:
+            votes_collection().drop_index("pollId_1_userId_1")
+        votes_collection().create_index(
+            [("pollId", 1), ("userId", 1)],
+            unique=True,
+            partialFilterExpression={"pollId": {"$type": "string"}, "userId": {"$type": "string"}},
+        )
     user_settings_collection().create_index("userId")
     login_history_collection().create_index("userId")
     login_history_collection().create_index("loginAt", expireAfterSeconds=180 * 24 * 60 * 60)
@@ -3056,7 +3077,7 @@ def vote_poll(
     payload: PollVoteRequest,
     current=Depends(get_current_user),
 ):
-    """Проголосовать в опросе"""
+    """Record a user vote atomically; counts are derived from vote records."""
     if not ObjectId.is_valid(pollId):
         raise HTTPException(status_code=400, detail="Invalid poll id")
     poll = polls_collection().find_one({"_id": ObjectId(pollId)})
@@ -3067,21 +3088,17 @@ def vote_poll(
     require_poll_access(poll, current["userId"])
     if payload.optionIndex < 0 or payload.optionIndex >= len(poll["options"]):
         raise HTTPException(status_code=400, detail="Invalid option index")
-    old_vote = votes_collection().find_one({"pollId": pollId, "userId": current["userId"]})
-    if old_vote and old_vote.get("optionIndex") == payload.optionIndex:
-        return {"status": "ok"}
-    votes_collection().delete_one({"pollId": pollId, "userId": current["userId"]})
-    votes_collection().insert_one({"pollId": pollId, "userId": current["userId"], "optionIndex": payload.optionIndex, "votedAt": datetime.now(timezone.utc)})
-    increments = {f"options.{payload.optionIndex}.votes": 1}
-    if old_vote:
-        increments[f"options.{old_vote['optionIndex']}.votes"] = -1
-    polls_collection().update_one({"_id": ObjectId(pollId)}, {"$inc": increments})
+    votes_collection().update_one(
+        {"pollId": pollId, "userId": current["userId"]},
+        {"$set": {"optionIndex": payload.optionIndex, "votedAt": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
     return {"status": "ok"}
 
 
 @app.get("/polls/{pollId}")
 def get_poll(pollId: str, current=Depends(get_current_user)):
-    """Получить опрос с результатами"""
+    """Get poll results from the vote records, avoiding stale cached counters."""
     if not ObjectId.is_valid(pollId):
         raise HTTPException(status_code=400, detail="Invalid poll id")
     poll = polls_collection().find_one({"_id": ObjectId(pollId)})
@@ -3089,15 +3106,22 @@ def get_poll(pollId: str, current=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Poll not found")
     require_poll_access(poll, current["userId"])
     user_vote = votes_collection().find_one({"pollId": pollId, "userId": current["userId"]})
+    options = [dict(option) for option in poll["options"]]
+    counts = votes_collection().aggregate([
+        {"$match": {"pollId": pollId}},
+        {"$group": {"_id": "$optionIndex", "count": {"$sum": 1}}},
+    ])
+    counts_by_option = {row["_id"]: row["count"] for row in counts}
+    for index, option in enumerate(options):
+        option["votes"] = counts_by_option.get(index, 0)
     return {
         "id": str(poll["_id"]),
         "question": poll["question"],
-        "options": poll["options"],
+        "options": options,
         "userVote": user_vote["optionIndex"] if user_vote else None,
         "isActive": poll.get("isActive", True),
         "createdAt": poll["createdAt"].isoformat(),
     }
-
 
 @app.post("/stories")
 def create_story(
