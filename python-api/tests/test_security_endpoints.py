@@ -109,6 +109,25 @@ class SecurityEndpointTests(unittest.TestCase):
 
         self.assertNotIn("expiresAt", messages.insert_one.call_args.args[0])
 
+    def test_cancel_scheduled_message_only_deletes_own_pending_message(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        user_id = "507f1f77bcf86cd799439011"
+        with patch("main.scheduled_messages_collection") as scheduled:
+            scheduled.return_value.delete_one.return_value.deleted_count = 1
+            result = main.cancel_scheduled_message(scheduled_id, {"userId": user_id})
+        self.assertEqual(result, {"status": "ok"})
+        scheduled.return_value.delete_one.assert_called_once_with({
+            "_id": main.ObjectId(scheduled_id), "senderId": user_id, "status": "pending"
+        })
+
+    def test_cancel_scheduled_message_rejects_already_processing_or_missing(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        with patch("main.scheduled_messages_collection") as scheduled:
+            scheduled.return_value.delete_one.return_value.deleted_count = 0
+            with self.assertRaises(HTTPException) as raised:
+                main.cancel_scheduled_message(scheduled_id, {"userId": "507f1f77bcf86cd799439011"})
+        self.assertEqual(raised.exception.status_code, 404)
+
     def test_scheduled_message_worker_delivers_due_personal_message(self):
         scheduled_id = "507f1f77bcf86cd799439014"
         sender_id = "507f1f77bcf86cd799439011"
