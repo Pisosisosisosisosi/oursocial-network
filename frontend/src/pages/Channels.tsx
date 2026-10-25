@@ -494,14 +494,19 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const copyInvite = async () => {
     if (!activeChannel) return;
     try {
-      const response = await api.get<{ inviteCode: string }>(`/channels/${activeChannel.id}/invite`);
-      const url = `${window.location.origin}${window.location.pathname}#/join/${response.data.inviteCode}`;
+      let url: string;
+      if (activeChannel.visibility === 'private') {
+        const response = await api.get<{ inviteCode: string }>(`/channels/${activeChannel.id}/invite`);
+        url = `${window.location.origin}${window.location.pathname}#/join/${response.data.inviteCode}`;
+      } else {
+        url = `${window.location.origin}${window.location.pathname}#/channels?channel=${encodeURIComponent(activeChannel.id)}&discover=1`;
+      }
       await navigator.clipboard.writeText(url);
       setInviteLink(url);
-      showToast('Ссылка-приглашение скопирована.', 'success');
+      showToast(activeChannel.visibility === 'private' ? 'Ссылка-приглашение скопирована.' : 'Ссылка на публичный канал скопирована.', 'success');
     } catch (error) {
       console.error('Не удалось получить ссылку канала:', error);
-      showToast('Не удалось получить ссылку-приглашение.', 'error');
+      showToast('Не удалось скопировать ссылку канала.', 'error');
     }
   };
 
@@ -598,7 +603,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
             </div>
             {activeChannel.isOwner ? <>
               <button type="button" onClick={() => void openChannelMembers()} title="Управление подписчиками" aria-label="Управление подписчиками" className="relative rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-accent"><Users size={17} /><span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent/20 px-1 text-[9px] leading-4 text-accent">{activeChannel.memberCount}</span></button>
-              {activeChannel.visibility === 'private' && <button type="button" onClick={() => void copyInvite()} title="Скопировать ссылку-приглашение" aria-label="Ссылка-приглашение" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-accent"><Share2 size={17} /></button>}
+              <button type="button" onClick={() => void copyInvite()} title="Скопировать ссылку на канал" aria-label="Ссылка на канал" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-accent"><Share2 size={17} /></button>
               <button type="button" onClick={() => { setVisibility(activeChannel.visibility); setEditing(true); }} title="Настройки канала" aria-label="Настройки канала" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-white"><Settings size={17} /></button>
             </> : activeChannel.isSubscribed ? <button disabled={busy} type="button" onClick={() => void unsubscribe(activeChannel)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-50">Отписаться</button> : <button disabled={busy} type="button" onClick={() => void subscribe(activeChannel)} className="rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent disabled:opacity-50">Подписаться</button>}
           </header>
