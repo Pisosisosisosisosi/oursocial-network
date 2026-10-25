@@ -12,14 +12,14 @@ export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => { try { return sessionStorage.getItem('verifiedEmailAddress') || ''; } catch { return ''; } });
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationError, setVerificationError] = useState('');
-  const [verificationNotice, setVerificationNotice] = useState('');
+  const [verificationNotice, setVerificationNotice] = useState(() => { try { const token = sessionStorage.getItem('verifiedEmailToken'); const address = sessionStorage.getItem('verifiedEmailAddress'); return token && address ? `Email ${address} уже подтверждён! Нажмите «Зарегистрироваться» для входа.` : ''; } catch { return ''; } });
   const [secondsRemaining, setSecondsRemaining] = useState(600);
   const [verificationLoading, setVerificationLoading] = useState(false);
 
@@ -30,15 +30,6 @@ export default function Register() {
     }, 1000);
     return () => window.clearTimeout(timer);
   }, [verificationOpen, secondsRemaining]);
-
-  useEffect(() => {
-    const verifiedToken = sessionStorage.getItem('verifiedEmailToken');
-    const verifiedEmail = sessionStorage.getItem('verifiedEmailAddress');
-    if (verifiedToken && verifiedEmail) {
-      setEmail(verifiedEmail);
-      setVerificationNotice(`Email ${verifiedEmail} уже подтверждён! Нажмите «Зарегистрироваться» для входа.`);
-    }
-  }, []);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -56,7 +47,7 @@ export default function Register() {
         sessionStorage.removeItem('skylineAfterLogin');
         navigate(redirectPath || '/', { replace: true });
         return;
-      } catch (err: unknown) {
+      } catch {
         sessionStorage.removeItem('verifiedEmailToken');
         sessionStorage.removeItem('verifiedEmailAddress');
       } finally {

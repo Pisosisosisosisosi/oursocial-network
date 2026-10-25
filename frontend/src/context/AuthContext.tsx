@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components -- Context modules intentionally export the provider and its hook together. */
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { authApi, type User } from '../api/client';
 import { connectSocket, disconnectSocket } from '../api/socket';

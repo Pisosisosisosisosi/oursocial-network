@@ -10,7 +10,8 @@ import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader'
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import UnifiedWorkspaceList from '../components/layout/UnifiedWorkspaceList';
 import { formatAppDateTime } from '../time';
-import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
+import EncryptionNotice from '../components/EncryptionNotice';
+import { canSendEncryptedMessages } from '../crypto/encryptionStatus';
 import { decryptBytes, encryptBytes, packAttachmentPayload, unpackAttachmentPayload, type RecipientPublicKey } from '../crypto/encrypt';
 
 interface GroupMember extends User {
@@ -144,9 +145,6 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const showToast = useToast();
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(requestedGroupId);
-  useEffect(() => {
-    if (requestedGroupId && requestedGroupId !== activeGroupId) setActiveGroupId(requestedGroupId);
-  }, [requestedGroupId, activeGroupId]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingHistory, setSearchingHistory] = useState(false);
@@ -180,7 +178,9 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const [forwardingMessage, setForwardingMessage] = useState<GroupMessage | null>(null);
   const [forwardSearch, setForwardSearch] = useState('');
   const [forwarding, setForwarding] = useState(false);
+  /* oxlint-disable react-hooks/set-state-in-effect -- The route query requests opening the group creation form. */
   useEffect(() => { if (searchParams.get('create') === '1') { setCreating(true); setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next; }, { replace: true }); } }, [searchParams, setSearchParams]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
   const activeGroup = activeGroupId === ''
     ? null
     : groups.find((group) => group.id === activeGroupId) || (!embedded ? groups[0] || null : null);
@@ -199,13 +199,15 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     return sorted;
   }, []);
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Keep editable group settings drafts synchronized with the selected group's current metadata. */
   useEffect(() => {
     if (activeGroup) {
       setGroupTitleDraft(activeGroup.title);
       setGroupDescriptionDraft(activeGroup.description || '');
       setGroupAvatarDraft(activeGroup.avatarUrl || '');
     }
-  }, [activeGroup?.id, activeGroup?.title, activeGroup?.description, activeGroup?.avatarUrl]);
+  }, [activeGroup]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
   useEffect(() => {
     const inviteToken = searchParams.get('invite');
     if (!inviteToken || !userId) return;
@@ -224,6 +226,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
       });
     return () => { current = false; };
   }, [searchParams, userId, loadGroups, setSearchParams, showToast]);
+  /* oxlint-disable react-hooks/set-state-in-effect -- Resolve the requested group after the asynchronous group list has loaded. */
   useEffect(() => {
     void loadGroups().then((items) => {
       if (requestedGroupId && items.some((group) => group.id === requestedGroupId)) setActiveGroupId(requestedGroupId);
@@ -232,6 +235,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
       showToast('Не удалось загрузить список групп.', 'error');
     });
   }, [loadGroups, requestedGroupId, showToast]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   const loadMessages = useCallback(async (groupId: string, before?: string) => {
     const response = await api.get<GroupMessage[]>(`/groups/${groupId}/messages`, {
@@ -250,11 +254,13 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     setLoadedGroupId(groupId);
   }, [userId]);
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Reset the reply target and restore the draft when the selected group changes. */
   useEffect(() => {
     activeGroupKeyRef.current = activeGroupKey;
     setReplyingMessage(null);
     setDraft(readGroupDraft(userId, activeGroupKey));
   }, [activeGroupKey, userId]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!activeGroupKey) return;
     void loadMessages(activeGroupKey).catch((error: unknown) => {
@@ -484,7 +490,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     }
   };
 
-  const loadPublicGroups = async () => {
+  const loadPublicGroups = useCallback(async () => {
     try {
       const response = await api.get<typeof publicGroups>('/groups/discover');
       setPublicGroups(response.data);
@@ -493,11 +499,13 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
       console.error('Не удалось загрузить публичные группы:', error);
       showToast('Не удалось загрузить публичные группы.', 'error');
     }
-  };
+  }, [showToast]);
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- The route query requests loading public groups for the discovery screen. */
   useEffect(() => {
     if (searchParams.get('discover') === '1') void loadPublicGroups();
-  }, [searchParams]);
+  }, [searchParams, loadPublicGroups]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   const joinPublicGroup = async (groupId: string) => {
     setJoiningPublicGroup(groupId);

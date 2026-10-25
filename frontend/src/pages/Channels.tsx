@@ -60,10 +60,6 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(searchParams.get('channel'));
 
-  useEffect(() => {
-    const channelIdFromUrl = searchParams.get('channel');
-    setActiveChannelId((current) => current === channelIdFromUrl ? current : channelIdFromUrl);
-  }, [searchParams]);
   const [posts, setPosts] = useState<ChannelPost[]>([]);
   const [loadedPostChannelId, setLoadedPostChannelId] = useState<string | null>(null);
   const [invitePreviewState, setInvitePreviewState] = useState<{ code: string; preview: InvitePreview } | null>(null);
@@ -80,6 +76,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- The route query is an external navigation signal that opens the create form and selects list mode. */
   useEffect(() => {
     if (searchParams.get('create') === '1') {
       setVisibility('public');
@@ -92,6 +89,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     }
     setListMode(searchParams.get('discover') === '1' ? 'discover' : 'mine');
   }, [searchParams, setSearchParams]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) || null;
   const activePosts = loadedPostChannelId === activeChannel?.id ? posts : [];
@@ -124,7 +122,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       console.error('Не удалось загрузить каналы:', error);
       showToast('Не удалось загрузить каналы.', 'error');
     }
-  }, [loadChannels, searchParams, setSearchParams, showToast]);
+  }, [loadChannels, searchParams, setSearchParams, showToast, embedded]);
 
   const loadInvitePreview = useCallback(async (code: string, signal: AbortSignal) => {
     try {
@@ -148,20 +146,25 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     }
   }, []);
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Initialize channel data asynchronously when route parameters change. */
   useEffect(() => {
     if (inviteCode) {
       return;
     }
     void initializeChannels();
   }, [inviteCode, initializeChannels]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Load invitation preview asynchronously when an invite route is opened. */
   useEffect(() => {
     if (!inviteCode) return;
     const controller = new AbortController();
     void loadInvitePreview(inviteCode, controller.signal);
     return () => controller.abort();
   }, [inviteCode, loadInvitePreview]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Synchronize channel selection and cleared embedded state with router navigation. */
   useEffect(() => {
     const requested = searchParams.get('channel');
     if (requested && channels.some((channel) => channel.id === requested) && requested !== activeChannelId) {
@@ -173,7 +176,9 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       setLoadedPostChannelId(null);
     }
   }, [searchParams, channels, activeChannelId, embedded]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Loading posts is an asynchronous side effect for the selected channel. */
   useEffect(() => {
     if (!activeChannelId || inviteCode) return;
     void loadPosts(activeChannelId).catch((error: unknown) => {
@@ -181,6 +186,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       showToast('Не удалось загрузить публикации канала.', 'error');
     });
   }, [activeChannelId, inviteCode, loadPosts, showToast]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const socket = getSocket();

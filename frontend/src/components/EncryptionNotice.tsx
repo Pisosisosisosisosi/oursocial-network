@@ -1,12 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const BLOCKED_STATUSES = new Set(['checking', 'key-mismatch', 'recovery-required', 'temporarily-unavailable']);
-
-export function canSendEncryptedMessages(status: string) {
-  return !BLOCKED_STATUSES.has(status);
-}
-
 export default function EncryptionNotice() {
   const { e2eeStatus, logout } = useAuth();
   const navigate = useNavigate();

@@ -54,15 +54,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
   const hiddenStorageKey = `skyline:hidden-workspace-items:${user?.id || 'anonymous'}`;
   const [mutedKeys, setMutedKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${user?.id || 'anonymous'}`) || '[]') as string[]); } catch { return new Set(); } });
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(`skyline:hidden-workspace-items:${user?.id || 'anonymous'}`) || '[]') as string[]); } catch { return new Set(); } });
-  useEffect(() => {
-    try {
-      setMutedKeys(new Set(JSON.parse(localStorage.getItem(mutedStorageKey) || '[]') as string[]));
-      setHiddenKeys(new Set(JSON.parse(localStorage.getItem(hiddenStorageKey) || '[]') as string[]));
-    } catch {
-      setMutedKeys(new Set());
-      setHiddenKeys(new Set());
-    }
-  }, [mutedStorageKey, hiddenStorageKey]);
+
   const entryKey = (entry: Entry) => entry.kind + ':' + entry.id;
   const toggleMute = (entry: Entry) => { const key = entryKey(entry); setMutedKeys((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); try { localStorage.setItem(mutedStorageKey, JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
   const hideEntry = (entry: Entry) => { const key = entryKey(entry); setHiddenKeys((current) => { const next = new Set(current); next.add(key); try { localStorage.setItem(hiddenStorageKey, JSON.stringify([...next])); } catch {} return next; }); setContextMenu(null); };
@@ -70,7 +62,6 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
 
   useEffect(() => {
     let current = true;
-    setLoading(true);
     void Promise.allSettled([
       api.get<Contact[]>('/contacts'),
       api.get<GroupItem[]>('/groups'),
@@ -147,8 +138,6 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
   useEffect(() => {
     const query = search.trim();
     if (query.replace(/^@/, '').trim().length < 2) {
-      setSearchedUsers([]);
-      setSearchingUsers(false);
       return;
     }
     let current = true;

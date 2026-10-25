@@ -1,3 +1,4 @@
+/* oxlint-disable react/only-export-components -- Context modules intentionally export the provider and its hook together. */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Mic, MicOff, Minus, Phone, PhoneOff, Video, VideoOff } from 'lucide-react';
 import { getSocket } from '../api/socket';

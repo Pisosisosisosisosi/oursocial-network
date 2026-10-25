@@ -11,7 +11,8 @@ import { decryptBytes, decryptMessage, encryptBytes, encryptMessage, isEncrypted
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import EmojiPicker from '../components/chat/EmojiPicker';
-import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
+import EncryptionNotice from '../components/EncryptionNotice';
+import { canSendEncryptedMessages } from '../crypto/encryptionStatus';
 import { useCallActions } from '../context/CallContext';
 import { formatAppDateTime, formatAppTime, getAppTimeZone } from '../time';
 
@@ -271,10 +272,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   }, [currentUser?.id, showToast]);
 
   useEffect(() => {
-    if (!currentUser?.id) {
-      setLoadingWorkspaceItems(false);
-      return;
-    }
+    if (!currentUser?.id) return;
     void Promise.allSettled([
       api.get<WorkspaceGroupItem[]>('/groups'),
       api.get<WorkspaceChannelItem[]>('/channels'),
@@ -349,12 +347,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   useEffect(() => {
     const rawQuery = searchQuery.trim();
     const query = rawQuery.startsWith('@') ? rawQuery.slice(1).trim() : rawQuery;
-    if (query.length < 2) {
-      setSearchResults([]);
-      setSearching(false);
-      setPanelError('');
-      return;
-    }
+    if (query.length < 2) return;
 
     let isCurrentSearch = true;
     const timeout = setTimeout(async () => {
@@ -805,6 +798,11 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     }
   };
 
+  const handleSelectChatRef = useRef(handleSelectChat);
+  useEffect(() => {
+    handleSelectChatRef.current = handleSelectChat;
+  });
+
   useEffect(() => {
     const requestedChatId = searchParams.get('chat');
     const requestedUsername = searchParams.get('user');
@@ -815,7 +813,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
           if (!current) return;
           const target = response.data.find((candidate) => candidate.username.toLocaleLowerCase() === requestedUsername.toLocaleLowerCase());
           if (target && String(activeChat?.id) !== String(target.id)) {
-            void handleSelectChat(target);
+            void handleSelectChatRef.current(target);
           }
         })
         .catch((error: unknown) => {
@@ -827,7 +825,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     if (String(activeChat?.id) === requestedChatId) return;
     const requestedContact = contacts.find((contact) => String(contact.id) === requestedChatId);
     if (!requestedContact) return;
-    void handleSelectChat(requestedContact);
+    void handleSelectChatRef.current(requestedContact);
   }, [searchParams, contacts, loading, activeChat?.id]);
 
   const handleSaveContact = async (user: User, existingNickname = '') => {
