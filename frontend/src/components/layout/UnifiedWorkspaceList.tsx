@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BellOff, Flag, MessageCircle, Pin, Radio, Trash2, Users, Volume2, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, socialApi, type Contact, type User } from '../../api/client';
+import { getSocket } from '../../api/socket';
 import { useAuth } from '../../context/AuthContext';
 import { formatAppDateTime } from '../../time';
 
@@ -71,6 +72,51 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
     }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
   }, [user?.id, includeDiscover]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket || !user?.id) return;
+
+    let disposed = false;
+    const refreshContacts = () => {
+      void api.get<Contact[]>('/contacts')
+        .then((response) => {
+          if (!disposed) setContacts(response.data.filter((contact) => contact.id !== user.id && !contact.chatHidden));
+        })
+        .catch((error: unknown) => console.error('Не удалось обновить личные чаты:', error));
+    };
+    const refreshGroups = () => {
+      void api.get<GroupItem[]>('/groups')
+        .then((response) => { if (!disposed) setGroups(response.data); })
+        .catch((error: unknown) => console.error('Не удалось обновить список групп:', error));
+    };
+    const refreshChannels = () => {
+      void api.get<ChannelItem[]>('/channels')
+        .then((response) => { if (!disposed) setChannels(response.data); })
+        .catch((error: unknown) => console.error('Не удалось обновить список каналов:', error));
+    };
+    const handleMessageChanged = (event: { action?: string; groupId?: string }) => {
+      if (event.action !== 'created') return;
+      if (event.groupId) refreshGroups();
+      else refreshContacts();
+    };
+    const handleChannelChanged = () => refreshChannels();
+    const handleReconnect = () => {
+      refreshContacts();
+      refreshGroups();
+      refreshChannels();
+    };
+
+    socket.on('message_changed', handleMessageChanged);
+    socket.on('channel_changed', handleChannelChanged);
+    socket.on('connect', handleReconnect);
+    return () => {
+      disposed = true;
+      socket.off('message_changed', handleMessageChanged);
+      socket.off('channel_changed', handleChannelChanged);
+      socket.off('connect', handleReconnect);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     const query = search.trim();
