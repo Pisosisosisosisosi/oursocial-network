@@ -54,7 +54,7 @@ interface GroupMessage {
   forwardedFrom?: string | null;
 }
 
-const REACTIONS = ['❤️', '👍', '😂'];
+const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'];
 const GROUP_ATTACHMENT_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'application/pdf', 'text/plain', 'text/csv', 'application/zip',
