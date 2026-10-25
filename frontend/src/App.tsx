@@ -1,23 +1,35 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Chats from './pages/Chats';
-import Login from './pages/Login';
-import Profile from './pages/Profile';
-import Register from './pages/Register';
-import VerifyEmail from './pages/VerifyEmail';
-import UserProfile from './pages/UserProfile';
-import Settings from './pages/Settings';
-import Groups from './pages/Groups';
-import WorkspaceLayout from './components/layout/WorkspaceLayout';
 import { applyAppPreferences } from './preferences';
 import { getSocket } from './api/socket';
 import { ToastProvider } from './context/ToastContext';
 import { useToast } from './context/useToast';
 import { CallProvider } from './context/CallContext';
 
+const Chats = lazy(() => import('./pages/Chats'));
+const Login = lazy(() => import('./pages/Login'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Register = lazy(() => import('./pages/Register'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
+const UserProfile = lazy(() => import('./pages/UserProfile'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Groups = lazy(() => import('./pages/Groups'));
+const WorkspaceLayout = lazy(() => import('./components/layout/WorkspaceLayout'));
+
 const Channels = lazy(() => import('./pages/Channels'));
 const Premium = lazy(() => import('./pages/Premium'));
+
+function RouteLoading() {
+  return (
+    <div className="grid h-full w-full place-items-center bg-bg-base text-sm text-t-secondary">
+      <span className="flex items-center gap-3">
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        Загружаем Skyline…
+      </span>
+    </div>
+  );
+}
 
 function GlobalNotifications() {
   const { user } = useAuth();
@@ -144,6 +156,7 @@ function AppRoutes() {
   }
 
   return (
+    <Suspense fallback={<RouteLoading />}>
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
@@ -152,17 +165,16 @@ function AppRoutes() {
         <Route index element={<Navigate to="/chats" replace />} />
         <Route path="chats" element={<Chats embedded />} />
         <Route path="groups" element={<Groups embedded />} />
-        <Route path="channels" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем каналы…</div>}><Channels embedded /></Suspense>} />
+        <Route path="channels" element={<Channels embedded />} />
       </Route>
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
-      <Route path="/premium" element={user
-        ? <Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем Skyline Premium…</div>}><Premium /></Suspense>
-        : <Navigate to="/login" replace />} />
+      <Route path="/premium" element={user ? <Premium /> : <Navigate to="/login" replace />} />
       <Route path="/settings" element={user ? <Settings /> : <Navigate to="/login" replace />} />
-      <Route path="/join/:inviteCode" element={<Suspense fallback={<div className="grid h-full place-items-center text-sm text-t-secondary">Загружаем канал…</div>}><Channels /></Suspense>} />
+      <Route path="/join/:inviteCode" element={<Channels />} />
       <Route path="/users/:userId" element={user ? <UserProfile /> : <Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to={user ? '/' : '/login'} replace />} />
     </Routes>
+    </Suspense>
   );
 }
 
