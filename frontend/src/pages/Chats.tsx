@@ -329,8 +329,14 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   }, [currentUser?.id, showToast]);
 
   useEffect(() => {
-    const query = searchQuery.trim();
-    if (!query.startsWith('@') || query.length < 4) return;
+    const rawQuery = searchQuery.trim();
+    const query = rawQuery.startsWith('@') ? rawQuery.slice(1).trim() : rawQuery;
+    if (query.length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      setPanelError('');
+      return;
+    }
 
     let isCurrentSearch = true;
     const timeout = setTimeout(async () => {
@@ -1245,10 +1251,18 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   };
 
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-  const usernameSearch = normalizedQuery.startsWith('@');
-  const visibleUsers: WorkspaceChatItem[] = usernameSearch
-    ? searchResults
-    : contacts.filter((contact) => !normalizedQuery || `${contact.nickname || ''} ${contact.displayName || ''} ${contact.username}`.toLocaleLowerCase().includes(normalizedQuery));
+  const userQuery = normalizedQuery.startsWith('@') ? normalizedQuery.slice(1).trim() : normalizedQuery;
+  const contactMatches = contacts.filter((contact) =>
+    !userQuery || `${contact.nickname || ''} ${contact.displayName || ''} ${contact.username}`.toLocaleLowerCase().includes(userQuery),
+  );
+  const visibleUsers: WorkspaceChatItem[] = !userQuery
+    ? contactMatches
+    : Array.from(new Map([
+        ...contactMatches.map((contact) => [String(contact.id), contact] as const),
+        ...searchResults
+          .filter((user) => `${user.displayName || ''} ${user.username}`.toLocaleLowerCase().includes(userQuery))
+          .map((user) => [String(user.id), user] as const),
+      ]).values());
   const visibleWorkspaceGroups = workspaceGroups.filter((group) => !normalizedQuery || group.title.toLocaleLowerCase().includes(normalizedQuery));
   const visibleWorkspaceChannels = workspaceChannels.filter((channel) => !normalizedQuery || `${channel.title} ${channel.description}`.toLocaleLowerCase().includes(normalizedQuery));
   const allUnifiedEntries: WorkspaceEntry[] = [
