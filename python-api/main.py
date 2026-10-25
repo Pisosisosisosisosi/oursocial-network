@@ -3,7 +3,7 @@ from fastapi.responses import Response, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from bson import ObjectId
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlsplit
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from pymongo import ReturnDocument
@@ -86,11 +86,14 @@ def enforce_login_rate_limit(request: Request) -> None:
                 login_attempt_timestamps.pop(ip, None)
 
 
-configured_frontend_origins = [
-    origin.strip().rstrip("/")
-    for origin in os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com").split(",")
-    if origin.strip()
-]
+DEFAULT_FRONTEND_URL = "https://pisosisosisosisosi.github.io/oursocial-network"
+configured_frontend_origins = []
+for frontend_url in os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL).split(","):
+    parsed_frontend_url = urlsplit(frontend_url.strip())
+    if parsed_frontend_url.scheme and parsed_frontend_url.netloc:
+        configured_frontend_origins.append(
+            f"{parsed_frontend_url.scheme}://{parsed_frontend_url.netloc}"
+        )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(dict.fromkeys([
@@ -632,7 +635,7 @@ def send_email_code(payload: SendEmailCodeRequest):
     )
     verified_email_tokens_collection().delete_many({"email": email})
 
-    frontend_base = os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com")
+    frontend_base = os.getenv("FRONTEND_URL", "https://pisosisosisosisosi.github.io/oursocial-network")
     verification_link = f"{frontend_base}/#/verify-email?email={quote_plus(email)}&code={code}&token={link_token}"
 
     try:
@@ -658,7 +661,7 @@ def verify_link_get(email: str, token: str):
     email = str(email).lower()
     verifications = email_verifications_collection()
     verification = verifications.find_one({"email": email})
-    frontend_base = os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com")
+    frontend_base = os.getenv("FRONTEND_URL", "https://pisosisosisosisosi.github.io/oursocial-network")
 
     if not verification:
         return RedirectResponse(f"{frontend_base}/#/register?error=code_not_requested")
