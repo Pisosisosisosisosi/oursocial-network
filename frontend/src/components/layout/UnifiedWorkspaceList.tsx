@@ -151,7 +151,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
   return (
     <div className="stagger min-h-0 flex-1 overflow-y-auto p-2" aria-label="Все переписки">
       {entries.map((entry) => {
-        const active = entry.kind === activeKind && entry.id === activeId;
+        const active = entry.kind === activeKind && (entry.id === activeId || (entry.kind === 'chat' && entry.contact.username === activeId));
         return (
           <button
             key={`${entry.kind}:${entry.id}`}
