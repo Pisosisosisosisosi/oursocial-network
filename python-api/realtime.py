@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 import json
 import os
+from urllib.parse import urlsplit
 import re
 from typing import Any
 
@@ -13,11 +14,14 @@ from auth import decode_token
 from db import blocked_users_collection, users_collection
 
 
-configured_frontend_origins = [
-    origin.strip().rstrip("/")
-    for origin in os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com").split(",")
-    if origin.strip()
-]
+DEFAULT_FRONTEND_URL = "https://pisosisosisosisosi.github.io/oursocial-network"
+configured_frontend_origins = []
+for frontend_url in os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL).split(","):
+    parsed_frontend_url = urlsplit(frontend_url.strip())
+    if parsed_frontend_url.scheme and parsed_frontend_url.netloc:
+        configured_frontend_origins.append(
+            f"{parsed_frontend_url.scheme}://{parsed_frontend_url.netloc}"
+        )
 socket_origins = list(dict.fromkeys([
     *configured_frontend_origins,
     "http://localhost:5173",
