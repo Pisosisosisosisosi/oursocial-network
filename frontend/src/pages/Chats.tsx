@@ -294,8 +294,10 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
       if (event.action !== 'created') return;
       let mutedItems: string[] = [];
       try { mutedItems = JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${currentUser.id}`) || '[]') as string[]; } catch { mutedItems = []; }
-      const muted = (event.groupId && mutedItems.includes('group:' + event.groupId))
-        || (event.senderId && mutedItems.includes('chat:' + event.senderId));
+      const mutedKey = event.groupId
+        ? 'group:' + event.groupId
+        : event.senderId ? 'chat:' + event.senderId : '';
+      const muted = Boolean(mutedKey && mutedItems.includes(mutedKey));
       if (!muted && event.senderId && event.senderId !== currentUser.id && event.senderId !== activeChatIdRef.current) {
         showToast('Новое сообщение в другом чате.', 'info');
       }

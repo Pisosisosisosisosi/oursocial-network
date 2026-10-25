@@ -47,6 +47,17 @@ function GlobalNotifications() {
         || Notification.permission !== 'granted'
       ) return;
 
+      // Respect the same per-chat/per-group mute preferences used by the chat list.
+      let mutedItems: string[] = [];
+      try {
+        const stored = JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${userId}`) || '[]');
+        if (Array.isArray(stored)) mutedItems = stored.filter((item): item is string => typeof item === 'string');
+      } catch {
+        mutedItems = [];
+      }
+      const muteKey = event.groupId ? `group:${event.groupId}` : `chat:${event.senderId}`;
+      if (mutedItems.includes(muteKey)) return;
+
       try {
         const notification = new Notification(event.groupId ? 'Новое сообщение в группе Skyline' : 'Новое сообщение в Skyline', {
           body: 'Откройте Skyline, чтобы прочитать сообщение.',
@@ -61,7 +72,16 @@ function GlobalNotifications() {
         console.warn('Не удалось показать desktop-уведомление:', error);
       }
     };
-    const handleGroupMention = (event: { groupTitle?: string; senderUsername?: string }) => {
+    const handleGroupMention = (event: { groupId?: string; groupTitle?: string; senderUsername?: string }) => {
+      let mutedItems: string[] = [];
+      try {
+        const stored = JSON.parse(localStorage.getItem(`skyline:muted-workspace-items:${userId}`) || '[]');
+        if (Array.isArray(stored)) mutedItems = stored.filter((item): item is string => typeof item === 'string');
+      } catch {
+        mutedItems = [];
+      }
+      if (event.groupId && mutedItems.includes(`group:${event.groupId}`)) return;
+
       const title = `Упоминание в группе «${event.groupTitle || 'Общая группа'}»`;
       const body = `@${event.senderUsername || 'пользователь'} упомянул вас.`;
       showToast(`${title}: ${body}`, 'info');
