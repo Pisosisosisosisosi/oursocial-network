@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { getSocket } from '../api/socket';
@@ -64,6 +64,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [activeChannelId, setActiveChannelId] = useState<string | null>(searchParams.get('channel'));
 
   const [posts, setPosts] = useState<ChannelPost[]>([]);
+  const [postSearch, setPostSearch] = useState('');
   const [loadedPostChannelId, setLoadedPostChannelId] = useState<string | null>(null);
   const [invitePreviewState, setInvitePreviewState] = useState<{ code: string; preview: InvitePreview } | null>(null);
   const [search, setSearch] = useState('');
@@ -98,6 +99,9 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
 
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) || null;
   const activePosts = loadedPostChannelId === activeChannel?.id ? posts : [];
+  const filteredPosts = postSearch.trim()
+    ? activePosts.filter((post) => post.text.toLocaleLowerCase().includes(postSearch.trim().toLocaleLowerCase()))
+    : activePosts;
   const invitePreview = inviteCode && invitePreviewState?.code === inviteCode
     ? invitePreviewState.preview
     : null;
@@ -373,6 +377,16 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     }
   };
 
+  const copyPostText = async (post: ChannelPost) => {
+    try {
+      await navigator.clipboard.writeText(post.text);
+      showToast('Текст публикации скопирован.', 'success');
+    } catch (error) {
+      console.error('Не удалось скопировать публикацию:', error);
+      window.prompt('Скопируйте текст публикации:', post.text);
+    }
+  };
+
   const toggleReaction = async (post: ChannelPost, emoji: string) => {
     if (!activeChannel) return;
     try {
@@ -518,16 +532,17 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           </header>
           {activeChannel.description && <div className="border-b border-white/[0.06] px-5 py-3 text-sm leading-6 text-t-secondary md:px-8">{activeChannel.description}</div>}
           {inviteLink && <button type="button" onClick={() => void navigator.clipboard.writeText(inviteLink).then(() => showToast('Ссылка скопирована.', 'success')).catch((error: unknown) => { console.error('Не удалось скопировать ссылку:', error); showToast('Не удалось скопировать ссылку.', 'error'); })} className="flex items-center gap-2 border-b border-accent/10 bg-accent/[0.06] px-5 py-2.5 text-left text-xs text-accent md:px-8"><Copy size={13} /> Ссылка-приглашение создана. Нажмите, чтобы скопировать</button>}
+          {activePosts.length > 0 && <div className="border-b border-white/[0.06] bg-panel/80 px-3 py-2.5 sm:px-5"><div className="mx-auto flex max-w-2xl items-center gap-2 rounded-xl border border-white/[0.08] bg-black/15 px-3"><Search size={15} className="shrink-0 text-slate-500" /><input value={postSearch} onChange={(event) => setPostSearch(event.target.value)} placeholder="Найти публикацию в канале…" aria-label="Поиск публикаций канала" className="h-10 min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-500" />{postSearch && <button type="button" onClick={() => setPostSearch('')} aria-label="Очистить поиск публикаций" className="rounded-lg p-1.5 text-slate-500 hover:bg-white/5 hover:text-white"><X size={14} /></button>}</div><p className="mx-auto mt-1.5 max-w-2xl text-[10px] text-slate-600">{postSearch.trim() ? `Найдено: ${filteredPosts.length}` : 'Поиск по тексту загруженных публикаций'}</p></div>}
 
           <div ref={postListRef} className="chat-wallpaper-surface custom-scrollbar relative z-10 min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6">
             {loadingPosts && <div className="mx-auto max-w-2xl space-y-3">{[0, 1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-3xl bg-white/[0.04]" />)}</div>}
-            {!loadingPosts && activePosts.length === 0 && <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-2.5 rounded-3xl border border-white/[0.06] bg-white/[0.02] p-8 text-center animate-scale-in">
+            {!loadingPosts && filteredPosts.length === 0 && <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-2.5 rounded-3xl border border-white/[0.06] bg-white/[0.02] p-8 text-center animate-scale-in">
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.04] text-slate-500"><Hash size={22} /></div>
-              <p className="mt-4 text-sm font-semibold">Пока нет публикаций</p>
-              <p className="mt-1 text-xs text-slate-500">{activeChannel.isOwner ? 'Напишите первый пост для подписчиков.' : 'Здесь появятся новые публикации канала.'}</p>
+              <p className="mt-4 text-sm font-semibold">{postSearch.trim() ? 'Ничего не найдено' : 'Пока нет публикаций'}</p>
+              <p className="mt-1 text-xs text-slate-500">{postSearch.trim() ? 'Попробуйте изменить поисковый запрос.' : activeChannel.isOwner ? 'Напишите первый пост для подписчиков.' : 'Здесь появятся новые публикации канала.'}</p>
             </div>}
             <div className="mx-auto flex max-w-2xl flex-col gap-3">
-              {activePosts.map((post) => {
+              {filteredPosts.map((post) => {
                 const counts = REACTIONS.map((emoji) => ({
                   emoji,
                   count: post.reactions.filter((reaction) => reaction.emoji === emoji).length,
@@ -539,6 +554,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
                     <div className="mb-2 flex items-center gap-2">
                       <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/15 text-accent"><Radio size={13} /></div>
                       <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold">{activeChannel.title}</p></div>
+                      <button type="button" onClick={() => void copyPostText(post)} title="Скопировать текст публикации" aria-label="Скопировать текст публикации" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/5 hover:text-accent"><Copy size={13} /></button>
                       {activeChannel.isOwner && <div className="flex items-center gap-0.5">
                         <button type="button" onClick={() => void togglePin(post)} title={post.pinned ? 'Открепить' : 'Закрепить'} aria-label={post.pinned ? 'Открепить публикацию' : 'Закрепить публикацию'} className={`rounded-lg p-1.5 transition hover:bg-white/5 ${post.pinned ? 'text-accent' : 'text-slate-500 hover:text-slate-200'}`}><Pin size={13} /></button>
                         <button type="button" onClick={() => void deletePost(post)} title="Удалить публикацию" aria-label="Удалить публикацию" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"><Trash2 size={13} /></button>
