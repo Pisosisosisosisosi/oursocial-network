@@ -2341,6 +2341,7 @@ async def delete_message_for_all(
         "chatId": message.get("chatId") or message.get("groupId"),
         "groupId": message.get("groupId"),
         "senderId": current["userId"],
+        "receiverId": message.get("receiverId"),
         "action": "deleted_for_all",
     }
     for uid in set(recipients):
