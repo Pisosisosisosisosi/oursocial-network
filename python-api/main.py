@@ -1546,9 +1546,15 @@ async def get_messages(
     my_id = current["userId"]
 
     participant_filter = {
-        "$or": [
-            {"senderId": my_id, "receiverId": user_id},
-            {"senderId": user_id, "receiverId": my_id},
+        "$and": [
+            {"$or": [
+                {"senderId": my_id, "receiverId": user_id},
+                {"senderId": user_id, "receiverId": my_id},
+            ]},
+            {"$or": [
+                {"expiresAt": {"$exists": False}},
+                {"expiresAt": {"$gt": datetime.now(timezone.utc)}},
+            ]},
         ]
     }
     owner = users_collection().find_one(
@@ -2564,6 +2570,10 @@ async def forward_message(
         "deleted": False,
         "isEdited": False,
     }
+    if not group_id:
+        expire_after = direct_chat_expiration_minutes(current["userId"], receiver_id)
+        if expire_after:
+            forwarded_doc["expiresAt"] = now + timedelta(minutes=expire_after)
     inserted = messages_collection().insert_one(forwarded_doc)
     forwarded_doc["_id"] = inserted.inserted_id
     if group:
@@ -2656,6 +2666,10 @@ async def reply_to_message(
         "deleted": False,
         "isEdited": False,
     }
+    if not group_id:
+        expire_after = direct_chat_expiration_minutes(current["userId"], receiver_id)
+        if expire_after:
+            reply_doc["expiresAt"] = now + timedelta(minutes=expire_after)
     result = messages_collection().insert_one(reply_doc)
     reply_doc["_id"] = result.inserted_id
     if group_id:
