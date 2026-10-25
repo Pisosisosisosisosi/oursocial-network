@@ -109,6 +109,46 @@ class SecurityEndpointTests(unittest.TestCase):
 
         self.assertNotIn("expiresAt", messages.insert_one.call_args.args[0])
 
+    def test_scheduled_message_worker_delivers_due_personal_message(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        sender_id = "507f1f77bcf86cd799439011"
+        receiver_id = "507f1f77bcf86cd799439012"
+        item = {
+            "_id": main.ObjectId(scheduled_id), "senderId": sender_id,
+            "receiverId": receiver_id, "text": "skyline-e2e:v3:payload",
+            "type": "text", "sendAt": main.datetime.now(main.timezone.utc),
+        }
+        messages = Mock()
+        messages.find_one.return_value = None
+        messages.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439015")
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.users_collection") as users,
+            patch("main.users_blocked_either_way", return_value=False),
+            patch("main.sio.emit", new_callable=AsyncMock) as emit,
+        ):
+            users.return_value.find_one.return_value = {"_id": main.ObjectId(receiver_id)}
+            asyncio.run(main.deliver_scheduled_message(item))
+
+        stored = messages.insert_one.call_args.args[0]
+        self.assertEqual(stored["scheduledMessageId"], scheduled_id)
+        self.assertEqual(stored["senderId"], sender_id)
+        self.assertEqual(stored["receiverId"], receiver_id)
+        self.assertEqual(scheduled.return_value.update_one.call_args.args[1]["$set"]["status"], "sent")
+        self.assertEqual(emit.await_count, 2)
+
+    def test_scheduled_message_worker_recovers_existing_delivery_without_duplicate(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        item = {"_id": main.ObjectId(scheduled_id), "senderId": "507f1f77bcf86cd799439011"}
+        existing = {"_id": main.ObjectId("507f1f77bcf86cd799439015"), "createdAt": main.datetime.now(main.timezone.utc)}
+        messages = Mock()
+        messages.find_one.return_value = existing
+        with patch("main.scheduled_messages_collection") as scheduled, patch("main.messages_collection", return_value=messages):
+            asyncio.run(main.deliver_scheduled_message(item))
+        messages.insert_one.assert_not_called()
+        self.assertEqual(scheduled.return_value.update_one.call_args.args[1]["$set"]["status"], "sent")
+
     def test_scheduled_message_requires_exactly_one_destination(self):
         payload = main.ScheduledMessageRequest(
             receiverId="507f1f77bcf86cd799439012",
