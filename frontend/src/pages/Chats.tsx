@@ -216,6 +216,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [recordingVoice, setRecordingVoice] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
+  const voiceRecordingCancelledRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1174,6 +1175,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
       const mimeType = ['audio/webm', 'audio/ogg', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       voiceChunksRef.current = [];
+      voiceRecordingCancelledRef.current = false;
       recorder.ondataavailable = (event) => { if (event.data.size) voiceChunksRef.current.push(event.data); };
       recorder.onerror = () => {
         stream.getTracks().forEach((track) => track.stop());
@@ -1183,6 +1185,11 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
       recorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
         setRecordingVoice(false);
+        if (voiceRecordingCancelledRef.current) {
+          voiceChunksRef.current = [];
+          voiceRecordingCancelledRef.current = false;
+          return;
+        }
         const type = (recorder.mimeType || 'audio/webm').split(';')[0];
         const blob = new Blob(voiceChunksRef.current, { type });
         voiceChunksRef.current = [];
@@ -1203,6 +1210,20 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     const recorder = voiceRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     voiceRecorderRef.current = null;
+  };
+
+  const cancelVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current;
+    voiceRecordingCancelledRef.current = true;
+    voiceChunksRef.current = [];
+    voiceRecorderRef.current = null;
+    setRecordingVoice(false);
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    } else {
+      voiceRecordingCancelledRef.current = false;
+    }
+    showToast('Запись голосового сообщения отменена.', 'info');
   };
 
   const handleDeleteMessage = async (message: ChatMessage) => {
@@ -1899,6 +1920,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                     {quickRepliesOpen && <div className="absolute bottom-full left-0 z-40 mb-2 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-xl"><div className="flex items-center justify-between px-2 py-1.5"><span className="text-xs font-semibold text-slate-200">Быстрые ответы</span><button type="button" onClick={() => void handleSaveQuickReply()} className="text-[10px] font-medium text-accent hover:underline">Сохранить текст</button></div>{quickRepliesLoading ? <p className="px-2 py-3 text-xs text-slate-500">Загрузка…</p> : quickReplies.length ? quickReplies.map((reply) => <button key={reply.id} type="button" onClick={() => { handleTextChange(reply.text); setQuickRepliesOpen(false); textInputRef.current?.focus(); }} className="block w-full rounded-xl px-2.5 py-2 text-left transition hover:bg-white/[0.07]"><span className="block truncate text-xs font-medium text-slate-200">{reply.emoji ? `${reply.emoji} ` : ''}{reply.title}</span><span className="mt-0.5 block truncate text-[10px] text-slate-500">{reply.text}</span></button>) : <p className="px-2 py-3 text-xs text-slate-500">Нет сохранённых ответов. Введите текст и нажмите «Сохранить текст».</p>}</div>}
                   </div>
                   <button type="button" onClick={() => setScheduleDialogOpen(true)} disabled={sending || !text.trim()} title="Запланировать отправку" aria-label="Запланировать отправку" className="p-2.5 rounded-xl text-t-secondary hover:text-accent hover:bg-accent/10 transition-all disabled:opacity-50"><CalendarClock size={18} /></button>
+                  {recordingVoice && <button type="button" onClick={cancelVoiceRecording} className="p-2.5 rounded-xl text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 transition-all" title="Отменить запись голосового сообщения" aria-label="Отменить запись голосового сообщения"><X size={18} /></button>}
                   <button type="button" onClick={() => { if (recordingVoice) stopVoiceRecording(); else void startVoiceRecording(); }} disabled={sending} className={`p-2.5 rounded-xl transition-all disabled:opacity-50 ${recordingVoice ? 'animate-pulse bg-rose-500/15 text-rose-300' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title={recordingVoice ? 'Остановить и отправить голосовое' : 'Записать голосовое сообщение'} aria-label={recordingVoice ? 'Отправить голосовое сообщение' : 'Записать голосовое сообщение'}><Mic size={18} /></button>
                   <textarea
                     ref={textInputRef}
