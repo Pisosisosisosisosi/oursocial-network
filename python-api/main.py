@@ -208,9 +208,32 @@ async def deliver_scheduled_message(item: dict) -> None:
     messages = messages_collection()
     existing = messages.find_one({"scheduledMessageId": scheduled_id})
     if existing:
+        # A previous attempt may have inserted the message but stopped before
+        # updating the schedule state or notifying connected clients. Recover
+        # both side effects without inserting a duplicate message.
         scheduled.update_one({"_id": item["_id"], "status": "processing"},
             {"$set": {"status": "sent", "sentAt": existing["createdAt"]},
              "$unset": {"claimedAt": "", "lastError": ""}})
+        event = {
+            "messageId": str(existing["_id"]),
+            "senderId": item["senderId"],
+            "action": "created",
+        }
+        if item.get("groupId"):
+            group_id = item["groupId"]
+            groups_collection().update_one(
+                {"_id": ObjectId(group_id)},
+                {"$set": {"updatedAt": existing["createdAt"]}},
+            )
+            event["groupId"] = group_id
+            for member_id in group_message_recipients(group_id):
+                await sio.emit("message_changed", event, to=f"user:{member_id}")
+        else:
+            receiver_id = item.get("receiverId")
+            if receiver_id:
+                event["receiverId"] = receiver_id
+                await sio.emit("message_changed", event, to=f"user:{item['senderId']}")
+                await sio.emit("message_changed", event, to=f"user:{receiver_id}")
         return
 
     sender_id = item["senderId"]
