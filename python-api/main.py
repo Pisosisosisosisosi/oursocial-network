@@ -53,6 +53,38 @@ MESSAGE_RATE_WINDOW_SECONDS = 1.0
 message_send_timestamps: dict[str, deque[float]] = defaultdict(deque)
 message_rate_lock = Lock()
 
+# Process-local defense-in-depth for repeated login attempts.
+# A shared/distributed limiter should be used when running multiple API instances.
+LOGIN_RATE_LIMIT = 20
+LOGIN_RATE_WINDOW_SECONDS = 300.0
+login_attempt_timestamps: dict[str, deque[float]] = defaultdict(deque)
+login_rate_lock = Lock()
+
+
+def enforce_login_rate_limit(request: Request) -> None:
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    with login_rate_lock:
+        timestamps = login_attempt_timestamps[client_ip]
+        while timestamps and now - timestamps[0] >= LOGIN_RATE_WINDOW_SECONDS:
+            timestamps.popleft()
+        if len(timestamps) >= LOGIN_RATE_LIMIT:
+            retry_after = LOGIN_RATE_WINDOW_SECONDS - (now - timestamps[0])
+            raise HTTPException(
+                status_code=429,
+                detail="Too many login attempts. Please wait before trying again.",
+                headers={"Retry-After": str(max(1, int(retry_after) + 1))},
+            )
+        timestamps.append(now)
+        # Bound stale per-IP entries if this process receives many distinct clients.
+        if len(login_attempt_timestamps) > 10_000:
+            stale_ips = [
+                ip for ip, entries in login_attempt_timestamps.items()
+                if not entries or now - entries[-1] >= LOGIN_RATE_WINDOW_SECONDS
+            ]
+            for ip in stale_ips:
+                login_attempt_timestamps.pop(ip, None)
+
 
 configured_frontend_origins = [
     origin.strip().rstrip("/")
@@ -782,6 +814,7 @@ def verify_email_code(payload: VerifyEmailCodeRequest):
 
 @app.post("/auth/login")
 def login(payload: LoginRequest, request: Request):
+    enforce_login_rate_limit(request)
     users = users_collection()
     user = users.find_one({"email": str(payload.email).lower()})
     if not user:
