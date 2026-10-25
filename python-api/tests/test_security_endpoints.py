@@ -235,6 +235,10 @@ class SecurityEndpointTests(unittest.TestCase):
             asyncio.run(main.deliver_scheduled_message(item))
         messages.insert_one.assert_not_called()
         groups.return_value.update_one.assert_called_once()
+        group_update_filter, group_update = groups.return_value.update_one.call_args.args[:2]
+        self.assertEqual(group_update_filter, {"_id": main.ObjectId(group_id)})
+        self.assertEqual(group_update, {"$max": {"updatedAt": existing["createdAt"]}})
+        self.assertNotIn("$set", group_update)
         self.assertEqual(emit.await_count, 2)
         self.assertEqual(emit.await_args_list[0].args[1]["groupId"], group_id)
 
