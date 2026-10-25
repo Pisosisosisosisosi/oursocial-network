@@ -146,19 +146,23 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     }
   }, []);
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Initialize channel data asynchronously when route parameters change. */
   useEffect(() => {
     if (inviteCode) {
       return;
     }
     void initializeChannels();
   }, [inviteCode, initializeChannels]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Load invitation preview asynchronously when an invite route is opened. */
   useEffect(() => {
     if (!inviteCode) return;
     const controller = new AbortController();
     void loadInvitePreview(inviteCode, controller.signal);
     return () => controller.abort();
   }, [inviteCode, loadInvitePreview]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   /* oxlint-disable react-hooks/set-state-in-effect -- Synchronize channel selection and cleared embedded state with router navigation. */
   useEffect(() => {
