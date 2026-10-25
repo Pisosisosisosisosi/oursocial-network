@@ -272,10 +272,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   }, [currentUser?.id, showToast]);
 
   useEffect(() => {
-    if (!currentUser?.id) {
-      setLoadingWorkspaceItems(false);
-      return;
-    }
+    if (!currentUser?.id) return;
     void Promise.allSettled([
       api.get<WorkspaceGroupItem[]>('/groups'),
       api.get<WorkspaceChannelItem[]>('/channels'),
@@ -350,12 +347,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   useEffect(() => {
     const rawQuery = searchQuery.trim();
     const query = rawQuery.startsWith('@') ? rawQuery.slice(1).trim() : rawQuery;
-    if (query.length < 2) {
-      setSearchResults([]);
-      setSearching(false);
-      setPanelError('');
-      return;
-    }
+    if (query.length < 2) return;
 
     let isCurrentSearch = true;
     const timeout = setTimeout(async () => {
@@ -806,6 +798,9 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     }
   };
 
+  const handleSelectChatRef = useRef(handleSelectChat);
+  handleSelectChatRef.current = handleSelectChat;
+
   useEffect(() => {
     const requestedChatId = searchParams.get('chat');
     const requestedUsername = searchParams.get('user');
@@ -816,7 +811,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
           if (!current) return;
           const target = response.data.find((candidate) => candidate.username.toLocaleLowerCase() === requestedUsername.toLocaleLowerCase());
           if (target && String(activeChat?.id) !== String(target.id)) {
-            void handleSelectChat(target);
+            void handleSelectChatRef.current(target);
           }
         })
         .catch((error: unknown) => {
