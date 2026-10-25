@@ -223,6 +223,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesListRef = useRef<HTMLDivElement>(null);
   const pendingScrollHeightRef = useRef<number | null>(null);
+  const initialChatLoadRef = useRef(false);
   const messageRefs = useRef(new Map<string, HTMLDivElement>());
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const messageFormRef = useRef<HTMLFormElement>(null);
@@ -529,14 +530,24 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   }, [openMessageMenu, lightboxImage, profilePanelOpen, messageMenuClosing, lightboxClosing, closeMessageMenu, closeLightbox, closeProfilePanel]);
 
   useLayoutEffect(() => {
-    if (pendingScrollHeightRef.current !== null && messagesListRef.current) {
-      const heightDifference = messagesListRef.current.scrollHeight - pendingScrollHeightRef.current;
-      messagesListRef.current.scrollTop += heightDifference;
+    const list = messagesListRef.current;
+    if (pendingScrollHeightRef.current !== null && list) {
+      const heightDifference = list.scrollHeight - pendingScrollHeightRef.current;
+      list.scrollTop += heightDifference;
       pendingScrollHeightRef.current = null;
       return;
     }
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeChat?.id, messages.length]);
+    if (!list) return;
+
+    // Keep the message pane at the bottom while the initial chat history is loading.
+    if (initialChatLoadRef.current) {
+      list.scrollTop = list.scrollHeight;
+      if (!loadingMessages) initialChatLoadRef.current = false;
+      return;
+    }
+
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [activeChat?.id, messages.length, loadingMessages]);
 
   useLayoutEffect(() => {
     const input = textInputRef.current;
@@ -778,6 +789,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     profileRequestRef.current += 1;
     setProfilePanelOpen(false);
     setChatProfile(null);
+    initialChatLoadRef.current = true;
     setActiveChat(user);
     setMessages([]);
     setText(readChatDraft(currentUser?.id, String(user.id)));
