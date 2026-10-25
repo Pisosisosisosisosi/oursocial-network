@@ -331,7 +331,12 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   useEffect(() => {
     const rawQuery = searchQuery.trim();
     const query = rawQuery.startsWith('@') ? rawQuery.slice(1).trim() : rawQuery;
-    if (query.length < 2) return;
+    if (query.length < 2) {
+      setSearchResults([]);
+      setSearching(false);
+      setPanelError('');
+      return;
+    }
 
     let isCurrentSearch = true;
     const timeout = setTimeout(async () => {
