@@ -8,18 +8,53 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import GlassPanel from '../components/ui/GlassPanel';
 
+function readPendingRegistration(): { email: string; username: string; password: string } | null {
+  try {
+    const raw = sessionStorage.getItem('pendingRegistration');
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    if (
+      !value
+      || typeof value !== 'object'
+      || !('email' in value) || typeof value.email !== 'string'
+      || !('username' in value) || typeof value.username !== 'string'
+      || !('password' in value) || typeof value.password !== 'string'
+    ) return null;
+    return { email: value.email, username: value.username, password: value.password };
+  } catch {
+    return null;
+  }
+}
+
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState(() => { try { return sessionStorage.getItem('verifiedEmailAddress') || ''; } catch { return ''; } });
-  const [password, setPassword] = useState('');
+  const [savedRegistration] = useState(readPendingRegistration);
+  const [username, setUsername] = useState(() => savedRegistration?.username || '');
+  const [email, setEmail] = useState(() => {
+    try {
+      return sessionStorage.getItem('verifiedEmailAddress') || savedRegistration?.email || '';
+    } catch {
+      return savedRegistration?.email || '';
+    }
+  });
+  const [password, setPassword] = useState(() => savedRegistration?.password || '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [verificationOpen, setVerificationOpen] = useState(false);
+  const [verificationOpen, setVerificationOpen] = useState(() => Boolean(savedRegistration));
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationError, setVerificationError] = useState('');
-  const [verificationNotice, setVerificationNotice] = useState(() => { try { const token = sessionStorage.getItem('verifiedEmailToken'); const address = sessionStorage.getItem('verifiedEmailAddress'); return token && address ? `Email ${address} уже подтверждён! Нажмите «Зарегистрироваться» для входа.` : ''; } catch { return ''; } });
+  const [verificationNotice, setVerificationNotice] = useState(() => {
+    try {
+      const token = sessionStorage.getItem('verifiedEmailToken');
+      const address = sessionStorage.getItem('verifiedEmailAddress');
+      if (token && address) return `Email ${address} уже подтверждён! Нажмите «Зарегистрироваться» для входа.`;
+      if (savedRegistration) return `Продолжите подтверждение email для ${savedRegistration.email}. Введите код из письма.`;
+      return '';
+    } catch {
+      return '';
+    }
+  });
   const [secondsRemaining, setSecondsRemaining] = useState(600);
   const [verificationLoading, setVerificationLoading] = useState(false);
 
@@ -47,9 +82,14 @@ export default function Register() {
         sessionStorage.removeItem('skylineAfterLogin');
         navigate(redirectPath || '/', { replace: true });
         return;
-      } catch {
+      } catch (registrationError: unknown) {
         sessionStorage.removeItem('verifiedEmailToken');
         sessionStorage.removeItem('verifiedEmailAddress');
+        const data = isAxiosError(registrationError)
+          ? registrationError.response?.data as { detail?: string; error?: string } | undefined
+          : undefined;
+        setError(data?.detail || data?.error || 'Не удалось завершить регистрацию. Проверьте данные и попробуйте ещё раз.');
+        return;
       } finally {
         setLoading(false);
       }
