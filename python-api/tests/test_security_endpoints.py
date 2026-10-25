@@ -786,10 +786,6 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertIn("loginAt", record)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_readiness_reports_database_connected(self):
         database = Mock()
         with patch("main.get_db", return_value=database):
@@ -805,3 +801,7 @@ if __name__ == "__main__":
                 main.readiness()
         self.assertEqual(raised.exception.status_code, 503)
         self.assertEqual(raised.exception.detail, "Database unavailable")
+
+
+if __name__ == "__main__":
+    unittest.main()
