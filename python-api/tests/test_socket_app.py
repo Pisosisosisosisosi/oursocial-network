@@ -60,7 +60,7 @@ class SocketAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(b'"sid"', body)
 
     async def test_socket_io_allows_configured_frontend_origin(self) -> None:
-        origin = "https://pipipipipi.3utilities.com"
+        origin = "https://pisosisosisosisosi.github.io"
         messages = await asgi_get(
             "/socket.io/",
             "EIO=4&transport=polling",
