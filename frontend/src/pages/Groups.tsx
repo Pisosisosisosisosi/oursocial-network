@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Copy, Crown, Download, FileText, Forward, Globe, Lock, Paperclip, Plus, Reply, Search, Send, Settings, ShieldCheck, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { ArrowLeft, Copy, Crown, Download, FileText, Forward, Globe, Lock, Mic, Paperclip, Plus, Reply, Search, Send, Settings, ShieldCheck, SmilePlus, Trash2, UserPlus, Users, X } from 'lucide-react';
+import VoiceMessagePlayer from '../components/chat/VoiceMessagePlayer';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { api, type User } from '../api/client';
@@ -53,10 +54,11 @@ interface GroupMessage {
   forwardedFrom?: string | null;
 }
 
-const REACTIONS = ['❤️', '👍', '😂'];
+const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'];
 const GROUP_ATTACHMENT_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'application/pdf', 'text/plain', 'text/csv', 'application/zip',
+  'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
 ]);
 
 function groupRecipients(group: Group): RecipientPublicKey[] {
@@ -76,9 +78,12 @@ function bytesToDataUrl(data: Uint8Array, contentType: string): string {
 }
 
 async function decryptGroupMessage(message: GroupMessage, userId: string): Promise<GroupMessage> {
-  if (!message.text.startsWith('skyline-e2e:v4:')) return message;
+  const encryptedPayload = message.text.startsWith('skyline-e2e:v4:')
+    ? message.text
+    : message.fileData?.startsWith('skyline-e2e:v4:') ? message.fileData : null;
+  if (!encryptedPayload) return message;
   try {
-    const plaintext = await decryptBytes(message.text, userId);
+    const plaintext = await decryptBytes(encryptedPayload, userId);
     const attachment = unpackAttachmentPayload(plaintext);
     if (attachment) {
       const { fileName, contentType } = attachment.metadata;
@@ -153,6 +158,10 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
   const [loadedGroupId, setLoadedGroupId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [recordingVoice, setRecordingVoice] = useState(false);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const voiceCancelledRef = useRef(false);
   const [creating, setCreating] = useState(false);
   const [addingMembers, setAddingMembers] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -600,10 +609,8 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
     }
   };
 
-  const sendAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file || !activeGroup || !user?.id || sending) return;
+  const sendGroupAttachment = async (file: File) => {
+    if (!activeGroup || !user?.id || sending) return;
     if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     const targetGroup = activeGroup;
     const replyTarget = replyingMessage;
@@ -634,13 +641,78 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
         setMessages((current) => [...current, decrypted]);
         setReplyingMessage(null);
       }
-      showToast('Файл отправлен в зашифрованном виде.', 'success');
+      showToast(file.type.startsWith('audio/') ? 'Голосовое сообщение отправлено.' : 'Файл отправлен в зашифрованном виде.', 'success');
     } catch (error) {
       console.error('Не удалось отправить вложение в группу:', error);
       showToast(error instanceof Error ? error.message : 'Не удалось отправить файл.', 'error');
     } finally {
       setSending(false);
     }
+  };
+
+  const sendAttachment = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) void sendGroupAttachment(file);
+  };
+
+  const startVoiceRecording = async () => {
+    if (recordingVoice || sending) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      showToast('Запись голосовых сообщений не поддерживается этим браузером.', 'error');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ['audio/webm', 'audio/ogg', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      voiceChunksRef.current = [];
+      voiceCancelledRef.current = false;
+      recorder.ondataavailable = (event) => { if (event.data.size) voiceChunksRef.current.push(event.data); };
+      recorder.onerror = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoice(false);
+        showToast('Не удалось записать голосовое сообщение.', 'error');
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoice(false);
+        if (voiceCancelledRef.current) {
+          voiceChunksRef.current = [];
+          voiceCancelledRef.current = false;
+          return;
+        }
+        const type = (recorder.mimeType || 'audio/webm').split(';')[0];
+        const blob = new Blob(voiceChunksRef.current, { type });
+        voiceChunksRef.current = [];
+        if (!blob.size) return;
+        const extension = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
+        void sendGroupAttachment(new File([blob], `voice-message.${extension}`, { type }));
+      };
+      voiceRecorderRef.current = recorder;
+      recorder.start();
+      setRecordingVoice(true);
+      showToast('Запись началась. Нажмите микрофон для отправки или крестик для отмены.', 'info');
+    } catch {
+      showToast('Нет доступа к микрофону. Разрешите его в браузере.', 'error');
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    voiceRecorderRef.current = null;
+  };
+
+  const cancelVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current;
+    voiceCancelledRef.current = true;
+    voiceChunksRef.current = [];
+    voiceRecorderRef.current = null;
+    setRecordingVoice(false);
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    else voiceCancelledRef.current = false;
+    showToast('Запись голосового сообщения отменена.', 'info');
   };
 
   const forwardMessage = async (targetGroup: Group) => {
@@ -885,7 +957,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
                     {!own && <p className="mb-1 text-[10px] font-semibold text-accent">{author?.displayName || author?.username || 'Участник'} <span className="font-normal text-slate-500">@{author?.username}</span></p>}
                     {message.forwardedFrom && <div className="mb-2 flex items-center gap-1 text-[10px] font-medium text-slate-400"><Forward size={11} /> Переслано</div>}
                     {message.replyTo && <button type="button" disabled={!messages.some((item) => item.id === message.replyTo)} onClick={() => document.getElementById(`group-message-${message.replyTo}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="mb-2 block w-full rounded-lg border-l-2 border-accent/60 bg-black/15 px-2.5 py-1.5 text-left disabled:cursor-default"><p className="text-[9px] font-semibold uppercase tracking-wider text-accent">{quotedMessage ? activeGroup.members.find((member) => member.userId === quotedMessage.senderId)?.username || 'Участник' : 'Ответ на сообщение'}</p><p className="truncate text-[10px] text-slate-300">{quotedMessage?.text || (quotedMessage && quotedMessage.type !== 'text' ? '📎 Вложение' : 'Исходное сообщение недоступно')}</p></button>}
-                    {message.type === 'image' && message.fileData ? <img src={message.fileData} alt={message.fileName || 'Изображение'} className="mb-2 max-h-72 max-w-full rounded-lg object-contain" /> : message.type === 'file' && message.fileData ? <a href={message.fileData} download={message.fileName || 'attachment'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{message.fileName || 'Скачать файл'}</span></a> : null}
+                    {message.type === 'image' && message.fileData ? <img src={message.fileData} alt={message.fileName || 'Изображение'} className="mb-2 max-h-72 max-w-full rounded-lg object-contain" /> : message.type === 'file' && message.fileData && message.contentType?.startsWith('audio/') ? <VoiceMessagePlayer src={message.fileData} fileName={message.fileName} mine={own} /> : message.type === 'file' && message.fileData ? <a href={message.fileData} download={message.fileName || 'attachment'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{message.fileName || 'Скачать файл'}</span></a> : null}
                     {editingMessage === message.id && message.type === 'text' ? (
                       <div className="space-y-2"><textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} className="w-full resize-y rounded-lg border border-white/10 bg-slate-950/60 p-2 text-sm outline-none focus:border-accent/40" /><div className="flex justify-end gap-2"><button type="button" onClick={() => setEditingMessage(null)} className="text-[10px] text-t-secondary">Отмена</button><button type="button" onClick={() => void saveEdit(message.id)} className="text-[10px] font-semibold text-accent">Сохранить</button></div></div>
                     ) : message.type === 'text' ? <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{messageSearch.trim() && message.text.toLocaleLowerCase().includes(messageSearch.trim().toLocaleLowerCase()) ? <>{message.text.split(new RegExp(`(${escapeRegExp(messageSearch.trim())})`, 'ig')).map((part, index) => part.toLocaleLowerCase() === messageSearch.trim().toLocaleLowerCase() ? <mark key={index} className="rounded bg-amber-300/30 text-inherit">{part}</mark> : part)}</> : message.text}</p> : null}
@@ -902,9 +974,11 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
 
             {replyingMessage && <div className="flex items-center gap-3 border-t border-white/[0.08] bg-panel px-4 pt-3"><Reply size={14} className="shrink-0 text-accent" /><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold uppercase tracking-wider text-accent">Ответ участнику группы</p><p className="truncate text-xs text-t-secondary">{replyingMessage.text || '📎 Вложение'}</p></div><button type="button" onClick={() => setReplyingMessage(null)} aria-label="Отменить ответ" className="grid h-10 w-10 place-items-center rounded-xl text-t-secondary hover:bg-white/5 hover:text-white"><X size={15} /></button></div>}
             <form onSubmit={(event) => void sendMessage(event)} className="glass-panel relative z-10 mx-3 mb-3 mt-2 flex items-end gap-1 rounded-2xl p-1.5 shadow-2xl transition-all focus-within:ring-2 focus-within:ring-accent/30 sm:mx-5 sm:gap-2 sm:p-2">
-              <label className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-t-secondary transition ${sending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-white/5 hover:text-accent'}`} title="Зашифрованное вложение"><Paperclip size={17} /><input type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void sendAttachment(event)} className="hidden" disabled={sending} /></label>
+              <label className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-t-secondary transition ${sending ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-white/5 hover:text-accent'}`} title="Зашифрованное вложение"><Paperclip size={17} /><input type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav" onChange={(event) => void sendAttachment(event)} className="hidden" disabled={sending || recordingVoice} /></label>
               <div className="hidden max-w-[30%] gap-1 overflow-hidden sm:flex">{activeGroup.members.slice(0, 3).map((member) => <button key={member.userId} type="button" onClick={() => setDraft((value) => `${value}${value && !value.endsWith(' ') ? ' ' : ''}@${member.username} `)} className="truncate rounded-full bg-white/[0.04] px-2 py-1 text-[9px] text-slate-500 hover:text-accent">@{member.username}</button>)}</div>
               <textarea value={draft} onChange={(event) => { setDraft(event.target.value); writeGroupDraft(userId, activeGroupKey, event.target.value); }} rows={1} maxLength={4000} disabled={sending} placeholder="Сообщение группе… Используйте @username для упоминания" className="max-h-36 min-h-10 min-w-0 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-500 focus:outline-none" onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && localStorage.getItem('skylineEnterToSend') !== 'false') { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+              {recordingVoice && <button type="button" onClick={cancelVoiceRecording} aria-label="Отменить голосовое сообщение" title="Отменить запись" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-rose-300 transition hover:bg-rose-500/10"><X size={17} /></button>}
+              <button type="button" onClick={() => { if (recordingVoice) stopVoiceRecording(); else void startVoiceRecording(); }} disabled={sending} aria-label={recordingVoice ? 'Отправить голосовое сообщение' : 'Записать голосовое сообщение'} title={recordingVoice ? 'Завершить и отправить запись' : 'Записать голосовое сообщение'} className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl transition disabled:opacity-40 ${recordingVoice ? 'animate-pulse bg-rose-500/15 text-rose-300' : 'text-t-secondary hover:bg-white/5 hover:text-accent'}`}><Mic size={17} /></button>
               <button type="submit" disabled={!draft.trim() || sending} aria-label="Отправить сообщение" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40">{sending ? <span className="text-xs">…</span> : <Send size={17} />}</button>
             </form>
           </>
