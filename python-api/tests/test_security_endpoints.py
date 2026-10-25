@@ -263,6 +263,26 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertEqual(messages.insert_one.call_count, 1)
         scheduled.return_value.update_one.assert_not_called()
 
+    def test_scheduled_worker_requeues_message_after_post_insert_failure(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        item = {"_id": main.ObjectId(scheduled_id), "senderId": "507f1f77bcf86cd799439011"}
+        scheduled_collection = Mock()
+        scheduled_collection.find_one_and_update.side_effect = [item, asyncio.CancelledError()]
+        messages = Mock()
+        messages.find_one.return_value = {"_id": main.ObjectId("507f1f77bcf86cd799439015")}
+        with (
+            patch("main.scheduled_messages_collection", return_value=scheduled_collection),
+            patch("main.messages_collection", return_value=messages),
+            patch("main.deliver_scheduled_message", new_callable=AsyncMock, side_effect=RuntimeError("socket unavailable")),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(main.scheduled_message_worker())
+        self.assertEqual(
+            scheduled_collection.update_one.call_args.args[1]["$set"]["status"],
+            "pending",
+        )
+        self.assertIn("socket unavailable", scheduled_collection.update_one.call_args.args[1]["$set"]["lastError"])
+
     def test_scheduled_message_requires_exactly_one_destination(self):
         payload = main.ScheduledMessageRequest(
             receiverId="507f1f77bcf86cd799439012",
