@@ -613,3 +613,20 @@ class SecurityEndpointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_readiness_reports_database_connected(self):
+        database = Mock()
+        with patch("main.get_db", return_value=database):
+            result = main.readiness()
+        self.assertEqual(result, {"status": "ready", "database": "connected"})
+        database.command.assert_called_once_with("ping")
+
+    def test_readiness_returns_service_unavailable_when_database_ping_fails(self):
+        database = Mock()
+        database.command.side_effect = main.PyMongoError("database unavailable")
+        with patch("main.get_db", return_value=database):
+            with self.assertRaises(HTTPException) as raised:
+                main.readiness()
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail, "Database unavailable")
