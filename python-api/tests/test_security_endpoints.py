@@ -179,6 +179,7 @@ class SecurityEndpointTests(unittest.TestCase):
             patch("main.messages_collection", return_value=messages),
             patch("main.users_collection") as users,
             patch("main.users_blocked_either_way", return_value=False),
+            patch("main.direct_chat_expiration_minutes", return_value=0),
             patch("main.sio.emit", new_callable=AsyncMock) as emit,
         ):
             users.return_value.find_one.return_value = {"_id": main.ObjectId(receiver_id)}
@@ -292,6 +293,7 @@ class SecurityEndpointTests(unittest.TestCase):
             patch("main.messages_collection", return_value=messages),
             patch("main.users_collection") as users,
             patch("main.users_blocked_either_way", return_value=False),
+            patch("main.direct_chat_expiration_minutes", return_value=0),
             patch("main.sio.emit", new_callable=AsyncMock, side_effect=RuntimeError("socket unavailable")),
         ):
             users.return_value.find_one.return_value = {"_id": main.ObjectId(receiver_id)}
