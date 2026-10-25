@@ -147,14 +147,19 @@ async def remove_group_member(group_id: str, member_id: str, current=Depends(get
     if leaving and current_role == "owner":
         raise HTTPException(status_code=400, detail="Transfer ownership before leaving the group")
     now = datetime.now(timezone.utc)
+    membership_conditions = [
+        {"members": {"$elemMatch": {"userId": current_user_id}}},
+        {"members": {"$elemMatch": {"userId": member_id, "role": {"$ne": "owner"}}}},
+    ]
+    if not leaving:
+        membership_conditions.append({
+            "$or": [
+                {"createdBy": current_user_id},
+                {"members": {"$elemMatch": {"userId": current_user_id, "role": "owner"}}},
+            ]
+        })
     result = groups_collection().update_one(
-        {
-            "_id": group["_id"],
-            "$and": [
-                {"members": {"$elemMatch": {"userId": current_user_id, "role": {"$in": ["owner", "admin", "member"]}}}},
-                {"members": {"$elemMatch": {"userId": member_id, "role": {"$ne": "owner"}}}},
-            ],
-        },
+        {"_id": group["_id"], "$and": membership_conditions},
         {"$pull": {"members": {"userId": member_id}}, "$set": {"updatedAt": now}},
     )
     if result.modified_count != 1:
