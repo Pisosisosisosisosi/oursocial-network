@@ -3,7 +3,7 @@ import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, Che
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, keysApi, messagesApi, type Contact, type QuickReply, type ScheduledMessage, type User } from '../api/client';
+import { api, keysApi, messagesApi, type Contact, type QuickReply, type SavedMessageItem, type ScheduledMessage, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
@@ -207,6 +207,9 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [scheduledDialogOpen, setScheduledDialogOpen] = useState(false);
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
   const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [savedMessagesOpen, setSavedMessagesOpen] = useState(false);
+  const [savedMessages, setSavedMessages] = useState<Array<{ savedId: string; savedAt: string; message: ChatMessage }>>([]);
+  const [savedMessagesLoading, setSavedMessagesLoading] = useState(false);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
@@ -1092,6 +1095,21 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
       showToast(detail, 'error');
     } finally { setSending(false); }
   };
+  const openSavedMessages = async () => {
+    setSavedMessagesOpen(true);
+    setSavedMessagesLoading(true);
+    try {
+      const response = await messagesApi.getSavedMessages(100, 0);
+      const decoded = await Promise.all((response.data.items || []).filter((item: SavedMessageItem) => item.message?.id).map(async (item: SavedMessageItem) => ({
+        savedId: item.savedId,
+        savedAt: item.savedAt,
+        message: await decryptChatMessage(item.message as ChatMessage, currentUser?.id),
+      })));
+      setSavedMessages(decoded);
+    } catch { showToast('Не удалось загрузить сохранённые сообщения.', 'error'); }
+    finally { setSavedMessagesLoading(false); }
+  };
+
   const openScheduledMessages = async () => {
     setScheduledDialogOpen(true); setScheduledLoading(true);
     try { const response = await messagesApi.getScheduledMessages(); setScheduledMessages(response.data.items || []); }
@@ -1621,6 +1639,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                   <button type="button" onClick={() => void openChatProfile()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
                     <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
                   </button>
+                  <button type="button" onClick={() => void openSavedMessages()} title="Избранное" aria-label="Открыть сохранённые сообщения" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Bookmark size={15} /></button>
                   <button type="button" onClick={() => void openScheduledMessages()} title="Запланированные сообщения" aria-label="Запланированные сообщения" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><CalendarClock size={15} /></button>
                   <div className="flex shrink-0 items-center gap-1">
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
@@ -2159,6 +2178,15 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
           document.body,
         );
       })()}
+      {savedMessagesOpen && createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Избранное">
+          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-base font-semibold text-white">Избранное</h2><p className="mt-1 text-xs text-slate-400">Сохранённые сообщения доступны только вам.</p></div><button type="button" onClick={() => setSavedMessagesOpen(false)} aria-label="Закрыть" className="rounded-xl p-2 text-slate-400 hover:bg-white/10"><X size={17} /></button></div>
+            {savedMessagesLoading ? <p className="py-8 text-center text-sm text-slate-500">Загрузка…</p> : savedMessages.length ? <div className="max-h-[60vh] space-y-2 overflow-y-auto">{savedMessages.map((item) => { const otherId = item.message.senderId === currentUser?.id ? item.message.receiverId : item.message.senderId; const contact = contacts.find((entry) => String(entry.id) === String(otherId)); return <div key={item.savedId} className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-3"><p className="text-[10px] text-slate-500">{new Date(item.savedAt).toLocaleString()}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-200">{item.message.type === 'text' ? item.message.text : `📎 ${item.message.fileName || 'Вложение'}`}</p>{contact && <button type="button" onClick={() => { void handleSelectChat(contact); setSavedMessagesOpen(false); }} className="mt-2 text-[10px] font-medium text-accent hover:underline">Открыть переписку</button>}</div>; })}</div> : <p className="py-8 text-center text-sm text-slate-500">Пока ничего не сохранено. Откройте меню сообщения и выберите «Сохранить в Избранное».</p>}
+            <div className="mt-4 flex justify-end"><button type="button" onClick={() => setSavedMessagesOpen(false)} className="rounded-xl border border-white/10 px-4 py-2 text-xs text-slate-300 hover:bg-white/10">Закрыть</button></div>
+          </div>
+        </div>, document.body,
+      )}
       {scheduleDialogOpen && createPortal(
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Запланировать сообщение">
           <form onSubmit={handleScheduleMessage} className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
