@@ -1114,6 +1114,12 @@ def find_message_for_user(message_id: str, user_id: str):
         raise HTTPException(status_code=404, detail="Message not found")
     if message.get("deletedForAll"):
         raise HTTPException(status_code=404, detail="Message not found")
+    expires_at = message.get("expiresAt")
+    if expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=404, detail="Message not found")
     group_id = message.get("groupId")
     if group_id:
         # Group messages must always pass current membership checks, even when
@@ -1739,7 +1745,16 @@ def get_group_messages(
         {"groupId": group_id, "readBy": {"$ne": current["userId"]}},
         {"$push": {"readBy": current["userId"]}},
     )
-    query: dict = {"groupId": group_id, "createdAt": {"$gte": member["joinedAt"]}}
+    query: dict = {
+        "groupId": group_id,
+        "createdAt": {"$gte": member["joinedAt"]},
+        "$and": [{
+            "$or": [
+                {"expiresAt": {"$exists": False}},
+                {"expiresAt": {"$gt": datetime.now(timezone.utc)}},
+            ]
+        }],
+    }
     if before:
         if not ObjectId.is_valid(before):
             raise HTTPException(status_code=400, detail="Invalid message cursor")
@@ -1749,10 +1764,12 @@ def get_group_messages(
         )
         if not cursor:
             raise HTTPException(status_code=400, detail="Message cursor not found in this group")
-        query["$or"] = [
-            {"createdAt": {"$lt": cursor["createdAt"], "$gte": member["joinedAt"]}},
-            {"createdAt": cursor["createdAt"], "_id": {"$lt": cursor["_id"]}},
-        ]
+        query["$and"].append({
+            "$or": [
+                {"createdAt": {"$lt": cursor["createdAt"], "$gte": member["joinedAt"]}},
+                {"createdAt": cursor["createdAt"], "_id": {"$lt": cursor["_id"]}},
+            ]
+        })
     page = list(messages_collection().find(query).sort([("createdAt", -1), ("_id", -1)]).limit(limit))
     page.reverse()
     return [serialize_message(message) for message in page]
