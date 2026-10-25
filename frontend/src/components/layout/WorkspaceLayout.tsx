@@ -11,6 +11,7 @@ export default function WorkspaceLayout() {
   const [newChatSearch, setNewChatSearch] = useState('');
   const [newChatResults, setNewChatResults] = useState<User[]>([]);
   const [newChatLoading, setNewChatLoading] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -45,16 +46,22 @@ export default function WorkspaceLayout() {
         <div className="flex items-center justify-between px-4 pb-1 pt-3"><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Все переписки</span>
           <button type="button" onClick={() => navigate(showDiscover ? '/channels' : '/channels?discover=1')} className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-accent"><Radio size={12} /> {showDiscover ? 'Мои каналы' : 'Найти каналы'}</button></div>
         <UnifiedWorkspaceList search={search} activeKind={activeKind} activeId={activeId} includeDiscover={showDiscover} />
-        <div className="group absolute bottom-4 left-4 z-50">
+        <div className="absolute bottom-4 left-4 z-50" onMouseEnter={() => setCreateMenuOpen(true)} onMouseLeave={() => setCreateMenuOpen(false)} onKeyDown={(event) => { if (event.key === 'Escape') setCreateMenuOpen(false); }}>
           <button
             type="button"
             aria-label="Создать новую переписку"
+            aria-expanded={createMenuOpen}
+            aria-controls="workspace-create-menu"
             title="Создать"
+            onClick={() => setCreateMenuOpen((open) => !open)}
             className="grid h-12 w-12 place-items-center rounded-full border border-white/15 bg-gradient-to-br from-accent to-sky-500 text-white shadow-lg shadow-accent/25 transition duration-200 hover:scale-105 hover:shadow-xl hover:shadow-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
           >
             <Pencil size={19} strokeWidth={2.2} />
           </button>
-          <div className="pointer-events-none absolute bottom-0 left-14 w-[264px] translate-y-2 translate-x-1 opacity-0 transition-all duration-200 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:translate-x-0 group-focus-within:opacity-100">
+          <div
+            id="workspace-create-menu"
+            className={`absolute bottom-0 left-14 w-[264px] transition-all duration-200 ease-out ${createMenuOpen ? 'pointer-events-auto translate-y-0 translate-x-0 opacity-100' : 'pointer-events-none translate-y-2 translate-x-1 opacity-0'}`}
+          >
             <div className="overflow-hidden rounded-2xl border border-white/[0.12] bg-[#0e1726]/[0.98] p-2 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
               <div className="px-3 pb-2.5 pt-2">
                 <p className="text-sm font-semibold tracking-tight text-white">Создать новое</p>
@@ -63,7 +70,7 @@ export default function WorkspaceLayout() {
               <div className="space-y-1">
                 <button
                   type="button"
-                  onClick={() => navigate('/chats?create=1')}
+                  onClick={() => { setCreateMenuOpen(false); navigate('/chats?create=1'); }}
                   className="group/item flex w-full items-center gap-3 rounded-xl border border-transparent p-2.5 text-left transition duration-150 hover:border-emerald-300/20 hover:bg-emerald-300/[0.07] focus-visible:border-emerald-300/30 focus-visible:bg-emerald-300/[0.07] focus-visible:outline-none"
                 >
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-300/10 text-emerald-300 transition group-hover/item:bg-emerald-300/15">
@@ -77,7 +84,7 @@ export default function WorkspaceLayout() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate('/groups?create=1')}
+                  onClick={() => { setCreateMenuOpen(false); navigate('/groups?create=1'); }}
                   className="group/item flex w-full items-center gap-3 rounded-xl border border-transparent p-2.5 text-left transition duration-150 hover:border-accent/20 hover:bg-accent/[0.09] focus-visible:border-accent/30 focus-visible:bg-accent/[0.09] focus-visible:outline-none"
                 >
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent transition group-hover/item:bg-accent/20">
@@ -91,7 +98,7 @@ export default function WorkspaceLayout() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate('/channels?create=1')}
+                  onClick={() => { setCreateMenuOpen(false); navigate('/channels?create=1'); }}
                   className="group/item flex w-full items-center gap-3 rounded-xl border border-transparent p-2.5 text-left transition duration-150 hover:border-cyan-300/20 hover:bg-cyan-300/[0.07] focus-visible:border-cyan-300/30 focus-visible:bg-cyan-300/[0.07] focus-visible:outline-none"
                 >
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-300/10 text-cyan-300 transition group-hover/item:bg-cyan-300/15">
