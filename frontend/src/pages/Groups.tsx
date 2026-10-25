@@ -203,7 +203,7 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
       setGroupDescriptionDraft(activeGroup.description || '');
       setGroupAvatarDraft(activeGroup.avatarUrl || '');
     }
-  }, [activeGroup?.id, activeGroup?.title, activeGroup?.description, activeGroup?.avatarUrl]);
+  }, [activeGroup]);
   useEffect(() => {
     const inviteToken = searchParams.get('invite');
     if (!inviteToken || !userId) return;
