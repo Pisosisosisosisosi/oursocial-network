@@ -9,6 +9,7 @@ class UnreadSummaryTests(unittest.TestCase):
         user_id = "507f1f77bcf86cd799439011"
         group_id = main.ObjectId("507f1f77bcf86cd799439013")
         messages = Mock()
+        messages.count_documents.return_value = 0
         groups = Mock()
         groups.find.return_value = [{"_id": group_id}]
         channels = Mock()
