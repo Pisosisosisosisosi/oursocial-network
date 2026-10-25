@@ -193,14 +193,132 @@ class SecurityEndpointTests(unittest.TestCase):
 
     def test_scheduled_message_worker_recovers_existing_delivery_without_duplicate(self):
         scheduled_id = "507f1f77bcf86cd799439014"
-        item = {"_id": main.ObjectId(scheduled_id), "senderId": "507f1f77bcf86cd799439011"}
+        sender_id = "507f1f77bcf86cd799439011"
+        receiver_id = "507f1f77bcf86cd799439012"
+        item = {"_id": main.ObjectId(scheduled_id), "senderId": sender_id, "receiverId": receiver_id}
         existing = {"_id": main.ObjectId("507f1f77bcf86cd799439015"), "createdAt": main.datetime.now(main.timezone.utc)}
         messages = Mock()
         messages.find_one.return_value = existing
-        with patch("main.scheduled_messages_collection") as scheduled, patch("main.messages_collection", return_value=messages):
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.sio.emit", new_callable=AsyncMock) as emit,
+        ):
             asyncio.run(main.deliver_scheduled_message(item))
         messages.insert_one.assert_not_called()
         self.assertEqual(scheduled.return_value.update_one.call_args.args[1]["$set"]["status"], "sent")
+        self.assertEqual(emit.await_count, 2)
+        self.assertEqual(emit.await_args_list[0].args[1]["messageId"], str(existing["_id"]))
+
+    def test_scheduled_group_message_recovery_notifies_current_members(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        group_id = "507f1f77bcf86cd799439013"
+        sender_id = "507f1f77bcf86cd799439011"
+        item = {
+            "_id": main.ObjectId(scheduled_id), "senderId": sender_id,
+            "groupId": group_id,
+        }
+        existing = {
+            "_id": main.ObjectId("507f1f77bcf86cd799439015"),
+            "createdAt": main.datetime.now(main.timezone.utc),
+        }
+        messages = Mock()
+        messages.find_one.return_value = existing
+        members = [sender_id, "507f1f77bcf86cd799439012"]
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.groups_collection") as groups,
+            patch("main.group_message_recipients", return_value=members),
+            patch("main.sio.emit", new_callable=AsyncMock) as emit,
+        ):
+            asyncio.run(main.deliver_scheduled_message(item))
+        messages.insert_one.assert_not_called()
+        groups.return_value.update_one.assert_called_once()
+        group_update_filter, group_update = groups.return_value.update_one.call_args.args[:2]
+        self.assertEqual(group_update_filter, {"_id": main.ObjectId(group_id)})
+        self.assertEqual(group_update, {"$max": {"updatedAt": existing["createdAt"]}})
+        self.assertNotIn("$set", group_update)
+        self.assertEqual(emit.await_count, 2)
+        self.assertEqual(emit.await_args_list[0].args[1]["groupId"], group_id)
+
+    def test_scheduled_group_delivery_never_rewinds_group_activity(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        group_id = "507f1f77bcf86cd799439013"
+        sender_id = "507f1f77bcf86cd799439011"
+        member_id = "507f1f77bcf86cd799439012"
+        item = {
+            "_id": main.ObjectId(scheduled_id), "senderId": sender_id,
+            "groupId": group_id, "text": "skyline-e2e:v3:payload", "type": "text",
+        }
+        group = {
+            "_id": main.ObjectId(group_id),
+            "members": [{"userId": sender_id}, {"userId": member_id}],
+        }
+        messages = Mock()
+        messages.find_one.return_value = None
+        messages.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439015")
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.get_group_for_member", return_value=group),
+            patch("main.validate_v4_envelope"),
+            patch("main.groups_collection") as groups,
+            patch("main.sio.emit", new_callable=AsyncMock) as emit,
+        ):
+            asyncio.run(main.deliver_scheduled_message(item))
+
+        group_update_filter, group_update = groups.return_value.update_one.call_args.args[:2]
+        self.assertEqual(group_update_filter, {"_id": group["_id"]})
+        self.assertEqual(group_update, {"$max": {"updatedAt": messages.insert_one.call_args.args[0]["createdAt"]}})
+        self.assertNotIn("$set", group_update)
+        self.assertEqual(emit.await_count, 2)
+        self.assertEqual(scheduled.return_value.update_one.call_args.args[1]["$set"]["status"], "sent")
+
+    def test_scheduled_delivery_stays_retryable_when_realtime_emit_fails(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        sender_id = "507f1f77bcf86cd799439011"
+        receiver_id = "507f1f77bcf86cd799439012"
+        item = {
+            "_id": main.ObjectId(scheduled_id), "senderId": sender_id,
+            "receiverId": receiver_id, "text": "skyline-e2e:v3:payload",
+            "type": "text",
+        }
+        messages = Mock()
+        messages.find_one.return_value = None
+        messages.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439015")
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.users_collection") as users,
+            patch("main.users_blocked_either_way", return_value=False),
+            patch("main.sio.emit", new_callable=AsyncMock, side_effect=RuntimeError("socket unavailable")),
+        ):
+            users.return_value.find_one.return_value = {"_id": main.ObjectId(receiver_id)}
+            with self.assertRaises(RuntimeError):
+                asyncio.run(main.deliver_scheduled_message(item))
+        self.assertEqual(messages.insert_one.call_count, 1)
+        scheduled.return_value.update_one.assert_not_called()
+
+    def test_scheduled_worker_requeues_message_after_post_insert_failure(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        item = {"_id": main.ObjectId(scheduled_id), "senderId": "507f1f77bcf86cd799439011"}
+        scheduled_collection = Mock()
+        scheduled_collection.find_one_and_update.side_effect = [item, asyncio.CancelledError()]
+        messages = Mock()
+        messages.find_one.return_value = {"_id": main.ObjectId("507f1f77bcf86cd799439015")}
+        with (
+            patch("main.scheduled_messages_collection", return_value=scheduled_collection),
+            patch("main.messages_collection", return_value=messages),
+            patch("main.deliver_scheduled_message", new_callable=AsyncMock, side_effect=RuntimeError("socket unavailable")),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(main.scheduled_message_worker())
+        self.assertEqual(
+            scheduled_collection.update_one.call_args.args[1]["$set"]["status"],
+            "pending",
+        )
+        self.assertIn("socket unavailable", scheduled_collection.update_one.call_args.args[1]["$set"]["lastError"])
 
     def test_scheduled_message_requires_exactly_one_destination(self):
         payload = main.ScheduledMessageRequest(
