@@ -3,7 +3,11 @@ import unittest
 from main import app
 
 
-async def asgi_get(path: str, query_string: str = "") -> list[dict]:
+async def asgi_get(
+    path: str,
+    query_string: str = "",
+    headers: list[tuple[bytes, bytes]] | None = None,
+) -> list[dict]:
     messages: list[dict] = []
     request_sent = False
 
@@ -27,7 +31,7 @@ async def asgi_get(path: str, query_string: str = "") -> list[dict]:
             "path": path,
             "raw_path": path.encode(),
             "query_string": query_string.encode(),
-            "headers": [(b"host", b"testserver")],
+            "headers": headers or [(b"host", b"testserver")],
             "server": ("testserver", 80),
             "client": ("127.0.0.1", 12345),
             "root_path": "",
@@ -54,6 +58,35 @@ class SocketAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response["status"], 200)
         self.assertTrue(body.startswith(b"0"))
         self.assertIn(b'"sid"', body)
+
+    async def test_socket_io_allows_configured_frontend_origin(self) -> None:
+        origin = "https://pipipipipi.3utilities.com"
+        messages = await asgi_get(
+            "/socket.io/",
+            "EIO=4&transport=polling",
+            headers=[(b"host", b"testserver"), (b"origin", origin.encode())],
+        )
+
+        response = next(message for message in messages if message["type"] == "http.response.start")
+        body = b"".join(
+            message.get("body", b"")
+            for message in messages
+            if message["type"] == "http.response.body"
+        )
+        self.assertEqual(response["status"], 200)
+        self.assertTrue(body.startswith(b"0"))
+
+    async def test_socket_io_rejects_unconfigured_origin(self) -> None:
+        messages = await asgi_get(
+            "/socket.io/",
+            "EIO=4&transport=polling",
+            headers=[(b"host", b"testserver"), (b"origin", b"https://evil.example")],
+        )
+
+        response = next(message for message in messages if message["type"] == "http.response.start")
+        response_headers = dict(response.get("headers", []))
+        self.assertEqual(response["status"], 400)
+        self.assertNotIn(b"access-control-allow-origin", response_headers)
 
     async def test_http_api_is_forwarded_by_conventional_app_entry(self) -> None:
         messages = await asgi_get("/health")
