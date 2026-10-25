@@ -408,7 +408,9 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     try {
       const response = await api.post<Channel>(`/channels/invites/${inviteCode}/join`);
       await loadChannels();
-      navigate(`/channels?channel=${response.data.id}`, { replace: true });
+      const nextParams = new URLSearchParams({ channel: response.data.id });
+      if (searchParams.get('discover') === '1') nextParams.set('discover', '1');
+      navigate(`/channels?${nextParams.toString()}`, { replace: true });
       showToast('Вы присоединились к каналу.', 'success');
     } catch (error) {
       console.error('Не удалось присоединиться к каналу:', error);
