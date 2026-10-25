@@ -51,7 +51,37 @@ class UpdateChannelRequest(BaseModel):
 
 
 class ChannelPostRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=10_000)
+    text: str = Field(default="", max_length=10_000)
+    fileName: str | None = Field(default=None, max_length=255)
+    contentType: str | None = Field(default=None, max_length=100)
+    fileData: str | None = Field(default=None, max_length=2_800_000)
+
+    @field_validator("contentType")
+    @classmethod
+    def validate_content_type(cls, value: str | None) -> str | None:
+        allowed = {
+            "image/jpeg", "image/png", "image/gif", "image/webp",
+            "application/pdf", "text/plain", "text/csv", "application/zip",
+            "audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav",
+        }
+        if value is not None and value not in allowed:
+            raise ValueError("Unsupported channel attachment type")
+        return value
+
+    @field_validator("fileData")
+    @classmethod
+    def validate_file_data(cls, value: str | None, info):
+        if value is None or value == "":
+            return value
+        content_type = info.data.get("contentType")
+        if not content_type or not value.startswith(f"data:{content_type};base64,"):
+            raise ValueError("Attachment data must match its content type")
+        encoded = value.split(",", 1)[1] if "," in value else ""
+        if not encoded or not re.fullmatch(r"[A-Za-z0-9+/]*={0,2}", encoded):
+            raise ValueError("Invalid base64 attachment data")
+        if len(encoded) > 2_796_204:
+            raise ValueError("Channel attachments cannot exceed 2 MB")
+        return value
 
 
 class ChannelReactionRequest(BaseModel):
@@ -114,7 +144,11 @@ def serialize_post(post: dict) -> dict:
         "id": str(post["_id"]),
         "channelId": post["channelId"],
         "senderId": post["senderId"],
-        "text": post["text"],
+        "text": post.get("text", ""),
+        "type": post.get("type", "text"),
+        "fileName": post.get("fileName"),
+        "contentType": post.get("contentType"),
+        "fileData": post.get("fileData"),
         "reactions": post.get("reactions", []),
         "pinned": post.get("pinned", False),
         "pinnedAt": post.get("pinnedAt").isoformat() if post.get("pinnedAt") else None,
@@ -355,6 +389,53 @@ async def unsubscribe_channel(channel_id: str, current=Depends(get_current_user)
     return {"status": "unsubscribed"}
 
 
+@router.get("/{channel_id}/members")
+def list_channel_members(channel_id: str, current=Depends(get_current_user)):
+    channel = channel_by_id(channel_id)
+    require_owner(channel, current["userId"])
+    member_ids = [member.get("userId") for member in channel.get("members", []) if member.get("userId")]
+    profiles = {}
+    object_ids = [ObjectId(member_id) for member_id in member_ids if ObjectId.is_valid(member_id)]
+    if object_ids:
+        for profile in users_collection().find(
+            {"_id": {"$in": object_ids}},
+            {"username": 1, "displayName": 1, "avatarUrl": 1},
+        ):
+            profiles[str(profile["_id"])] = profile
+    return [
+        {
+            "userId": member_id,
+            "username": profiles.get(member_id, {}).get("username", ""),
+            "displayName": profiles.get(member_id, {}).get("displayName", ""),
+            "avatarUrl": profiles.get(member_id, {}).get("avatarUrl", ""),
+            "role": next((member.get("role", "subscriber") for member in channel.get("members", []) if member.get("userId") == member_id), "subscriber"),
+            "joinedAt": next((member.get("joinedAt").isoformat() if member.get("joinedAt") and hasattr(member.get("joinedAt"), "isoformat") else str(member.get("joinedAt") or "") for member in channel.get("members", []) if member.get("userId") == member_id), ""),
+        }
+        for member_id in member_ids
+    ]
+
+
+@router.delete("/{channel_id}/members/{member_id}")
+async def remove_channel_member(channel_id: str, member_id: str, current=Depends(get_current_user)):
+    channel = channel_by_id(channel_id)
+    require_owner(channel, current["userId"])
+    if member_id == channel.get("ownerId"):
+        raise HTTPException(status_code=400, detail="The channel owner cannot be removed")
+    if not get_member(channel, member_id):
+        raise HTTPException(status_code=404, detail="Channel member not found")
+    result = channels_collection().update_one(
+        {"_id": channel["_id"], "ownerId": current["userId"], "members.userId": member_id},
+        {"$pull": {"members": {"userId": member_id}}, "$set": {"updatedAt": datetime.now(timezone.utc)}},
+    )
+    if result.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Channel membership changed; refresh and retry")
+    await notify_members(
+        {**channel, "members": [member for member in channel.get("members", []) if member.get("userId") != member_id]},
+        {"action": "member_removed", "channelId": channel_id, "userId": member_id},
+    )
+    return {"status": "removed", "userId": member_id}
+
+
 @router.get("/{channel_id}/posts")
 def get_channel_posts(
     channel_id: str,
@@ -382,13 +463,21 @@ async def create_channel_post(
     channel = channel_by_id(channel_id)
     require_owner(channel, current["userId"])
     text = payload.text.strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="Post cannot be empty")
+    file_data = payload.fileData
+    content_type = payload.contentType
+    if not text and not file_data:
+        raise HTTPException(status_code=422, detail="Post must contain text or an attachment")
+    if file_data and (not content_type or not payload.fileName):
+        raise HTTPException(status_code=422, detail="Attachment name and content type are required")
     now = datetime.now(timezone.utc)
     post = {
         "channelId": channel_id,
         "senderId": current["userId"],
         "text": text,
+        "fileName": payload.fileName if file_data else None,
+        "contentType": content_type if file_data else None,
+        "fileData": file_data if file_data else None,
+        "type": "image" if content_type and content_type.startswith("image/") else "file" if file_data else "text",
         "reactions": [],
         "pinned": False,
         "createdAt": now,

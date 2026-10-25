@@ -131,6 +131,48 @@ async def update_group_member_role(group_id: str, member_id: str, payload: Group
     return {"status": "ok", "userId": member_id, "role": payload.role}
 
 
+@router.delete("/groups/{group_id}/members/{member_id}")
+async def remove_group_member(group_id: str, member_id: str, current=Depends(get_current_user)):
+    group = _group_for_member(group_id, current["userId"])
+    current_user_id = current["userId"]
+    current_role = _role(group, current_user_id)
+    target = next((member for member in group.get("members", []) if member.get("userId") == member_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Group member not found")
+    if member_id == group.get("createdBy") or target.get("role") == "owner":
+        raise HTTPException(status_code=400, detail="The group owner cannot be removed")
+    leaving = member_id == current_user_id
+    if not leaving and current_role != "owner":
+        raise HTTPException(status_code=403, detail="Only the group owner can remove other members")
+    if leaving and current_role == "owner":
+        raise HTTPException(status_code=400, detail="Transfer ownership before leaving the group")
+    now = datetime.now(timezone.utc)
+    membership_conditions = [
+        {"members": {"$elemMatch": {"userId": current_user_id}}},
+        {"members": {"$elemMatch": {"userId": member_id, "role": {"$ne": "owner"}}}},
+    ]
+    if not leaving:
+        membership_conditions.append({
+            "$or": [
+                {"createdBy": current_user_id},
+                {"members": {"$elemMatch": {"userId": current_user_id, "role": "owner"}}},
+            ]
+        })
+    result = groups_collection().update_one(
+        {"_id": group["_id"], "$and": membership_conditions},
+        {"$pull": {"members": {"userId": member_id}}, "$set": {"updatedAt": now}},
+    )
+    if result.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Group membership changed; refresh and retry")
+    updated = groups_collection().find_one({"_id": group["_id"]})
+    await _notify_members(updated, group_id, "members")
+    try:
+        await sio.emit("group_changed", {"groupId": group_id, "action": "member_removed", "userId": member_id}, to=f"user:{member_id}")
+    except Exception as exc:
+        print(f"Failed to notify removed group member: {exc}")
+    return {"status": "removed", "userId": member_id, "left": leaving}
+
+
 @router.post("/groups/{group_id}/transfer-ownership")
 async def transfer_group_ownership(group_id: str, payload: TransferOwnershipRequest, current=Depends(get_current_user)):
     group = _group_for_member(group_id, current["userId"])

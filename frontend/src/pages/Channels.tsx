@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Copy, Download, FileText, Hash, LockKeyhole, Paperclip, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
+import VoiceMessagePlayer from '../components/chat/VoiceMessagePlayer';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { getSocket } from '../api/socket';
@@ -32,10 +33,23 @@ interface ChannelPost {
   channelId: string;
   senderId: string;
   text: string;
+  type?: 'text' | 'image' | 'file';
+  fileName?: string;
+  contentType?: string;
+  fileData?: string;
   reactions: { userId: string; emoji: string }[];
   pinned: boolean;
   pinnedAt: string | null;
   createdAt: string;
+}
+
+interface ChannelMember {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  role: string;
+  joinedAt: string;
 }
 
 interface InvitePreview {
@@ -77,8 +91,14 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [channelAvatarUrl, setChannelAvatarUrl] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [draft, setDraft] = useState('');
+  const [postAttachment, setPostAttachment] = useState<File | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [channelMembers, setChannelMembers] = useState<ChannelMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const postListRef = useRef<HTMLDivElement>(null);
   const scrollToLatestPostRef = useRef(false);
 
@@ -360,18 +380,37 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
 
   const publishPost = async (event: FormEvent) => {
     event.preventDefault();
-    if (!activeChannel || !draft.trim()) return;
+    if (!activeChannel || (!draft.trim() && !postAttachment) || busy) return;
     setBusy(true);
     try {
-      const response = await api.post<ChannelPost>(`/channels/${activeChannel.id}/posts`, { text: draft });
+      let attachmentPayload: { fileName?: string; contentType?: string; fileData?: string } = {};
+      if (postAttachment) {
+        const allowedTypes = new Set([
+          'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+          'application/pdf', 'text/plain', 'text/csv', 'application/zip',
+          'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
+        ]);
+        if (!allowedTypes.has(postAttachment.type)) throw new Error('Этот формат файла нельзя опубликовать в канале.');
+        if (!postAttachment.size || postAttachment.size > 2 * 1024 * 1024) throw new Error('Размер вложения должен быть от 1 байта до 2 МБ.');
+        const fileData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Не удалось прочитать вложение.'));
+          reader.onerror = () => reject(new Error('Не удалось прочитать вложение.'));
+          reader.readAsDataURL(postAttachment);
+        });
+        attachmentPayload = { fileName: postAttachment.name, contentType: postAttachment.type, fileData };
+      }
+      const response = await api.post<ChannelPost>(`/channels/${activeChannel.id}/posts`, { text: draft, ...attachmentPayload });
       scrollToLatestPostRef.current = true;
       setPosts((current) => sortChannelPosts(current.some((post) => post.id === response.data.id)
         ? current.map((post) => post.id === response.data.id ? response.data : post)
         : [...current, response.data]));
       setDraft('');
+      setPostAttachment(null);
+      showToast('Публикация опубликована.', 'success');
     } catch (error) {
       console.error('Не удалось опубликовать сообщение:', error);
-      showToast('Не удалось опубликовать сообщение.', 'error');
+      showToast(error instanceof Error ? error.message : 'Не удалось опубликовать сообщение.', 'error');
     } finally {
       setBusy(false);
     }
@@ -417,6 +456,38 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     } catch (error) {
       console.error('Не удалось удалить публикацию:', error);
       showToast('Не удалось удалить публикацию.', 'error');
+    }
+  };
+
+  const openChannelMembers = async () => {
+    if (!activeChannel?.isOwner) return;
+    setMembersOpen(true);
+    setLoadingMembers(true);
+    try {
+      const response = await api.get<ChannelMember[]>(`/channels/${activeChannel.id}/members`);
+      setChannelMembers(response.data);
+    } catch (error) {
+      console.error('Не удалось загрузить подписчиков канала:', error);
+      showToast('Не удалось загрузить список подписчиков.', 'error');
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const removeChannelMember = async (member: ChannelMember) => {
+    if (!activeChannel || member.userId === activeChannel.ownerId) return;
+    if (!window.confirm(`Удалить @${member.username || member.displayName} из подписчиков канала?`)) return;
+    setRemovingMemberId(member.userId);
+    try {
+      await api.delete(`/channels/${activeChannel.id}/members/${member.userId}`);
+      setChannelMembers((items) => items.filter((item) => item.userId !== member.userId));
+      await loadChannels();
+      showToast('Подписчик удалён из канала.', 'success');
+    } catch (error) {
+      console.error('Не удалось удалить подписчика канала:', error);
+      showToast('Не удалось удалить подписчика.', 'error');
+    } finally {
+      setRemovingMemberId(null);
     }
   };
 
@@ -526,6 +597,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
               <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><Users size={12} /> {activeChannel.memberCount} подписчиков <span>·</span> {activeChannel.isOwner ? 'Ваш канал' : `Автор: ${activeChannel.ownerName || activeChannel.ownerUsername || 'Skyline'}`}</p>
             </div>
             {activeChannel.isOwner ? <>
+              <button type="button" onClick={() => void openChannelMembers()} title="Управление подписчиками" aria-label="Управление подписчиками" className="relative rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-accent"><Users size={17} /><span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent/20 px-1 text-[9px] leading-4 text-accent">{activeChannel.memberCount}</span></button>
               {activeChannel.visibility === 'private' && <button type="button" onClick={() => void copyInvite()} title="Скопировать ссылку-приглашение" aria-label="Ссылка-приглашение" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-accent"><Share2 size={17} /></button>}
               <button type="button" onClick={() => { setVisibility(activeChannel.visibility); setEditing(true); }} title="Настройки канала" aria-label="Настройки канала" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-white"><Settings size={17} /></button>
             </> : activeChannel.isSubscribed ? <button disabled={busy} type="button" onClick={() => void unsubscribe(activeChannel)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-50">Отписаться</button> : <button disabled={busy} type="button" onClick={() => void subscribe(activeChannel)} className="rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent disabled:opacity-50">Подписаться</button>}
@@ -560,7 +632,10 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
                         <button type="button" onClick={() => void deletePost(post)} title="Удалить публикацию" aria-label="Удалить публикацию" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"><Trash2 size={13} /></button>
                       </div>}
                     </div>
-                    <div className="chat-message-content whitespace-pre-wrap break-words text-xs leading-relaxed">{post.text}</div>
+                    {post.text && <div className="chat-message-content whitespace-pre-wrap break-words text-xs leading-relaxed">{post.text}</div>}
+                    {post.fileData && post.contentType?.startsWith('image/') && <a href={post.fileData} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl"><img src={post.fileData} alt={post.fileName || 'Изображение из публикации'} loading="lazy" className="max-h-[420px] max-w-full rounded-xl object-contain" /></a>}
+                    {post.fileData && post.contentType?.startsWith('audio/') && <div className="mt-2"><VoiceMessagePlayer src={post.fileData} fileName={post.fileName} /></div>}
+                    {post.fileData && !post.contentType?.startsWith('image/') && !post.contentType?.startsWith('audio/') && <a href={post.fileData} download={post.fileName || 'attachment'} className="mt-2 flex items-center gap-3 rounded-xl border border-white/[0.08] bg-black/15 p-3 transition hover:border-accent/30"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><FileText size={18} /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{post.fileName || 'Вложение'}</span><span className="mt-1 block text-[10px] text-slate-500">{post.contentType || 'Файл'}</span></span><Download size={15} className="shrink-0 text-slate-400" /></a>}
                     <div className="mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono text-t-secondary/70"><time>{formatAppTime(post.createdAt)}</time></div>
                     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/[0.06] pt-2">
                       {counts.map(({ emoji, count, mine }) => <button key={emoji} type="button" disabled={!activeChannel.isSubscribed} onClick={() => void toggleReaction(post, emoji)} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] transition disabled:cursor-not-allowed disabled:opacity-60 ${mine ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-white/[0.025] text-slate-300 hover:border-white/20'}`}><span>{emoji}</span>{count > 0 && <span>{count}</span>}</button>)}
@@ -573,13 +648,37 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           </div>
 
           {activeChannel.isOwner && <form onSubmit={(event) => void publishPost(event)} className="glass-panel relative z-10 mx-3 mb-3 mt-2 rounded-2xl p-1.5 shadow-2xl transition-all focus-within:ring-2 focus-within:ring-accent/30 sm:mx-5 sm:p-2">
+            {postAttachment && <div className="mx-auto mb-1 flex max-w-2xl items-center gap-2 rounded-xl border border-accent/20 bg-accent/[0.06] px-3 py-2"><Paperclip size={14} className="shrink-0 text-accent" /><span className="min-w-0 flex-1 truncate text-[11px] text-t-primary">{postAttachment.name} <span className="text-t-secondary">· {(postAttachment.size / 1024 / 1024).toFixed(2)} МБ</span></span><button type="button" onClick={() => setPostAttachment(null)} aria-label="Убрать вложение" className="rounded-lg p-1 text-t-secondary hover:bg-white/5 hover:text-rose-300"><X size={14} /></button></div>}
             <div className="mx-auto flex max-w-2xl items-end gap-2">
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10_000} rows={1} placeholder="Опубликовать сообщение для подписчиков…" className="max-h-36 min-h-10 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-600" />
-              <button type="submit" disabled={busy || !draft.trim()} aria-label="Опубликовать" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"><Send size={16} /></button>
+              <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav" className="hidden" onChange={(event) => { const file = event.target.files?.[0] || null; event.target.value = ''; if (!file) return; if (file.size > 2 * 1024 * 1024) { showToast('Размер вложения не должен превышать 2 МБ.', 'error'); return; } setPostAttachment(file); }} />
+              <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={busy} aria-label="Прикрепить файл к публикации" title="Фото, аудио или файл до 2 МБ" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-t-secondary transition hover:bg-white/[0.06] hover:text-accent disabled:opacity-40"><Paperclip size={17} /></button>
+              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10_000} rows={1} placeholder="Напишите публикацию или прикрепите файл…" className="max-h-36 min-h-10 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-600" />
+              <button type="submit" disabled={busy || (!draft.trim() && !postAttachment)} aria-label="Опубликовать" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{busy ? <span className="h-4 w-4 animate-spin rounded-full border border-white/40 border-t-white" /> : <Send size={16} />}</button>
             </div>
           </form>}
         </>}
       </section>
+
+      {membersOpen && activeChannel && <div className="fixed inset-0 z-[115] flex justify-end bg-black/65 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setMembersOpen(false); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="channel-members-title" className="flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#0c1422] shadow-2xl animate-slide-in">
+          <header className="flex items-center gap-3 border-b border-white/[0.08] p-5">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent/10 text-accent"><Users size={19} /></div>
+            <div className="min-w-0 flex-1"><h2 id="channel-members-title" className="text-sm font-bold text-white">Подписчики канала</h2><p className="mt-1 text-[11px] text-slate-500">{activeChannel.title} · {channelMembers.length || activeChannel.memberCount} человек</p></div>
+            <button type="button" onClick={() => setMembersOpen(false)} aria-label="Закрыть список подписчиков" className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 transition hover:bg-white/[0.06] hover:text-white"><X size={17} /></button>
+          </header>
+          <div className="border-b border-white/[0.06] p-4"><p className="text-xs leading-5 text-slate-400">Здесь можно посмотреть аудиторию и удалить пользователя из подписчиков. Владелец канала защищён от удаления.</p></div>
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+            {loadingMembers && <div className="space-y-2 p-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-14 animate-pulse rounded-xl bg-white/[0.04]" />)}</div>}
+            {!loadingMembers && channelMembers.map((member) => <div key={member.userId} className="mb-1.5 flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3">
+              {member.avatarUrl ? <img src={member.avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" /> : <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent/10 text-sm font-semibold text-accent">{(member.displayName || member.username || '?').slice(0, 1).toUpperCase()}</div>}
+              <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-slate-200">{member.displayName || member.username || 'Пользователь'}</p><p className="mt-1 truncate text-[10px] text-slate-500">@{member.username || 'username не указан'} · {member.role === 'owner' ? 'Владелец' : 'Подписчик'}</p></div>
+              {member.userId !== activeChannel.ownerId && <button type="button" disabled={removingMemberId === member.userId} onClick={() => void removeChannelMember(member)} title="Удалить подписчика" aria-label={`Удалить @${member.username} из канала`} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300 disabled:opacity-40">{removingMemberId === member.userId ? <span className="h-4 w-4 animate-spin rounded-full border border-slate-500 border-t-rose-300" /> : <Trash2 size={15} />}</button>}
+            </div>)}
+            {!loadingMembers && channelMembers.length === 0 && <p className="py-12 text-center text-xs text-slate-500">Подписчики не найдены.</p>}
+          </div>
+          <footer className="border-t border-white/[0.08] p-4"><button type="button" onClick={() => void copyInvite()} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-xs font-semibold text-white transition hover:brightness-110"><Share2 size={15} /> Создать / скопировать приглашение</button></footer>
+        </section>
+      </div>}
 
       {(creating || editing) && <div className="fixed inset-0 z-[120] flex justify-center overflow-y-auto bg-[#030712]/80 p-3 backdrop-blur-md sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) { setCreating(false); setEditing(false); } }}>
         <section role="dialog" aria-modal="true" aria-labelledby="channel-form-title" className="my-auto w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/10 bg-[#101827] shadow-[0_30px_100px_rgba(0,0,0,0.55)] animate-scale-in">
