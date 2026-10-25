@@ -932,15 +932,28 @@ def unread_summary(current=Depends(get_current_user)):
         "groupId": {"$exists": False},
         **active_message_filter,
     })
-    group_ids = [str(g["_id"]) for g in groups_collection().find({"members.userId": me}, {"_id": 1})]
     groups_unread = 0
-    if group_ids:
-        groups_unread = messages_collection().count_documents({
-            "groupId": {"$in": group_ids},
+    member_groups = groups_collection().find(
+        {"members.userId": me},
+        {"_id": 1, "members": 1},
+    )
+    for group in member_groups:
+        member = next(
+            (item for item in group.get("members", []) if item.get("userId") == me),
+            None,
+        )
+        if not member:
+            continue
+        group_filter = {
+            "groupId": str(group["_id"]),
             "senderId": {"$ne": me},
             "readBy": {"$ne": me},
             **active_message_filter,
-        })
+        }
+        joined_at = member.get("joinedAt")
+        if joined_at is not None:
+            group_filter["createdAt"] = {"$gte": joined_at}
+        groups_unread += messages_collection().count_documents(group_filter)
     owner = users_collection().find_one({"_id": ObjectId(me)}, {"channelReads": 1})
     channel_reads = (owner or {}).get("channelReads") or {}
     epoch = datetime.min.replace(tzinfo=timezone.utc)
