@@ -28,6 +28,7 @@ export default function VoiceMessagePlayer({ src, fileName, mine = false }: Voic
   const [failed, setFailed] = useState(false);
   const [speed, setSpeed] = useState<1 | 1.5 | 2>(1);
 
+  /* oxlint-disable react-hooks/set-state-in-effect -- Reset playback state when the media source changes. */
   useEffect(() => {
     setPlaying(false);
     setDuration(0);
@@ -35,6 +36,7 @@ export default function VoiceMessagePlayer({ src, fileName, mine = false }: Voic
     setFailed(false);
     setSpeed(1);
   }, [src]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = speed;
