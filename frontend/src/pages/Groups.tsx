@@ -10,7 +10,8 @@ import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader'
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import UnifiedWorkspaceList from '../components/layout/UnifiedWorkspaceList';
 import { formatAppDateTime } from '../time';
-import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
+import EncryptionNotice from '../components/EncryptionNotice';
+import { canSendEncryptedMessages } from '../crypto/encryptionStatus';
 import { decryptBytes, encryptBytes, packAttachmentPayload, unpackAttachmentPayload, type RecipientPublicKey } from '../crypto/encrypt';
 
 interface GroupMember extends User {
