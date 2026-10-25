@@ -76,6 +76,10 @@ async def call_invite(sid: str, data: dict[str, Any] | None = None) -> dict[str,
         return {"status": "error", "error": "User not found"}
     if users_blocked_either_way(caller_id, target_id):
         return {"status": "error", "error": "Calls are unavailable for this user"}
+    # Do not reserve a call ID or lock either participant when the invitee has
+    # no connected Socket.IO session to receive the incoming-call event.
+    if not online_users.get(target_id):
+        return {"status": "error", "error": "User is offline"}
     if call_id in active_calls:
         return {"status": "error", "error": "Call identifier already exists"}
     if any({caller_id, target_id} & participants for participants in active_calls.values()):
