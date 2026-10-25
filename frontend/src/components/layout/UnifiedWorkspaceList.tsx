@@ -101,6 +101,7 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
       else refreshContacts();
     };
     const handleChannelChanged = () => refreshChannels();
+    const handleGroupChanged = () => refreshGroups();
     const handleReconnect = () => {
       refreshContacts();
       refreshGroups();
@@ -109,11 +110,13 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
 
     socket.on('message_changed', handleMessageChanged);
     socket.on('channel_changed', handleChannelChanged);
+    socket.on('group_changed', handleGroupChanged);
     socket.on('connect', handleReconnect);
     return () => {
       disposed = true;
       socket.off('message_changed', handleMessageChanged);
       socket.off('channel_changed', handleChannelChanged);
+      socket.off('group_changed', handleGroupChanged);
       socket.off('connect', handleReconnect);
     };
   }, [user?.id]);
