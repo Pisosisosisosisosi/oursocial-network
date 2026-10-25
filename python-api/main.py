@@ -203,6 +203,8 @@ def startup():
     email_verifications_collection().create_index("expiresAt", expireAfterSeconds=0)
     verified_email_tokens_collection().create_index("expiresAt", expireAfterSeconds=0)
     stories_collection().create_index("expiresAt", expireAfterSeconds=0)
+    # Messages with expiresAt are removed automatically by MongoDB TTL.
+    messages_collection().create_index("expiresAt", expireAfterSeconds=0)
     friend_requests_collection().create_index([("fromUserId", 1), ("toUserId", 1)])
     blocked_users_collection().create_index("userId")
     saved_messages_collection().create_index("userId")
@@ -1841,6 +1843,11 @@ async def send_group_message(
         "createdAt": now,
         "read": False,
     }
+    disappearing = group.get("disappearingMessages", {})
+    if disappearing.get("enabled") and disappearing.get("expireAfterMinutes"):
+        # TTL cleanup is handled by MongoDB; only messages sent after the timer
+        # is enabled receive an expiry timestamp.
+        doc["expiresAt"] = now + timedelta(minutes=int(disappearing["expireAfterMinutes"]))
     result = messages_collection().insert_one(doc)
     doc["_id"] = result.inserted_id
     groups_collection().update_one({"_id": group["_id"]}, {"$set": {"updatedAt": now}})

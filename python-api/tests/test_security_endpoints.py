@@ -27,6 +27,71 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertEqual(calls[0].args[1], {"$pull": {"contacts": {"userId": target_id}}})
         self.assertEqual(calls[1].args[1], {"$pull": {"contacts": target_id}})
 
+    def test_group_message_gets_expiry_when_disappearing_messages_enabled(self):
+        user_id = "507f1f77bcf86cd799439011"
+        group_id = "507f1f77bcf86cd799439013"
+        group = {
+            "_id": main.ObjectId(group_id),
+            "title": "Test group",
+            "members": [{"userId": user_id, "role": "owner"}],
+            "disappearingMessages": {"enabled": True, "expireAfterMinutes": 30},
+        }
+        messages = Mock()
+        messages.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439014")
+        groups = Mock()
+
+        with (
+            patch("main.get_group_for_member", return_value=group),
+            patch("main.validate_v4_envelope"),
+            patch("main.enforce_message_rate_limit"),
+            patch("main.messages_collection", return_value=messages),
+            patch("main.groups_collection", return_value=groups),
+            patch("main.sio.emit", new_callable=AsyncMock),
+        ):
+            result = asyncio.run(
+                main.send_group_message(
+                    group_id,
+                    main.GroupMessageRequest(text="skyline-e2e:v4:test"),
+                    {"userId": user_id, "username": "tester"},
+                )
+            )
+
+        self.assertEqual(result["id"], "507f1f77bcf86cd799439014")
+        stored_message = messages.insert_one.call_args.args[0]
+        self.assertEqual(
+            (stored_message["expiresAt"] - stored_message["createdAt"]).total_seconds(),
+            30 * 60,
+        )
+
+    def test_group_message_without_expiry_setting_has_no_expiration(self):
+        user_id = "507f1f77bcf86cd799439011"
+        group_id = "507f1f77bcf86cd799439013"
+        group = {
+            "_id": main.ObjectId(group_id),
+            "title": "Test group",
+            "members": [{"userId": user_id, "role": "owner"}],
+        }
+        messages = Mock()
+        messages.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439014")
+
+        with (
+            patch("main.get_group_for_member", return_value=group),
+            patch("main.validate_v4_envelope"),
+            patch("main.enforce_message_rate_limit"),
+            patch("main.messages_collection", return_value=messages),
+            patch("main.groups_collection"),
+            patch("main.sio.emit", new_callable=AsyncMock),
+        ):
+            asyncio.run(
+                main.send_group_message(
+                    group_id,
+                    main.GroupMessageRequest(text="skyline-e2e:v4:test"),
+                    {"userId": user_id, "username": "tester"},
+                )
+            )
+
+        self.assertNotIn("expiresAt", messages.insert_one.call_args.args[0])
+
     def test_scheduled_message_requires_exactly_one_destination(self):
         payload = main.ScheduledMessageRequest(
             receiverId="507f1f77bcf86cd799439012",
