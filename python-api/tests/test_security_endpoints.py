@@ -979,5 +979,44 @@ class DeleteForAllRealtimeEventTests(unittest.TestCase):
         )
 
 
+    def test_login_rate_limit_blocks_repeated_attempts_per_ip(self):
+        main.login_attempt_timestamps.clear()
+        request = Request({
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/auth/login",
+            "raw_path": b"/auth/login",
+            "query_string": b"",
+            "headers": [],
+            "client": ("203.0.113.10", 12345),
+            "server": ("testserver", 80),
+        })
+        try:
+            for _ in range(main.LOGIN_RATE_LIMIT):
+                main.enforce_login_rate_limit(request)
+            with self.assertRaises(HTTPException) as raised:
+                main.enforce_login_rate_limit(request)
+            self.assertEqual(raised.exception.status_code, 429)
+            self.assertIn("Retry-After", raised.exception.headers)
+
+            other_ip_request = Request({
+                "type": "http",
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "http",
+                "path": "/auth/login",
+                "raw_path": b"/auth/login",
+                "query_string": b"",
+                "headers": [],
+                "client": ("203.0.113.11", 12345),
+                "server": ("testserver", 80),
+            })
+            main.enforce_login_rate_limit(other_ip_request)
+        finally:
+            main.login_attempt_timestamps.clear()
+
+
 if __name__ == "__main__":
     unittest.main()
