@@ -102,7 +102,7 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
         notify.assert_awaited_once()
         self.assertEqual(notify.await_args.args[1]["action"], "post_created")
 
-    async def test_subscriber_can_toggle_a_reaction(self) -> None:
+    async def test_subscriber_can_toggle_a_reaction_atomically(self):
         post = {
             "_id": POST_ID,
             "channelId": str(CHANNEL_ID),
@@ -112,13 +112,15 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
             "pinned": False,
             "createdAt": datetime.now(timezone.utc),
         }
+        added_post = {**post, "reactions": [{"userId": SUBSCRIBER_ID, "emoji": "❤️"}]}
         posts = Mock()
-        posts.find_one.return_value = post
+        posts.find_one.side_effect = [post, added_post, added_post, post]
+        posts.update_one.return_value.matched_count = 1
 
         with (
             patch("channels.channel_by_id", return_value=make_channel()),
             patch("channels.channel_posts_collection", return_value=posts),
-            patch("channels.notify_members", new_callable=AsyncMock),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
         ):
             added = await channels.toggle_channel_post_reaction(
                 str(CHANNEL_ID),
@@ -135,6 +137,11 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(added["reactions"], [{"userId": SUBSCRIBER_ID, "emoji": "❤️"}])
         self.assertEqual(removed["reactions"], [])
+        self.assertEqual(posts.update_one.call_count, 2)
+        for call in posts.update_one.call_args_list:
+            self.assertIsInstance(call.args[1], list)
+            self.assertIn("$set", call.args[1][0])
+        self.assertEqual(notify.await_count, 2)
 
     async def test_delete_channel_rejects_stale_owner(self) -> None:
         collection = Mock()
