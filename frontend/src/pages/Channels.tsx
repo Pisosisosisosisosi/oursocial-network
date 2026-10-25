@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, Bell, Check, Copy, Hash, LockKeyhole, Pin, Plus, Radio, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -8,7 +8,7 @@ import { useToast } from '../context/useToast';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import UnifiedWorkspaceList from '../components/layout/UnifiedWorkspaceList';
-import { formatAppDateTime } from '../time';
+import { formatAppDateTime, formatAppTime } from '../time';
 
 interface Channel {
   id: string;
@@ -51,6 +51,11 @@ const REACTIONS = ['❤️', '👍', '😂'];
 
 function formatDate(value: string) { return formatAppDateTime(value); }
 
+function sortChannelPosts(items: ChannelPost[]) {
+  return [...items].sort((a, b) => Number(b.pinned) - Number(a.pinned)
+    || (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
+}
+
 export default function Channels({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const { inviteCode } = useParams();
@@ -75,6 +80,8 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
+  const postListRef = useRef<HTMLDivElement>(null);
+  const scrollToLatestPostRef = useRef(false);
 
   /* oxlint-disable react-hooks/set-state-in-effect -- The route query is an external navigation signal that opens the create form and selects list mode. */
   useEffect(() => {
@@ -136,15 +143,24 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   }, [showToast]);
 
   const loadPosts = useCallback(async (channelId: string) => {
+    scrollToLatestPostRef.current = true;
     setLoadingPosts(true);
     try {
       const response = await api.get<ChannelPost[]>(`/channels/${channelId}/posts`, { params: { limit: 50 } });
-      setPosts(response.data);
+      setPosts(sortChannelPosts(response.data));
       setLoadedPostChannelId(channelId);
     } finally {
       setLoadingPosts(false);
     }
   }, []);
+
+  useLayoutEffect(() => {
+    if (!scrollToLatestPostRef.current || loadingPosts || loadedPostChannelId !== activeChannelId) return;
+    const list = postListRef.current;
+    if (!list) return;
+    list.scrollTop = list.scrollHeight;
+    scrollToLatestPostRef.current = false;
+  }, [posts, loadingPosts, loadedPostChannelId, activeChannelId]);
 
   /* oxlint-disable react-hooks/set-state-in-effect -- Initialize channel data asynchronously when route parameters change. */
   useEffect(() => {
@@ -200,12 +216,13 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
         if (event.action === 'post_deleted' && event.postId) {
           setPosts((current) => current.filter((post) => post.id !== event.postId));
         } else if (event.post && ['post_created', 'post_updated'].includes(event.action || '')) {
+          if (event.action === 'post_created') scrollToLatestPostRef.current = true;
           setPosts((current) => {
             const exists = current.some((post) => post.id === event.post?.id);
             const updated = exists
               ? current.map((post) => post.id === event.post?.id ? event.post! : post)
-              : [event.post!, ...current];
-            return updated.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt));
+              : [...current, event.post!];
+            return sortChannelPosts(updated);
           });
         }
       }
@@ -345,7 +362,10 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     setBusy(true);
     try {
       const response = await api.post<ChannelPost>(`/channels/${activeChannel.id}/posts`, { text: draft });
-      setPosts((current) => current.some((post) => post.id === response.data.id) ? current : [response.data, ...current]);
+      scrollToLatestPostRef.current = true;
+      setPosts((current) => sortChannelPosts(current.some((post) => post.id === response.data.id)
+        ? current.map((post) => post.id === response.data.id ? response.data : post)
+        : [...current, response.data]));
       setDraft('');
     } catch (error) {
       console.error('Не удалось опубликовать сообщение:', error);
@@ -370,8 +390,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     if (!activeChannel) return;
     try {
       const response = await api.post<ChannelPost>(`/channels/${activeChannel.id}/posts/${post.id}/pin`);
-      setPosts((current) => current.map((item) => item.id === post.id ? response.data : item)
-        .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt.localeCompare(a.createdAt)));
+      setPosts((current) => sortChannelPosts(current.map((item) => item.id === post.id ? response.data : item)));
     } catch (error) {
       console.error('Не удалось закрепить публикацию:', error);
       showToast('Не удалось изменить закрепление.', 'error');
@@ -502,36 +521,39 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           {activeChannel.description && <div className="border-b border-white/[0.06] px-5 py-3 text-sm leading-6 text-t-secondary md:px-8">{activeChannel.description}</div>}
           {inviteLink && <button type="button" onClick={() => void navigator.clipboard.writeText(inviteLink).then(() => showToast('Ссылка скопирована.', 'success')).catch((error: unknown) => { console.error('Не удалось скопировать ссылку:', error); showToast('Не удалось скопировать ссылку.', 'error'); })} className="flex items-center gap-2 border-b border-accent/10 bg-accent/[0.06] px-5 py-2.5 text-left text-xs text-accent md:px-8"><Copy size={13} /> Ссылка-приглашение создана. Нажмите, чтобы скопировать</button>}
 
-          <div className="chat-wallpaper-surface custom-scrollbar relative z-10 min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6">
+          <div ref={postListRef} className="chat-wallpaper-surface custom-scrollbar relative z-10 min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-6">
             {loadingPosts && <div className="mx-auto max-w-2xl space-y-3">{[0, 1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-3xl bg-white/[0.04]" />)}</div>}
             {!loadingPosts && activePosts.length === 0 && <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-2.5 rounded-3xl border border-white/[0.06] bg-white/[0.02] p-8 text-center animate-scale-in">
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/[0.04] text-slate-500"><Hash size={22} /></div>
               <p className="mt-4 text-sm font-semibold">Пока нет публикаций</p>
               <p className="mt-1 text-xs text-slate-500">{activeChannel.isOwner ? 'Напишите первый пост для подписчиков.' : 'Здесь появятся новые публикации канала.'}</p>
             </div>}
-            <div className="mx-auto max-w-2xl space-y-3">
+            <div className="mx-auto flex max-w-2xl flex-col gap-3">
               {activePosts.map((post) => {
                 const counts = REACTIONS.map((emoji) => ({
                   emoji,
                   count: post.reactions.filter((reaction) => reaction.emoji === emoji).length,
                   mine: post.reactions.some((reaction) => reaction.emoji === emoji && reaction.userId === user?.id),
                 }));
-                return <article key={post.id} className="channel-post chat-message-bubble overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111a2a]/90 shadow-lg">
-                  {post.pinned && <div className="flex items-center gap-2 border-b border-accent/10 bg-accent/[0.06] px-5 py-2 text-[11px] font-semibold text-accent"><Pin size={13} /> Закреплённая публикация</div>}
-                  <div className="flex items-center gap-3 px-5 pt-4">
-                    <div className="grid h-9 w-9 place-items-center rounded-xl bg-accent/15 text-accent"><Radio size={16} /></div>
-                    <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{activeChannel.title}</p><time className="mt-0.5 block text-[10px] text-slate-500">{formatDate(post.createdAt)}</time></div>
-                    {activeChannel.isOwner && <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => void togglePin(post)} title={post.pinned ? 'Открепить' : 'Закрепить'} aria-label={post.pinned ? 'Открепить публикацию' : 'Закрепить публикацию'} className={`rounded-lg p-2 transition hover:bg-white/5 ${post.pinned ? 'text-accent' : 'text-slate-500 hover:text-slate-200'}`}><Pin size={15} /></button>
-                      <button type="button" onClick={() => void deletePost(post)} title="Удалить публикацию" aria-label="Удалить публикацию" className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"><Trash2 size={15} /></button>
-                    </div>}
-                  </div>
-                  <p className="whitespace-pre-wrap break-words px-5 pb-4 pt-4 text-sm leading-7 text-slate-200">{post.text}</p>
-                  <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] px-5 py-3">
-                    {counts.map(({ emoji, count, mine }) => <button key={emoji} type="button" disabled={!activeChannel.isSubscribed} onClick={() => void toggleReaction(post, emoji)} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 ${mine ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-white/[0.025] text-slate-300 hover:border-white/20'}`}><span>{emoji}</span>{count > 0 && <span>{count}</span>}</button>)}
-                    {!activeChannel.isSubscribed && <span className="ml-auto text-[10px] text-slate-600">Подпишитесь, чтобы ставить реакции</span>}
-                  </div>
-                </article>;
+                return <div key={post.id} className="flex justify-start animate-slide-in">
+                  <article className="chat-message chat-message-bubble chat-message-other relative max-w-[88%] rounded-2xl rounded-bl-none border p-3.5 text-xs leading-relaxed shadow-lg sm:max-w-[80%]">
+                    {post.pinned && <div className="pinned-message-label mb-2 flex items-center gap-1 text-[10px] text-amber-200/90"><Pin size={12} /> Закреплено</div>}
+                    <div className="mb-2 flex items-center gap-2">
+                      <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent/15 text-accent"><Radio size={13} /></div>
+                      <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold">{activeChannel.title}</p></div>
+                      {activeChannel.isOwner && <div className="flex items-center gap-0.5">
+                        <button type="button" onClick={() => void togglePin(post)} title={post.pinned ? 'Открепить' : 'Закрепить'} aria-label={post.pinned ? 'Открепить публикацию' : 'Закрепить публикацию'} className={`rounded-lg p-1.5 transition hover:bg-white/5 ${post.pinned ? 'text-accent' : 'text-slate-500 hover:text-slate-200'}`}><Pin size={13} /></button>
+                        <button type="button" onClick={() => void deletePost(post)} title="Удалить публикацию" aria-label="Удалить публикацию" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"><Trash2 size={13} /></button>
+                      </div>}
+                    </div>
+                    <div className="chat-message-content whitespace-pre-wrap break-words text-xs leading-relaxed">{post.text}</div>
+                    <div className="mt-1.5 flex items-center justify-end gap-1 text-[9px] font-mono text-t-secondary/70"><time>{formatAppTime(post.createdAt)}</time></div>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/[0.06] pt-2">
+                      {counts.map(({ emoji, count, mine }) => <button key={emoji} type="button" disabled={!activeChannel.isSubscribed} onClick={() => void toggleReaction(post, emoji)} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] transition disabled:cursor-not-allowed disabled:opacity-60 ${mine ? 'border-accent/30 bg-accent/10 text-accent' : 'border-white/[0.08] bg-white/[0.025] text-slate-300 hover:border-white/20'}`}><span>{emoji}</span>{count > 0 && <span>{count}</span>}</button>)}
+                      {!activeChannel.isSubscribed && <span className="ml-auto text-[9px] text-slate-600">Подпишитесь, чтобы ставить реакции</span>}
+                    </div>
+                  </article>
+                </div>;
               })}
             </div>
           </div>
