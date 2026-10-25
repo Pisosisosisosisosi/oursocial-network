@@ -11,6 +11,7 @@ import { decryptBytes, decryptMessage, encryptBytes, encryptMessage, isEncrypted
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import EmojiPicker from '../components/chat/EmojiPicker';
+import VoiceMessagePlayer from '../components/chat/VoiceMessagePlayer';
 import EncryptionNotice from '../components/EncryptionNotice';
 import { canSendEncryptedMessages } from '../crypto/encryptionStatus';
 import { useCallActions } from '../context/CallContext';
@@ -1808,7 +1809,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                               </button>
                             : <a href={m.fileData} download={m.fileName || 'image'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{m.fileName || 'Скачать изображение'}</span></a>
                         ) : m.type === 'file' && m.fileData && m.contentType?.startsWith('audio/') ? (
-                          <audio controls preload="metadata" src={m.fileData} className="mb-2 max-w-full" aria-label={m.fileName || 'Голосовое сообщение'} />
+                          <VoiceMessagePlayer src={m.fileData} fileName={m.fileName} mine={isMe} />
                         ) : m.type === 'file' && m.fileData ? (
                           <a href={m.fileData} download={m.fileName || 'attachment'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20">
                             <FileText size={20} />
