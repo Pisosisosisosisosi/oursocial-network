@@ -917,11 +917,20 @@ def update_profile(payload: UpdateProfileRequest, current=Depends(get_current_us
 @app.get("/unread/summary")
 def unread_summary(current=Depends(get_current_user)):
     me = current["userId"]
+    now = datetime.now(timezone.utc)
+    active_message_filter = {
+        "deletedForAll": {"$ne": True},
+        "$or": [
+            {"expiresAt": {"$exists": False}},
+            {"expiresAt": {"$gt": now}},
+        ],
+    }
     chats_unread = messages_collection().count_documents({
         "receiverId": me,
         "senderId": {"$ne": me},
         "read": False,
         "groupId": {"$exists": False},
+        **active_message_filter,
     })
     group_ids = [str(g["_id"]) for g in groups_collection().find({"members.userId": me}, {"_id": 1})]
     groups_unread = 0
@@ -930,6 +939,7 @@ def unread_summary(current=Depends(get_current_user)):
             "groupId": {"$in": group_ids},
             "senderId": {"$ne": me},
             "readBy": {"$ne": me},
+            **active_message_filter,
         })
     owner = users_collection().find_one({"_id": ObjectId(me)}, {"channelReads": 1})
     channel_reads = (owner or {}).get("channelReads") or {}
