@@ -201,7 +201,8 @@ class MessageRequest(BaseModel):
 
 
 class ReactionRequest(BaseModel):
-    emoji: Literal["❤️", "👍", "😂"]
+    # Keep the server allowlist aligned with the six reactions shown in the chat UI.
+    emoji: Literal["❤️", "👍", "😂", "🔥", "🎉", "😢"]
 
 
 class PinRequest(BaseModel):

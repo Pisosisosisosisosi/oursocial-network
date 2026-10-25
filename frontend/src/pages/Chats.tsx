@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X } from 'lucide-react';
+import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Mic, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X, Zap } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, keysApi, type Contact, type User } from '../api/client';
+import { api, keysApi, messagesApi, type Contact, type QuickReply, type SavedMessageItem, type ScheduledMessage, type User } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
@@ -47,6 +47,7 @@ const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'] as const;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'application/pdf', 'text/plain', 'text/csv', 'application/zip',
+  'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
 ]);
 
 function highlightText(text: string, query: string) {
@@ -198,6 +199,20 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
   const [forwardSearch, setForwardSearch] = useState('');
   const [forwarding, setForwarding] = useState(false);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [quickRepliesOpen, setQuickRepliesOpen] = useState(false);
+  const [quickRepliesLoading, setQuickRepliesLoading] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState(() => { const value = new Date(Date.now() + 10 * 60_000); value.setMinutes(value.getMinutes() - value.getTimezoneOffset()); return value.toISOString().slice(0, 16); });
+  const [scheduledDialogOpen, setScheduledDialogOpen] = useState(false);
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [savedMessagesOpen, setSavedMessagesOpen] = useState(false);
+  const [savedMessages, setSavedMessages] = useState<Array<{ savedId: string; savedAt: string; message: ChatMessage }>>([]);
+  const [savedMessagesLoading, setSavedMessagesLoading] = useState(false);
+  const [recordingVoice, setRecordingVoice] = useState(false);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -967,7 +982,11 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const handleAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file || !activeChat || sending) return;
+    if (file) await sendAttachmentFile(file);
+  };
+
+  const sendAttachmentFile = async (file: File) => {
+    if (!activeChat || sending) return;
     if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
     const targetChat = activeChat;
     const replyTarget = replyingMessage;
@@ -1038,6 +1057,124 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     } finally {
       setSending(false);
     }
+  };
+
+  const loadQuickReplies = async () => {
+    setQuickRepliesLoading(true);
+    try { const response = await messagesApi.getQuickReplies(); setQuickReplies(response.data.items || []); }
+    catch { showToast('Не удалось загрузить быстрые ответы.', 'error'); }
+    finally { setQuickRepliesLoading(false); }
+  };
+  const handleSaveQuickReply = async () => {
+    const value = text.trim();
+    if (!value) { showToast('Сначала введите текст ответа.', 'error'); return; }
+    const title = window.prompt('Название быстрого ответа:', value.slice(0, 40));
+    if (!title?.trim()) return;
+    try { await messagesApi.createQuickReply(title.trim(), value); await loadQuickReplies(); showToast('Быстрый ответ сохранён.', 'success'); }
+    catch { showToast('Не удалось сохранить быстрый ответ.', 'error'); }
+  };
+  const handleScheduleMessage = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!activeChat || !currentUser?.id || !text.trim() || sending) return;
+    const sendAtDate = new Date(scheduleAt);
+    if (Number.isNaN(sendAtDate.getTime()) || sendAtDate.getTime() <= Date.now()) { showToast('Выберите время в будущем.', 'error'); return; }
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки.', 'error'); return; }
+    setSending(true);
+    try {
+      const [recipientKeyResponse, ownKeyResponse] = await Promise.all([keysApi.get(String(activeChat.id)), keysApi.me()]);
+      const recipientKey = recipientKeyResponse.data?.publicKey;
+      const ownKey = ownKeyResponse.data?.publicKey;
+      if (!recipientKey || !ownKey) throw new Error('Не удалось получить ключи шифрования.');
+      const encryptedText = await encryptMessage(text.trim(), [{ userId: String(activeChat.id), publicKey: recipientKey }, { userId: currentUser.id, publicKey: ownKey }]);
+      if (!encryptedText.startsWith('skyline-e2e:v3:')) throw new Error('Не удалось зашифровать сообщение.');
+      await messagesApi.scheduleMessage({ receiverId: String(activeChat.id), text: encryptedText, type: 'text', sendAt: sendAtDate.toISOString() });
+      setText(''); writeChatDraft(currentUser.id, String(activeChat.id), ''); setScheduleDialogOpen(false);
+      showToast('Сообщение запланировано.', 'success');
+    } catch (error) {
+      const detail = isAxiosError(error) && error.response?.data?.detail ? String(error.response.data.detail) : error instanceof Error ? error.message : 'Не удалось запланировать сообщение.';
+      showToast(detail, 'error');
+    } finally { setSending(false); }
+  };
+  const openSavedMessages = async () => {
+    setSavedMessagesOpen(true);
+    setSavedMessagesLoading(true);
+    try {
+      const response = await messagesApi.getSavedMessages(100, 0);
+      const decoded = await Promise.all((response.data.items || []).filter((item: SavedMessageItem) => item.message?.id).map(async (item: SavedMessageItem) => ({
+        savedId: item.savedId,
+        savedAt: item.savedAt,
+        message: await decryptChatMessage(item.message as ChatMessage, currentUser?.id),
+      })));
+      setSavedMessages(decoded);
+    } catch { showToast('Не удалось загрузить сохранённые сообщения.', 'error'); }
+    finally { setSavedMessagesLoading(false); }
+  };
+
+  const openScheduledMessages = async () => {
+    setScheduledDialogOpen(true); setScheduledLoading(true);
+    try { const response = await messagesApi.getScheduledMessages(); setScheduledMessages(response.data.items || []); }
+    catch { showToast('Не удалось загрузить запланированные сообщения.', 'error'); }
+    finally { setScheduledLoading(false); }
+  };
+  const cancelScheduledMessage = async (id: string) => {
+    try { await messagesApi.cancelScheduledMessage(id); setScheduledMessages((items) => items.filter((item) => item.id !== id)); showToast('Запланированное сообщение отменено.', 'success'); }
+    catch { showToast('Не удалось отменить сообщение.', 'error'); }
+  };
+  const handleSaveMessage = async (message: ChatMessage) => {
+    try { await messagesApi.saveToBookmarks(message.id); closeMessageMenu(); showToast('Сообщение сохранено в «Избранное».', 'success'); }
+    catch (error) {
+      const detail = isAxiosError(error) && error.response?.data?.detail ? String(error.response.data.detail) : 'Не удалось сохранить сообщение.';
+      showToast(detail, 'error');
+    }
+  };
+  const handleDeleteForAll = async (message: ChatMessage) => {
+    if (!window.confirm('Удалить это сообщение у всех участников? Это действие нельзя отменить.')) return;
+    try { await messagesApi.deleteForAll(message.id); setMessages((items) => items.filter((item) => item.id !== message.id)); closeMessageMenu(); showToast('Сообщение удалено у всех участников.', 'success'); }
+    catch (error) {
+      const detail = isAxiosError(error) && error.response?.data?.detail ? String(error.response.data.detail) : 'Не удалось удалить сообщение у всех.';
+      showToast(detail, 'error');
+    }
+  };
+  const startVoiceRecording = async () => {
+    if (recordingVoice || sending) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      showToast('Запись голосовых сообщений не поддерживается этим браузером.', 'error');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ['audio/webm', 'audio/ogg', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      voiceChunksRef.current = [];
+      recorder.ondataavailable = (event) => { if (event.data.size) voiceChunksRef.current.push(event.data); };
+      recorder.onerror = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoice(false);
+        showToast('Не удалось записать голосовое сообщение.', 'error');
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoice(false);
+        const type = (recorder.mimeType || 'audio/webm').split(';')[0];
+        const blob = new Blob(voiceChunksRef.current, { type });
+        voiceChunksRef.current = [];
+        if (!blob.size) return;
+        const extension = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
+        void sendAttachmentFile(new File([blob], `voice-message.${extension}`, { type }));
+      };
+      voiceRecorderRef.current = recorder;
+      recorder.start();
+      setRecordingVoice(true);
+      showToast('Запись началась. Нажмите микрофон ещё раз, чтобы отправить.', 'success');
+    } catch {
+      showToast('Нет доступа к микрофону. Разрешите его в браузере.', 'error');
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    voiceRecorderRef.current = null;
   };
 
   const handleDeleteMessage = async (message: ChatMessage) => {
@@ -1502,6 +1639,8 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                   <button type="button" onClick={() => void openChatProfile()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
                     <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
                   </button>
+                  <button type="button" onClick={() => void openSavedMessages()} title="Избранное" aria-label="Открыть сохранённые сообщения" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Bookmark size={15} /></button>
+                  <button type="button" onClick={() => void openScheduledMessages()} title="Запланированные сообщения" aria-label="Запланированные сообщения" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><CalendarClock size={15} /></button>
                   <div className="flex shrink-0 items-center gap-1">
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>
@@ -1618,6 +1757,8 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                                 <img src={m.fileData} alt={m.fileName || 'Изображение'} className="max-h-[55vh] max-w-full rounded-lg object-contain sm:max-h-72" />
                               </button>
                             : <a href={m.fileData} download={m.fileName || 'image'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20"><FileText size={20} /><span className="max-w-56 break-all">{m.fileName || 'Скачать изображение'}</span></a>
+                        ) : m.type === 'file' && m.fileData && m.contentType?.startsWith('audio/') ? (
+                          <audio controls preload="metadata" src={m.fileData} className="mb-2 max-w-full" aria-label={m.fileName || 'Голосовое сообщение'} />
                         ) : m.type === 'file' && m.fileData ? (
                           <a href={m.fileData} download={m.fileName || 'attachment'} className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 p-3 hover:bg-black/20">
                             <FileText size={20} />
@@ -1695,7 +1836,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                   <span className="inline-flex items-center gap-1.5">{typingUser}<span className="typing-dots"><span /><span /><span /></span></span>
                 </div>
               )}
-              <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip" onChange={(event) => void handleAttachment(event)} className="hidden" />
+              <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav" onChange={(event) => void handleAttachment(event)} className="hidden" />
               {replyingMessage && (
                 <div className="mb-2 flex items-center gap-3 rounded-2xl border-l-2 border-accent bg-white/[0.04] px-3.5 py-2.5 animate-slide-up">
                   <Reply size={15} className="shrink-0 text-accent" />
@@ -1724,6 +1865,12 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                  <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={sending} className="p-2.5 rounded-xl text-t-secondary hover:text-slate-200 hover:bg-slate-800/80 transition-all disabled:opacity-50" title="Прикрепить изображение или файл" aria-label="Прикрепить файл">
                    <Paperclip size={19} />
                  </button>
+                  <div className="relative">
+                    <button type="button" onClick={() => { setQuickRepliesOpen((open) => !open); if (!quickReplies.length) void loadQuickReplies(); }} disabled={sending} className={`p-2.5 rounded-xl transition-all ${quickRepliesOpen ? 'text-accent bg-accent/10' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title="Быстрые ответы" aria-label="Быстрые ответы" aria-expanded={quickRepliesOpen}><Zap size={18} /></button>
+                    {quickRepliesOpen && <div className="absolute bottom-full left-0 z-40 mb-2 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-xl"><div className="flex items-center justify-between px-2 py-1.5"><span className="text-xs font-semibold text-slate-200">Быстрые ответы</span><button type="button" onClick={() => void handleSaveQuickReply()} className="text-[10px] font-medium text-accent hover:underline">Сохранить текст</button></div>{quickRepliesLoading ? <p className="px-2 py-3 text-xs text-slate-500">Загрузка…</p> : quickReplies.length ? quickReplies.map((reply) => <button key={reply.id} type="button" onClick={() => { handleTextChange(reply.text); setQuickRepliesOpen(false); textInputRef.current?.focus(); }} className="block w-full rounded-xl px-2.5 py-2 text-left transition hover:bg-white/[0.07]"><span className="block truncate text-xs font-medium text-slate-200">{reply.emoji ? `${reply.emoji} ` : ''}{reply.title}</span><span className="mt-0.5 block truncate text-[10px] text-slate-500">{reply.text}</span></button>) : <p className="px-2 py-3 text-xs text-slate-500">Нет сохранённых ответов. Введите текст и нажмите «Сохранить текст».</p>}</div>}
+                  </div>
+                  <button type="button" onClick={() => setScheduleDialogOpen(true)} disabled={sending || !text.trim()} title="Запланировать отправку" aria-label="Запланировать отправку" className="p-2.5 rounded-xl text-t-secondary hover:text-accent hover:bg-accent/10 transition-all disabled:opacity-50"><CalendarClock size={18} /></button>
+                  <button type="button" onClick={() => { if (recordingVoice) stopVoiceRecording(); else void startVoiceRecording(); }} disabled={sending} className={`p-2.5 rounded-xl transition-all disabled:opacity-50 ${recordingVoice ? 'animate-pulse bg-rose-500/15 text-rose-300' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title={recordingVoice ? 'Остановить и отправить голосовое' : 'Записать голосовое сообщение'} aria-label={recordingVoice ? 'Отправить голосовое сообщение' : 'Записать голосовое сообщение'}><Mic size={18} /></button>
                   <textarea
                     ref={textInputRef}
                     value={text}
@@ -2015,6 +2162,8 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                 </button>
               )
             )}
+            <button type="button" role="menuitem" onClick={() => void handleSaveMessage(menuMessage)} className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-accent/10 hover:text-accent"><Bookmark size={15} /> Сохранить в «Избранное»</button>
+            {canDeleteMessage && <button type="button" role="menuitem" onClick={() => void handleDeleteForAll(menuMessage)} className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-rose-300 transition hover:bg-rose-400/10"><Trash2 size={15} /> Удалить у всех</button>}
             {canDeleteMessage && (
               <button
                 type="button"
@@ -2029,6 +2178,34 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
           document.body,
         );
       })()}
+      {savedMessagesOpen && createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Избранное">
+          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-base font-semibold text-white">Избранное</h2><p className="mt-1 text-xs text-slate-400">Сохранённые сообщения доступны только вам.</p></div><button type="button" onClick={() => setSavedMessagesOpen(false)} aria-label="Закрыть" className="rounded-xl p-2 text-slate-400 hover:bg-white/10"><X size={17} /></button></div>
+            {savedMessagesLoading ? <p className="py-8 text-center text-sm text-slate-500">Загрузка…</p> : savedMessages.length ? <div className="max-h-[60vh] space-y-2 overflow-y-auto">{savedMessages.map((item) => { const otherId = item.message.senderId === currentUser?.id ? item.message.receiverId : item.message.senderId; const contact = contacts.find((entry) => String(entry.id) === String(otherId)); return <div key={item.savedId} className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-3"><p className="text-[10px] text-slate-500">{new Date(item.savedAt).toLocaleString()}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-200">{item.message.type === 'text' ? item.message.text : `📎 ${item.message.fileName || 'Вложение'}`}</p>{contact && <button type="button" onClick={() => { void handleSelectChat(contact); setSavedMessagesOpen(false); }} className="mt-2 text-[10px] font-medium text-accent hover:underline">Открыть переписку</button>}</div>; })}</div> : <p className="py-8 text-center text-sm text-slate-500">Пока ничего не сохранено. Откройте меню сообщения и выберите «Сохранить в Избранное».</p>}
+            <div className="mt-4 flex justify-end"><button type="button" onClick={() => setSavedMessagesOpen(false)} className="rounded-xl border border-white/10 px-4 py-2 text-xs text-slate-300 hover:bg-white/10">Закрыть</button></div>
+          </div>
+        </div>, document.body,
+      )}
+      {scheduleDialogOpen && createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Запланировать сообщение">
+          <form onSubmit={handleScheduleMessage} className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-base font-semibold text-white">Отложенная отправка</h2><p className="mt-1 text-xs text-slate-400">Сообщение будет зашифровано и отправлено в выбранное время.</p></div><button type="button" onClick={() => setScheduleDialogOpen(false)} aria-label="Закрыть" className="rounded-xl p-2 text-slate-400 hover:bg-white/10"><X size={17} /></button></div>
+            <label className="block text-xs text-slate-300">Дата и время<input type="datetime-local" required min={(() => { const value = new Date(); value.setMinutes(value.getMinutes() - value.getTimezoneOffset()); return value.toISOString().slice(0, 16); })()} value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-white outline-none focus:border-accent/50" /></label>
+            <div className="mt-4 rounded-xl bg-white/[0.04] p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Текст сообщения</p><p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-sm text-slate-200">{text || 'Введите сообщение в поле чата перед планированием.'}</p></div>
+            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setScheduleDialogOpen(false)} className="rounded-xl px-4 py-2 text-xs text-slate-300 hover:bg-white/10">Отмена</button><button type="submit" disabled={sending || !text.trim()} className="rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-slate-950 disabled:opacity-50">{sending ? 'Сохраняю…' : 'Запланировать'}</button></div>
+          </form>
+        </div>, document.body,
+      )}
+      {scheduledDialogOpen && createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Запланированные сообщения">
+          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-base font-semibold text-white">Запланированные сообщения</h2><p className="mt-1 text-xs text-slate-400">Отправки, которые ещё ожидают своего времени.</p></div><button type="button" onClick={() => setScheduledDialogOpen(false)} aria-label="Закрыть" className="rounded-xl p-2 text-slate-400 hover:bg-white/10"><X size={17} /></button></div>
+            {scheduledLoading ? <p className="py-8 text-center text-sm text-slate-500">Загрузка…</p> : scheduledMessages.length ? <div className="max-h-[55vh] space-y-2 overflow-y-auto">{scheduledMessages.map((item) => <div key={item.id} className="flex items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-3"><div className="min-w-0 flex-1"><p className="break-all text-xs text-slate-200">{item.receiverId === activeChat?.id ? 'Текущий чат' : item.groupId ? 'Группа' : 'Личная переписка'} · {new Date(item.sendAt).toLocaleString()}</p><p className="mt-1 text-[10px] text-slate-500">Содержимое хранится в зашифрованном виде.</p></div><button type="button" onClick={() => void cancelScheduledMessage(item.id)} className="shrink-0 rounded-lg px-2 py-1.5 text-[10px] text-rose-300 hover:bg-rose-400/10">Отменить</button></div>)}</div> : <p className="py-8 text-center text-sm text-slate-500">Нет ожидающих отправки сообщений.</p>}
+            <div className="mt-4 flex justify-end"><button type="button" onClick={() => setScheduledDialogOpen(false)} className="rounded-xl border border-white/10 px-4 py-2 text-xs text-slate-300 hover:bg-white/10">Закрыть</button></div>
+          </div>
+        </div>, document.body,
+      )}
       {lightboxImage?.fileData && (
         <div
           role="dialog"
