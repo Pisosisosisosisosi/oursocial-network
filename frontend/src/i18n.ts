@@ -72,8 +72,16 @@ function translateDocument(language: AppLanguage) {
     const raw = textNode.data;
     const trimmed = raw.trim();
     if (!trimmed) continue;
-    const source = reverse.get(trimmed) || trimmed;
-    const replacement = dictionary[source] || translations.en?.[source] || source;
+    // Prefer canonical Russian source phrases before reverse lookup: a Russian word can
+    // also happen to be a translated value in another language.
+    const isRussianSource = Object.prototype.hasOwnProperty.call(translations.en || {}, trimmed);
+    const source = isRussianSource ? trimmed : (reverse.get(trimmed) || trimmed);
+
+    // Russian is the source language. Never fall back to English when Russian is selected.
+    // For other languages, retain the existing English fallback for phrases not yet translated.
+    const replacement = language === 'ru'
+      ? source
+      : (dictionary[source] || translations.en?.[source] || source);
     if (replacement !== trimmed) {
       const start = raw.indexOf(trimmed);
       textNode.data = raw.slice(0, start) + replacement + raw.slice(start + trimmed.length);
