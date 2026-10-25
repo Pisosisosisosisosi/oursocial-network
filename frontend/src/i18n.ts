@@ -73,7 +73,7 @@ function translateDocument(language: AppLanguage) {
     const trimmed = raw.trim();
     if (!trimmed) continue;
     const source = reverse.get(trimmed) || trimmed;
-    const replacement = dictionary[source] || source;
+    const replacement = dictionary[source] || translations.en?.[source] || source;
     if (replacement !== trimmed) {
       const start = raw.indexOf(trimmed);
       textNode.data = raw.slice(0, start) + replacement + raw.slice(start + trimmed.length);
