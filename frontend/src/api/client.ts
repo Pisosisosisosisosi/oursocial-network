@@ -177,6 +177,7 @@ export const messagesApi = {
     api.get<{ items: SavedMessageItem[]; count: number }>('/saved-messages', { params: { limit, skip } }),
   scheduleMessage: (payload: any) => api.post('/scheduled-messages', payload),
   getScheduledMessages: () => api.get<{ items: ScheduledMessage[] }>('/scheduled-messages'),
+  cancelScheduledMessage: (scheduledId: string) => api.delete(`/scheduled-messages/${scheduledId}`),
   createQuickReply: (title: string, text: string, emoji?: string) =>
     api.post('/quick-replies', { title, text, emoji }),
   getQuickReplies: () => api.get<{ items: QuickReply[] }>('/quick-replies'),

@@ -2705,6 +2705,23 @@ def list_scheduled_messages(current=Depends(get_current_user)):
     }
 
 
+@app.delete("/scheduled-messages/{scheduledId}")
+def cancel_scheduled_message(
+    scheduledId: str,
+    current=Depends(get_current_user),
+):
+    """Cancel a message only while it is pending and owned by the caller."""
+    if not ObjectId.is_valid(scheduledId):
+        raise HTTPException(status_code=400, detail="Invalid scheduled message id")
+    result = scheduled_messages_collection().delete_one({
+        "_id": ObjectId(scheduledId),
+        "senderId": current["userId"],
+        "status": "pending",
+    })
+    if result.deleted_count != 1:
+        raise HTTPException(status_code=404, detail="Pending scheduled message not found")
+    return {"status": "ok"}
+
 @app.post("/quick-replies")
 def create_quick_reply(
     payload: QuickReplyRequest,
