@@ -11,7 +11,8 @@ import { decryptBytes, decryptMessage, encryptBytes, encryptMessage, isEncrypted
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import EmojiPicker from '../components/chat/EmojiPicker';
-import EncryptionNotice, { canSendEncryptedMessages } from '../components/EncryptionNotice';
+import EncryptionNotice from '../components/EncryptionNotice';
+import { canSendEncryptedMessages } from '../crypto/encryptionStatus';
 import { useCallActions } from '../context/CallContext';
 import { formatAppDateTime, formatAppTime, getAppTimeZone } from '../time';
 
