@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pause, Play, Volume2 } from 'lucide-react';
 
 interface VoiceMessagePlayerProps {
@@ -20,14 +20,6 @@ export default function VoiceMessagePlayer({ src, fileName, mine = false }: Voic
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setFailed(false);
-    if (audioRef.current) audioRef.current.load();
-  }, [src]);
 
   const togglePlayback = async () => {
     const audio = audioRef.current;
@@ -52,6 +44,7 @@ export default function VoiceMessagePlayer({ src, fileName, mine = false }: Voic
   return (
     <div className={`my-1 flex w-full min-w-[220px] max-w-[320px] items-center gap-3 rounded-2xl border px-3 py-2.5 shadow-sm ${mine ? 'border-white/10 bg-black/10' : 'border-white/[0.07] bg-slate-950/35'}`}>
       <audio
+        key={src}
         ref={audioRef}
         src={src}
         preload="metadata"
