@@ -60,10 +60,6 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(searchParams.get('channel'));
 
-  useEffect(() => {
-    const channelIdFromUrl = searchParams.get('channel');
-    setActiveChannelId((current) => current === channelIdFromUrl ? current : channelIdFromUrl);
-  }, [searchParams]);
   const [posts, setPosts] = useState<ChannelPost[]>([]);
   const [loadedPostChannelId, setLoadedPostChannelId] = useState<string | null>(null);
   const [invitePreviewState, setInvitePreviewState] = useState<{ code: string; preview: InvitePreview } | null>(null);
@@ -124,7 +120,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       console.error('Не удалось загрузить каналы:', error);
       showToast('Не удалось загрузить каналы.', 'error');
     }
-  }, [loadChannels, searchParams, setSearchParams, showToast]);
+  }, [loadChannels, searchParams, setSearchParams, showToast, embedded]);
 
   const loadInvitePreview = useCallback(async (code: string, signal: AbortSignal) => {
     try {
