@@ -5,6 +5,7 @@ services:
     rootDir: python-api
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ready
     autoDeploy: true
     envVars:
       - key: MONGO_URI
