@@ -26,10 +26,10 @@ jobs:
       JWT_SECRET: ci-only-test-secret-do-not-use-in-production-0123456789
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
