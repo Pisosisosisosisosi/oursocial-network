@@ -8,7 +8,7 @@ import { useToast } from '../context/useToast';
 import WorkspaceSidebarHeader from '../components/layout/WorkspaceSidebarHeader';
 import WorkspaceTabs from '../components/layout/WorkspaceTabs';
 import UnifiedWorkspaceList from '../components/layout/UnifiedWorkspaceList';
-import { formatAppDateTime, formatAppTime } from '../time';
+import { formatAppTime } from '../time';
 
 interface Channel {
   id: string;
@@ -48,8 +48,6 @@ interface InvitePreview {
 }
 
 const REACTIONS = ['❤️', '👍', '😂'];
-
-function formatDate(value: string) { return formatAppDateTime(value); }
 
 function sortChannelPosts(items: ChannelPost[]) {
   return [...items].sort((a, b) => Number(b.pinned) - Number(a.pinned)
