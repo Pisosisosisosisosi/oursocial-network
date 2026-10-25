@@ -11,6 +11,8 @@ interface GroupItem {
   description?: string;
   avatarUrl?: string;
   memberCount: number;
+  createdAt?: string;
+  updatedAt?: string;
   lastMessageAt?: string | null;
 }
 interface ChannelItem {
@@ -21,6 +23,8 @@ interface ChannelItem {
   memberCount: number;
   isSubscribed: boolean;
   visibility: 'public' | 'private';
+  createdAt?: string;
+  updatedAt?: string;
   lastMessageAt?: string | null;
 }
 type Entry =
@@ -142,7 +146,17 @@ export default function UnifiedWorkspaceList({ search, activeKind, activeId, inc
             : `${entry.title} ${entry.subtitle} ${entry.group.description || ''}`;
         return searchable.toLocaleLowerCase().includes(query.replace(/^@/, '').trim());
       })
-      .sort((a, b) => (Date.parse(b.time || '') || 0) - (Date.parse(a.time || '') || 0));
+      .sort((a, b) => {
+        const getSortTime = (entry: Entry) => {
+          const fallback = entry.kind === 'group'
+            ? entry.group.updatedAt || entry.group.createdAt
+            : entry.kind === 'channel'
+              ? entry.channel.updatedAt || entry.channel.createdAt
+              : undefined;
+          return Date.parse(entry.time || fallback || '') || 0;
+        };
+        return getSortTime(b) - getSortTime(a);
+      });
   }, [contacts, groups, channels, searchedUsers, search, includeDiscover, hiddenKeys]);
 
   if (loading) return <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" role="status" aria-label="Загрузка переписок">{[0, 1, 2, 3].map((item) => <div key={item} className="chat-skeleton h-14 rounded-xl" />)}</div>;
