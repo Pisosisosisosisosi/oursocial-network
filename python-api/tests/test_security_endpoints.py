@@ -128,6 +128,40 @@ class SecurityEndpointTests(unittest.TestCase):
                 main.cancel_scheduled_message(scheduled_id, {"userId": "507f1f77bcf86cd799439011"})
         self.assertEqual(raised.exception.status_code, 404)
 
+    def test_poll_vote_updates_one_user_record_without_counter_deltas(self):
+        poll_id = "507f1f77bcf86cd799439014"
+        user_id = "507f1f77bcf86cd799439011"
+        poll = {"_id": main.ObjectId(poll_id), "options": [{"text": "A", "votes": 9}, {"text": "B", "votes": 3}], "isActive": True}
+        with (
+            patch("main.polls_collection") as polls,
+            patch("main.require_poll_access"),
+            patch("main.votes_collection") as votes,
+        ):
+            polls.return_value.find_one.return_value = poll
+            result = main.vote_poll(poll_id, main.PollVoteRequest(pollId=poll_id, optionIndex=1), {"userId": user_id})
+        self.assertEqual(result, {"status": "ok"})
+        votes.return_value.update_one.assert_called_once()
+        args, kwargs = votes.return_value.update_one.call_args
+        self.assertEqual(args[0], {"pollId": poll_id, "userId": user_id})
+        self.assertEqual(args[1]["$set"]["optionIndex"], 1)
+        self.assertTrue(kwargs["upsert"])
+        polls.return_value.update_one.assert_not_called()
+
+    def test_poll_results_recompute_counts_from_vote_records(self):
+        poll_id = "507f1f77bcf86cd799439014"
+        poll = {"_id": main.ObjectId(poll_id), "question": "Q", "options": [{"text": "A", "votes": 88}, {"text": "B", "votes": 2}], "createdAt": main.datetime.now(main.timezone.utc)}
+        with (
+            patch("main.polls_collection") as polls,
+            patch("main.require_poll_access"),
+            patch("main.votes_collection") as votes,
+        ):
+            polls.return_value.find_one.return_value = poll
+            votes.return_value.find_one.return_value = {"optionIndex": 1}
+            votes.return_value.aggregate.return_value = [{"_id": 0, "count": 4}, {"_id": 1, "count": 6}]
+            result = main.get_poll(poll_id, {"userId": "507f1f77bcf86cd799439011"})
+        self.assertEqual([o["votes"] for o in result["options"]], [4, 6])
+        self.assertEqual(result["userVote"], 1)
+
     def test_scheduled_message_worker_delivers_due_personal_message(self):
         scheduled_id = "507f1f77bcf86cd799439014"
         sender_id = "507f1f77bcf86cd799439011"
