@@ -73,8 +73,11 @@ class SocketAppTests(unittest.IsolatedAsyncioTestCase):
             for message in messages
             if message["type"] == "http.response.body"
         )
+        response_headers = dict(response.get("headers", []))
         self.assertEqual(response["status"], 200)
         self.assertTrue(body.startswith(b"0"))
+        normalized_headers = {key.lower(): value for key, value in response_headers.items()}
+        self.assertEqual(normalized_headers.get(b"access-control-allow-origin"), origin.encode(), response_headers)
 
     async def test_socket_io_rejects_unconfigured_origin(self) -> None:
         messages = await asgi_get(
