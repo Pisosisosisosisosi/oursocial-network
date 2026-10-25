@@ -799,7 +799,9 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   };
 
   const handleSelectChatRef = useRef(handleSelectChat);
-  handleSelectChatRef.current = handleSelectChat;
+  useEffect(() => {
+    handleSelectChatRef.current = handleSelectChat;
+  });
 
   useEffect(() => {
     const requestedChatId = searchParams.get('chat');
@@ -823,7 +825,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     if (String(activeChat?.id) === requestedChatId) return;
     const requestedContact = contacts.find((contact) => String(contact.id) === requestedChatId);
     if (!requestedContact) return;
-    void handleSelectChat(requestedContact);
+    void handleSelectChatRef.current(requestedContact);
   }, [searchParams, contacts, loading, activeChat?.id]);
 
   const handleSaveContact = async (user: User, existingNickname = '') => {
