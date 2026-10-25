@@ -1018,5 +1018,35 @@ class DeleteForAllRealtimeEventTests(unittest.TestCase):
             main.login_attempt_timestamps.clear()
 
 
+    def test_login_route_enforces_rate_limit_before_database_access(self):
+        request = Request({
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/auth/login",
+            "raw_path": b"/auth/login",
+            "query_string": b"",
+            "headers": [],
+            "client": ("203.0.113.12", 12345),
+            "server": ("testserver", 80),
+        })
+        with (
+            patch("main.enforce_login_rate_limit", side_effect=HTTPException(
+                status_code=429,
+                detail="Too many login attempts",
+                headers={"Retry-After": "60"},
+            )) as limiter,
+            patch("main.users_collection") as users,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                main.login(main.LoginRequest(email="user@example.com", password="incorrect"), request)
+
+        self.assertEqual(raised.exception.status_code, 429)
+        self.assertEqual(raised.exception.headers["Retry-After"], "60")
+        limiter.assert_called_once_with(request)
+        users.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
