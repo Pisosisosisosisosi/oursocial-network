@@ -38,6 +38,15 @@ interface ChannelPost {
   createdAt: string;
 }
 
+interface ChannelMember {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  role: string;
+  joinedAt: string;
+}
+
 interface InvitePreview {
   id: string;
   title: string;
@@ -79,6 +88,10 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [channelMembers, setChannelMembers] = useState<ChannelMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const postListRef = useRef<HTMLDivElement>(null);
   const scrollToLatestPostRef = useRef(false);
 
@@ -420,6 +433,38 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     }
   };
 
+  const openChannelMembers = async () => {
+    if (!activeChannel?.isOwner) return;
+    setMembersOpen(true);
+    setLoadingMembers(true);
+    try {
+      const response = await api.get<ChannelMember[]>(`/channels/${activeChannel.id}/members`);
+      setChannelMembers(response.data);
+    } catch (error) {
+      console.error('Не удалось загрузить подписчиков канала:', error);
+      showToast('Не удалось загрузить список подписчиков.', 'error');
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const removeChannelMember = async (member: ChannelMember) => {
+    if (!activeChannel || member.userId === activeChannel.ownerId) return;
+    if (!window.confirm(`Удалить @${member.username || member.displayName} из подписчиков канала?`)) return;
+    setRemovingMemberId(member.userId);
+    try {
+      await api.delete(`/channels/${activeChannel.id}/members/${member.userId}`);
+      setChannelMembers((items) => items.filter((item) => item.userId !== member.userId));
+      await loadChannels();
+      showToast('Подписчик удалён из канала.', 'success');
+    } catch (error) {
+      console.error('Не удалось удалить подписчика канала:', error);
+      showToast('Не удалось удалить подписчика.', 'error');
+    } finally {
+      setRemovingMemberId(null);
+    }
+  };
+
   const copyInvite = async () => {
     if (!activeChannel) return;
     try {
@@ -526,6 +571,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
               <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><Users size={12} /> {activeChannel.memberCount} подписчиков <span>·</span> {activeChannel.isOwner ? 'Ваш канал' : `Автор: ${activeChannel.ownerName || activeChannel.ownerUsername || 'Skyline'}`}</p>
             </div>
             {activeChannel.isOwner ? <>
+              <button type="button" onClick={() => void openChannelMembers()} title="Управление подписчиками" aria-label="Управление подписчиками" className="relative rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-accent"><Users size={17} /><span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent/20 px-1 text-[9px] leading-4 text-accent">{activeChannel.memberCount}</span></button>
               {activeChannel.visibility === 'private' && <button type="button" onClick={() => void copyInvite()} title="Скопировать ссылку-приглашение" aria-label="Ссылка-приглашение" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-accent"><Share2 size={17} /></button>}
               <button type="button" onClick={() => { setVisibility(activeChannel.visibility); setEditing(true); }} title="Настройки канала" aria-label="Настройки канала" className="rounded-xl p-2.5 text-t-secondary transition hover:bg-white/5 hover:text-white"><Settings size={17} /></button>
             </> : activeChannel.isSubscribed ? <button disabled={busy} type="button" onClick={() => void unsubscribe(activeChannel)} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-50">Отписаться</button> : <button disabled={busy} type="button" onClick={() => void subscribe(activeChannel)} className="rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent disabled:opacity-50">Подписаться</button>}
@@ -580,6 +626,27 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           </form>}
         </>}
       </section>
+
+      {membersOpen && activeChannel && <div className="fixed inset-0 z-[115] flex justify-end bg-black/65 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setMembersOpen(false); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="channel-members-title" className="flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#0c1422] shadow-2xl animate-slide-in">
+          <header className="flex items-center gap-3 border-b border-white/[0.08] p-5">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-accent/10 text-accent"><Users size={19} /></div>
+            <div className="min-w-0 flex-1"><h2 id="channel-members-title" className="text-sm font-bold text-white">Подписчики канала</h2><p className="mt-1 text-[11px] text-slate-500">{activeChannel.title} · {channelMembers.length || activeChannel.memberCount} человек</p></div>
+            <button type="button" onClick={() => setMembersOpen(false)} aria-label="Закрыть список подписчиков" className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 transition hover:bg-white/[0.06] hover:text-white"><X size={17} /></button>
+          </header>
+          <div className="border-b border-white/[0.06] p-4"><p className="text-xs leading-5 text-slate-400">Здесь можно посмотреть аудиторию и удалить пользователя из подписчиков. Владелец канала защищён от удаления.</p></div>
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+            {loadingMembers && <div className="space-y-2 p-2">{[0, 1, 2, 3].map((item) => <div key={item} className="h-14 animate-pulse rounded-xl bg-white/[0.04]" />)}</div>}
+            {!loadingMembers && channelMembers.map((member) => <div key={member.userId} className="mb-1.5 flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3">
+              {member.avatarUrl ? <img src={member.avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" /> : <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent/10 text-sm font-semibold text-accent">{(member.displayName || member.username || '?').slice(0, 1).toUpperCase()}</div>}
+              <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-slate-200">{member.displayName || member.username || 'Пользователь'}</p><p className="mt-1 truncate text-[10px] text-slate-500">@{member.username || 'username не указан'} · {member.role === 'owner' ? 'Владелец' : 'Подписчик'}</p></div>
+              {member.userId !== activeChannel.ownerId && <button type="button" disabled={removingMemberId === member.userId} onClick={() => void removeChannelMember(member)} title="Удалить подписчика" aria-label={`Удалить @${member.username} из канала`} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300 disabled:opacity-40">{removingMemberId === member.userId ? <span className="h-4 w-4 animate-spin rounded-full border border-slate-500 border-t-rose-300" /> : <Trash2 size={15} />}</button>}
+            </div>)}
+            {!loadingMembers && channelMembers.length === 0 && <p className="py-12 text-center text-xs text-slate-500">Подписчики не найдены.</p>}
+          </div>
+          <footer className="border-t border-white/[0.08] p-4"><button type="button" onClick={() => void copyInvite()} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-xs font-semibold text-white transition hover:brightness-110"><Share2 size={15} /> Создать / скопировать приглашение</button></footer>
+        </section>
+      </div>}
 
       {(creating || editing) && <div className="fixed inset-0 z-[120] flex justify-center overflow-y-auto bg-[#030712]/80 p-3 backdrop-blur-md sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) { setCreating(false); setEditing(false); } }}>
         <section role="dialog" aria-modal="true" aria-labelledby="channel-form-title" className="my-auto w-full max-w-3xl overflow-hidden rounded-[28px] border border-white/10 bg-[#101827] shadow-[0_30px_100px_rgba(0,0,0,0.55)] animate-scale-in">
