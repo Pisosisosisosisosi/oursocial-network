@@ -242,6 +242,39 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertEqual(emit.await_count, 2)
         self.assertEqual(emit.await_args_list[0].args[1]["groupId"], group_id)
 
+    def test_scheduled_group_delivery_never_rewinds_group_activity(self):
+        scheduled_id = "507f1f77bcf86cd799439014"
+        group_id = "507f1f77bcf86cd799439013"
+        sender_id = "507f1f77bcf86cd799439011"
+        member_id = "507f1f77bcf86cd799439012"
+        item = {
+            "_id": main.ObjectId(scheduled_id), "senderId": sender_id,
+            "groupId": group_id, "text": "skyline-e2e:v3:payload", "type": "text",
+        }
+        group = {
+            "_id": main.ObjectId(group_id),
+            "members": [{"userId": sender_id}, {"userId": member_id}],
+        }
+        messages = Mock()
+        messages.find_one.return_value = None
+        messages.insert_one.return_value.inserted_id = main.ObjectId("507f1f77bcf86cd799439015")
+        with (
+            patch("main.scheduled_messages_collection") as scheduled,
+            patch("main.messages_collection", return_value=messages),
+            patch("main.get_group_for_member", return_value=group),
+            patch("main.validate_v4_envelope"),
+            patch("main.groups_collection") as groups,
+            patch("main.sio.emit", new_callable=AsyncMock) as emit,
+        ):
+            asyncio.run(main.deliver_scheduled_message(item))
+
+        group_update_filter, group_update = groups.return_value.update_one.call_args.args[:2]
+        self.assertEqual(group_update_filter, {"_id": group["_id"]})
+        self.assertEqual(group_update, {"$max": {"updatedAt": messages.insert_one.call_args.args[0]["createdAt"]}})
+        self.assertNotIn("$set", group_update)
+        self.assertEqual(emit.await_count, 2)
+        self.assertEqual(scheduled.return_value.update_one.call_args.args[1]["$set"]["status"], "sent")
+
     def test_scheduled_delivery_stays_retryable_when_realtime_emit_fails(self):
         scheduled_id = "507f1f77bcf86cd799439014"
         sender_id = "507f1f77bcf86cd799439011"
