@@ -355,6 +355,53 @@ async def unsubscribe_channel(channel_id: str, current=Depends(get_current_user)
     return {"status": "unsubscribed"}
 
 
+@router.get("/{channel_id}/members")
+def list_channel_members(channel_id: str, current=Depends(get_current_user)):
+    channel = channel_by_id(channel_id)
+    require_owner(channel, current["userId"])
+    member_ids = [member.get("userId") for member in channel.get("members", []) if member.get("userId")]
+    profiles = {}
+    object_ids = [ObjectId(member_id) for member_id in member_ids if ObjectId.is_valid(member_id)]
+    if object_ids:
+        for profile in users_collection().find(
+            {"_id": {"$in": object_ids}},
+            {"username": 1, "displayName": 1, "avatarUrl": 1},
+        ):
+            profiles[str(profile["_id"])] = profile
+    return [
+        {
+            "userId": member_id,
+            "username": profiles.get(member_id, {}).get("username", ""),
+            "displayName": profiles.get(member_id, {}).get("displayName", ""),
+            "avatarUrl": profiles.get(member_id, {}).get("avatarUrl", ""),
+            "role": next((member.get("role", "subscriber") for member in channel.get("members", []) if member.get("userId") == member_id), "subscriber"),
+            "joinedAt": next((member.get("joinedAt").isoformat() if member.get("joinedAt") and hasattr(member.get("joinedAt"), "isoformat") else str(member.get("joinedAt") or "") for member in channel.get("members", []) if member.get("userId") == member_id), ""),
+        }
+        for member_id in member_ids
+    ]
+
+
+@router.delete("/{channel_id}/members/{member_id}")
+async def remove_channel_member(channel_id: str, member_id: str, current=Depends(get_current_user)):
+    channel = channel_by_id(channel_id)
+    require_owner(channel, current["userId"])
+    if member_id == channel.get("ownerId"):
+        raise HTTPException(status_code=400, detail="The channel owner cannot be removed")
+    if not get_member(channel, member_id):
+        raise HTTPException(status_code=404, detail="Channel member not found")
+    result = channels_collection().update_one(
+        {"_id": channel["_id"], "ownerId": current["userId"], "members.userId": member_id},
+        {"$pull": {"members": {"userId": member_id}}, "$set": {"updatedAt": datetime.now(timezone.utc)}},
+    )
+    if result.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Channel membership changed; refresh and retry")
+    await notify_members(
+        {**channel, "members": [member for member in channel.get("members", []) if member.get("userId") != member_id]},
+        {"action": "member_removed", "channelId": channel_id, "userId": member_id},
+    )
+    return {"status": "removed", "userId": member_id}
+
+
 @router.get("/{channel_id}/posts")
 def get_channel_posts(
     channel_id: str,
