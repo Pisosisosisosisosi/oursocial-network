@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timezone
 import json
+import os
 import re
 from typing import Any
 
@@ -12,9 +13,22 @@ from auth import decode_token
 from db import blocked_users_collection, users_collection
 
 
+configured_frontend_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("FRONTEND_URL", "https://pipipipipi.3utilities.com").split(",")
+    if origin.strip()
+]
+socket_origins = list(dict.fromkeys([
+    *configured_frontend_origins,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+]))
+
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins="*",
+    cors_allowed_origins=socket_origins,
     logger=False,
     engineio_logger=False,
 )
