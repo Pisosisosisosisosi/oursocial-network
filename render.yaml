@@ -12,7 +12,7 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: FRONTEND_URL
-        value: https://pipipipipi.3utilities.com
+        value: https://pisosisosisosisosi.github.io/oursocial-network
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
