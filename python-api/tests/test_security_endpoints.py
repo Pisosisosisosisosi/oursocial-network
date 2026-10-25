@@ -27,6 +27,23 @@ class SecurityEndpointTests(unittest.TestCase):
         self.assertEqual(calls[0].args[1], {"$pull": {"contacts": {"userId": target_id}}})
         self.assertEqual(calls[1].args[1], {"$pull": {"contacts": target_id}})
 
+    def test_expired_group_message_is_not_accessible_even_before_ttl_cleanup(self):
+        message_id = "507f1f77bcf86cd799439014"
+        message = {
+            "_id": main.ObjectId(message_id),
+            "senderId": "507f1f77bcf86cd799439011",
+            "receiverId": "",
+            "groupId": "507f1f77bcf86cd799439013",
+            "createdAt": main.datetime.now(main.timezone.utc) - main.timedelta(hours=1),
+            "expiresAt": main.datetime.now(main.timezone.utc) - main.timedelta(seconds=1),
+        }
+        with patch("main.messages_collection") as messages:
+            messages.return_value.find_one.return_value = message
+            with self.assertRaises(HTTPException) as raised:
+                main.find_message_for_user(message_id, message["senderId"])
+        self.assertEqual(raised.exception.status_code, 404)
+        messages.return_value.find_one.assert_called_once_with({"_id": main.ObjectId(message_id)})
+
     def test_group_message_gets_expiry_when_disappearing_messages_enabled(self):
         user_id = "507f1f77bcf86cd799439011"
         group_id = "507f1f77bcf86cd799439013"
