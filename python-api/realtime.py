@@ -14,7 +14,7 @@ from auth import decode_token
 from db import blocked_users_collection, users_collection
 
 
-DEFAULT_FRONTEND_URL = "https://pisosisosisosisosi.github.io/oursocial-network"
+DEFAULT_FRONTEND_URL = "https://pisosisosisosisosi.github.io/oursocial-network,https://pipipipipi.3utilities.com"
 configured_frontend_origins = []
 for frontend_url in os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL).split(","):
     parsed_frontend_url = urlsplit(frontend_url.strip())
