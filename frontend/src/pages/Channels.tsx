@@ -210,7 +210,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
 
   const selectChannel = (channelId: string) => {
     setActiveChannelId(channelId);
-    setSearchParams({ channel: channelId });
+    setSearchParams({ channel: channelId, ...(searchParams.get('discover') === '1' ? { discover: '1' } : {}) });
     setInviteLink('');
   };
 
@@ -288,7 +288,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
       setChannels((current) => current.filter((channel) => channel.id !== activeChannel.id));
       setActiveChannelId(null);
       setPosts([]);
-      setSearchParams({});
+      setSearchParams(searchParams.get('discover') === '1' ? { discover: '1' } : {});
       setEditing(false);
       showToast('Канал удалён.', 'success');
     } catch (error) {
@@ -473,7 +473,7 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           </div>
         ) : <>
           <header className="relative z-10 flex items-center gap-3 border-b border-slate-800/60 p-2.5 glass-panel sm:p-4">
-            <button type="button" onClick={() => { setActiveChannelId(null); setSearchParams({}); }} aria-label="Назад к каналам" className="rounded-xl p-2 text-t-secondary hover:bg-white/5 md:hidden"><ArrowLeft size={18} /></button>
+            <button type="button" onClick={() => { setActiveChannelId(null); setSearchParams(searchParams.get('discover') === '1' ? { discover: '1' } : {}); }} aria-label="Назад к каналам" className="rounded-xl p-2 text-t-secondary hover:bg-white/5 md:hidden"><ArrowLeft size={18} /></button>
             <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-accent/15 text-accent">
               {activeChannel.avatarUrl ? <img src={activeChannel.avatarUrl} alt="" className="h-full w-full object-cover" /> : activeChannel.visibility === 'private' ? <LockKeyhole size={18} /> : <Radio size={19} />}
             </div>
