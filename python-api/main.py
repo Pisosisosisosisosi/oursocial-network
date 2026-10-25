@@ -211,9 +211,6 @@ async def deliver_scheduled_message(item: dict) -> None:
         # A previous attempt may have inserted the message but stopped before
         # updating the schedule state or notifying connected clients. Recover
         # both side effects without inserting a duplicate message.
-        scheduled.update_one({"_id": item["_id"], "status": "processing"},
-            {"$set": {"status": "sent", "sentAt": existing["createdAt"]},
-             "$unset": {"claimedAt": "", "lastError": ""}})
         event = {
             "messageId": str(existing["_id"]),
             "senderId": item["senderId"],
@@ -234,6 +231,9 @@ async def deliver_scheduled_message(item: dict) -> None:
                 event["receiverId"] = receiver_id
                 await sio.emit("message_changed", event, to=f"user:{item['senderId']}")
                 await sio.emit("message_changed", event, to=f"user:{receiver_id}")
+        scheduled.update_one({"_id": item["_id"], "status": "processing"},
+            {"$set": {"status": "sent", "sentAt": existing["createdAt"]},
+             "$unset": {"claimedAt": "", "lastError": ""}})
         return
 
     sender_id = item["senderId"]
@@ -283,15 +283,18 @@ async def deliver_scheduled_message(item: dict) -> None:
         event["groupId"] = item["groupId"]
     else:
         event["receiverId"] = item["receiverId"]
-    scheduled.update_one({"_id": item["_id"], "status": "processing"},
-        {"$set": {"status": "sent", "sentAt": message["createdAt"]},
-         "$unset": {"claimedAt": "", "lastError": ""}})
     if group:
         for member in group.get("members", []):
             await sio.emit("message_changed", event, to=f"user:{member['userId']}")
     else:
         await sio.emit("message_changed", event, to=f"user:{sender_id}")
         await sio.emit("message_changed", event, to=f"user:{item['receiverId']}")
+    # Mark delivery complete only after realtime notifications succeed. If an
+    # emit fails, the worker can retry and the existing-message branch above
+    # will re-emit without inserting a duplicate.
+    scheduled.update_one({"_id": item["_id"], "status": "processing"},
+        {"$set": {"status": "sent", "sentAt": message["createdAt"]},
+         "$unset": {"claimedAt": "", "lastError": ""}})
 
 async def scheduled_message_worker() -> None:
     """Poll due messages and recover claims left by a stopped process."""
