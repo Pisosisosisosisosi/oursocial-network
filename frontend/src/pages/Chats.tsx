@@ -1409,7 +1409,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                     stopTyping(String(activeChat.id));
                     setTypingUser(null);
                     setActiveChat(null);
-                    setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('chat'); return next; }, { replace: true });
+                    setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('chat'); next.delete('user'); return next; }, { replace: true });
                   }} className="md:hidden rounded-xl p-2 text-slate-300 hover:bg-white/10" aria-label="Назад к контактам">
                     <ArrowLeft size={19} />
                   </button>
