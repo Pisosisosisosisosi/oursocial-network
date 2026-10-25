@@ -316,9 +316,17 @@ async def scheduled_message_worker() -> None:
             try:
                 await deliver_scheduled_message(item)
             except Exception as exc:
+                # If the message was already inserted, failures in the remaining
+                # delivery steps are retryable: the idempotency key prevents a
+                # duplicate insert on the next attempt. Fail only deliveries
+                # that never made it into the messages collection.
+                existing_delivery = messages_collection().find_one(
+                    {"scheduledMessageId": str(item["_id"])}, {"_id": 1}
+                )
+                next_status = "pending" if existing_delivery else "failed"
                 scheduled_messages_collection().update_one(
                     {"_id": item["_id"], "status": "processing"},
-                    {"$set": {"status": "failed", "lastError": str(exc)[:300]},
+                    {"$set": {"status": next_status, "lastError": str(exc)[:300]},
                      "$unset": {"claimedAt": ""}},
                 )
         except asyncio.CancelledError:
