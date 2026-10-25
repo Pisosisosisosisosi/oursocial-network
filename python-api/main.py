@@ -317,6 +317,11 @@ async def deliver_scheduled_message(item: dict) -> None:
             "scheduledMessageId": scheduled_id,
         }
 
+    if not group:
+        expire_after = direct_chat_expiration_minutes(sender_id, item["receiverId"])
+        if expire_after:
+            message["expiresAt"] = now + timedelta(minutes=expire_after)
+
     try:
         result = messages.insert_one(message)
         message["_id"] = result.inserted_id
