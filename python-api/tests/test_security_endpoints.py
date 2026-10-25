@@ -805,3 +805,30 @@ if __name__ == "__main__":
                 main.readiness()
         self.assertEqual(raised.exception.status_code, 503)
         self.assertEqual(raised.exception.detail, "Database unavailable")
+
+class DeleteForAllRealtimeEventTests(unittest.TestCase):
+    def test_personal_delete_for_all_event_includes_both_chat_participants(self):
+        sender_id = "507f1f77bcf86cd799439011"
+        receiver_id = "507f1f77bcf86cd799439012"
+        message_id = "507f1f77bcf86cd799439013"
+        message = {
+            "_id": main.ObjectId(message_id),
+            "senderId": sender_id,
+            "receiverId": receiver_id,
+            "createdAt": main.datetime.now(main.timezone.utc),
+        }
+        with (
+            patch("main.find_message_for_user", return_value=message),
+            patch("main.messages_collection") as messages,
+            patch("main.sio.emit", new_callable=AsyncMock) as emit,
+        ):
+            messages.return_value.update_one.return_value.matched_count = 1
+            result = asyncio.run(main.delete_message_for_all(message_id, {"userId": sender_id}))
+
+        self.assertEqual(result, {"status": "ok"})
+        self.assertEqual(emit.await_count, 2)
+        event = emit.await_args_list[0].args[1]
+        self.assertEqual(event["senderId"], sender_id)
+        self.assertEqual(event["receiverId"], receiver_id)
+        self.assertEqual(event["action"], "deleted_for_all")
+
