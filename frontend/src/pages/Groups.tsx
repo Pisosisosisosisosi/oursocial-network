@@ -456,7 +456,10 @@ export default function Groups({ embedded = false }: { embedded?: boolean } = {}
 
   const copyInviteLink = async () => {
     if (!activeGroup?.inviteCode) { showToast('Для этой группы пока нет ссылки приглашения.', 'error'); return; }
-    const link = new URL(`/groups?invite=${encodeURIComponent(activeGroup.inviteCode)}`, window.location.origin).toString();
+    const appPath = window.location.pathname.endsWith('/')
+      ? window.location.pathname
+      : `${window.location.pathname}/`;
+    const link = `${window.location.origin}${appPath}#/groups?invite=${encodeURIComponent(activeGroup.inviteCode)}`;
     try {
       await navigator.clipboard.writeText(link);
       showToast('Ссылка приглашения скопирована.', 'success');
