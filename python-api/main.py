@@ -7,8 +7,9 @@ from urllib.parse import quote_plus
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from pymongo import ReturnDocument
-from pymongo.errors import PyMongoError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 from typing import Literal, Optional
+import asyncio
 import base64
 import binascii
 import hashlib
@@ -194,10 +195,116 @@ class PrivacyRequest(BaseModel):
     hideDateOfBirth: bool | None = None
 
 
+# ---------- Scheduled message delivery ----------
+
+SCHEDULED_MESSAGE_POLL_SECONDS = 10
+SCHEDULED_MESSAGE_CLAIM_TIMEOUT = timedelta(minutes=2)
+_scheduled_worker_task: asyncio.Task | None = None
+
+async def deliver_scheduled_message(item: dict) -> None:
+    """Deliver one claimed scheduled message, idempotently."""
+    scheduled_id = str(item["_id"])
+    scheduled = scheduled_messages_collection()
+    messages = messages_collection()
+    existing = messages.find_one({"scheduledMessageId": scheduled_id})
+    if existing:
+        scheduled.update_one({"_id": item["_id"], "status": "processing"},
+            {"$set": {"status": "sent", "sentAt": existing["createdAt"]},
+             "$unset": {"claimedAt": "", "lastError": ""}})
+        return
+
+    sender_id = item["senderId"]
+    now = datetime.now(timezone.utc)
+    group = None
+    if item.get("groupId"):
+        group = get_group_for_member(item["groupId"], sender_id)
+        recipients = {member["userId"] for member in group.get("members", [])}
+        if item.get("type", "text") == "text":
+            validate_v4_envelope(item.get("text", ""), 64_000, recipients)
+        else:
+            validate_v4_envelope(item.get("fileData", ""), MAX_ATTACHMENT_SIZE + 1024, recipients)
+        message = {
+            "senderId": sender_id, "receiverId": "", "groupId": item["groupId"],
+            "text": item.get("text", ""), "type": item.get("type", "text"),
+            "fileName": item.get("fileName", ""), "contentType": item.get("contentType", ""),
+            "fileData": item.get("fileData", ""), "reactions": [], "readBy": [sender_id],
+            "pinned": False, "createdAt": now, "read": False, "scheduledMessageId": scheduled_id,
+        }
+    else:
+        receiver_id = item["receiverId"]
+        if not users_collection().find_one({"_id": ObjectId(receiver_id)}, {"_id": 1}):
+            raise ValueError("Recipient no longer exists")
+        if users_blocked_either_way(sender_id, receiver_id):
+            raise ValueError("Messaging is unavailable for this user")
+        message = {
+            "senderId": sender_id, "receiverId": receiver_id, "text": item.get("text", ""),
+            "type": "file" if item.get("type") != "text" else "text",
+            "fileName": "", "contentType": "",
+            "fileData": item.get("fileData", "") if item.get("type") != "text" else "",
+            "reactions": [], "pinned": False, "createdAt": now, "read": False,
+            "scheduledMessageId": scheduled_id,
+        }
+
+    try:
+        result = messages.insert_one(message)
+        message["_id"] = result.inserted_id
+    except DuplicateKeyError:
+        existing = messages.find_one({"scheduledMessageId": scheduled_id})
+        if not existing:
+            raise
+        message = existing
+
+    event = {"messageId": str(message["_id"]), "senderId": sender_id, "action": "created"}
+    if group:
+        groups_collection().update_one({"_id": group["_id"]}, {"$set": {"updatedAt": message["createdAt"]}})
+        event["groupId"] = item["groupId"]
+    else:
+        event["receiverId"] = item["receiverId"]
+    scheduled.update_one({"_id": item["_id"], "status": "processing"},
+        {"$set": {"status": "sent", "sentAt": message["createdAt"]},
+         "$unset": {"claimedAt": "", "lastError": ""}})
+    if group:
+        for member in group.get("members", []):
+            await sio.emit("message_changed", event, to=f"user:{member['userId']}")
+    else:
+        await sio.emit("message_changed", event, to=f"user:{sender_id}")
+        await sio.emit("message_changed", event, to=f"user:{item['receiverId']}")
+
+async def scheduled_message_worker() -> None:
+    """Poll due messages and recover claims left by a stopped process."""
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            item = scheduled_messages_collection().find_one_and_update(
+                {"sendAt": {"$lte": now}, "$or": [
+                    {"status": "pending"},
+                    {"status": "processing", "claimedAt": {"$lte": now - SCHEDULED_MESSAGE_CLAIM_TIMEOUT}},
+                    {"status": "processing", "claimedAt": {"$exists": False}},
+                ]},
+                {"$set": {"status": "processing", "claimedAt": now}},
+                sort=[("sendAt", 1)], return_document=ReturnDocument.AFTER,
+            )
+            if not item:
+                await asyncio.sleep(SCHEDULED_MESSAGE_POLL_SECONDS)
+                continue
+            try:
+                await deliver_scheduled_message(item)
+            except Exception as exc:
+                scheduled_messages_collection().update_one(
+                    {"_id": item["_id"], "status": "processing"},
+                    {"$set": {"status": "failed", "lastError": str(exc)[:300]},
+                     "$unset": {"claimedAt": ""}},
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"Scheduled message worker error: {exc}")
+            await asyncio.sleep(SCHEDULED_MESSAGE_POLL_SECONDS)
+
 # ---------- Startup ----------
 
 @app.on_event("startup")
-def startup():
+async def startup():
     connect_db()
     email_verifications_collection().create_index("email", unique=True)
     email_verifications_collection().create_index("expiresAt", expireAfterSeconds=0)
@@ -205,6 +312,7 @@ def startup():
     stories_collection().create_index("expiresAt", expireAfterSeconds=0)
     # Messages with expiresAt are removed automatically by MongoDB TTL.
     messages_collection().create_index("expiresAt", expireAfterSeconds=0)
+    messages_collection().create_index("scheduledMessageId", unique=True, sparse=True)
     friend_requests_collection().create_index([("fromUserId", 1), ("toUserId", 1)])
     blocked_users_collection().create_index("userId")
     saved_messages_collection().create_index("userId")
@@ -217,7 +325,22 @@ def startup():
     reports_collection().create_index("targetId")
     bots_collection().create_index("ownerId")
     gifts_collection().create_index("name")
+    global _scheduled_worker_task
+    if _scheduled_worker_task is None or _scheduled_worker_task.done():
+        _scheduled_worker_task = asyncio.create_task(scheduled_message_worker())
     print("DEBUG startup: MongoDB connected (python-api)")
+
+
+@app.on_event("shutdown")
+async def shutdown_scheduled_message_worker():
+    global _scheduled_worker_task
+    if _scheduled_worker_task is not None:
+        _scheduled_worker_task.cancel()
+        try:
+            await _scheduled_worker_task
+        except asyncio.CancelledError:
+            pass
+        _scheduled_worker_task = None
 
 
 # ---------- Health ----------
