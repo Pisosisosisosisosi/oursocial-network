@@ -320,10 +320,26 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
       });
     };
 
+    const handleMessageDeletedForAll = (event: { groupId?: string }) => {
+      if (event.groupId) {
+        void api.get<WorkspaceGroupItem[]>('/groups').then((response) => setWorkspaceGroups(response.data)).catch((error: unknown) => {
+          console.error('Не удалось обновить список групп после удаления сообщения:', error);
+        });
+        return;
+      }
+      void api.get<Contact[]>('/contacts').then((response) => {
+        setContacts(response.data.filter((contact) => contact.id !== currentUser.id && !contact.chatHidden));
+      }).catch((error: unknown) => {
+        console.error('Не удалось обновить список контактов после удаления сообщения:', error);
+      });
+    };
+
     socket.on('message_changed', handleNewMessage);
+    socket.on('message_deleted_for_all', handleMessageDeletedForAll);
     socket.on('channel_changed', handleChannelChange);
     return () => {
       socket.off('message_changed', handleNewMessage);
+      socket.off('message_deleted_for_all', handleMessageDeletedForAll);
       socket.off('channel_changed', handleChannelChange);
     };
   }, [currentUser?.id, showToast]);
@@ -698,9 +714,20 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
       });
     };
 
+    const handleMessageDeletedForAll = (event: { messageId: string; senderId?: string; receiverId?: string; groupId?: string }) => {
+      if (!event?.messageId || event.groupId) return;
+      if (event.senderId !== activeChat.id && event.receiverId !== activeChat.id) return;
+      setMessages((previous) => previous.map((message) => message.id === event.messageId
+        ? { ...message, text: 'Сообщение удалено', type: 'text', fileName: '', contentType: '', fileData: '' }
+        : message,
+      ));
+    };
+
     socket.on('message_changed', handleMessageChanged);
+    socket.on('message_deleted_for_all', handleMessageDeletedForAll);
     return () => {
       socket.off('message_changed', handleMessageChanged);
+      socket.off('message_deleted_for_all', handleMessageDeletedForAll);
     };
   }, [activeChat, currentUser?.id, showToast]);
 
