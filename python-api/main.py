@@ -87,6 +87,18 @@ def enforce_login_rate_limit(request: Request) -> None:
 
 
 DEFAULT_FRONTEND_URL = "https://pisosisosisosisosi.github.io/oursocial-network,https://pipipipipi.3utilities.com"
+
+
+def get_frontend_base_url() -> str:
+    """Return one valid frontend URL for email links and browser redirects."""
+    configured = os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL)
+    for candidate in configured.split(","):
+        parsed = urlsplit(candidate.strip())
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}"
+    return "https://pisosisosisosisosi.github.io/oursocial-network"
+
+
 configured_frontend_origins = []
 for frontend_url in os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL).split(","):
     parsed_frontend_url = urlsplit(frontend_url.strip())
@@ -635,7 +647,7 @@ def send_email_code(payload: SendEmailCodeRequest):
     )
     verified_email_tokens_collection().delete_many({"email": email})
 
-    frontend_base = os.getenv("FRONTEND_URL", "https://pisosisosisosisosi.github.io/oursocial-network")
+    frontend_base = get_frontend_base_url()
     verification_link = f"{frontend_base}/#/verify-email?email={quote_plus(email)}&code={code}&token={link_token}"
 
     try:
@@ -661,7 +673,7 @@ def verify_link_get(email: str, token: str):
     email = str(email).lower()
     verifications = email_verifications_collection()
     verification = verifications.find_one({"email": email})
-    frontend_base = os.getenv("FRONTEND_URL", "https://pisosisosisosisosi.github.io/oursocial-network")
+    frontend_base = get_frontend_base_url()
 
     if not verification:
         return RedirectResponse(f"{frontend_base}/#/register?error=code_not_requested")
