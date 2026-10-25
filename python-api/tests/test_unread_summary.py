@@ -11,7 +11,11 @@ class UnreadSummaryTests(unittest.TestCase):
         messages = Mock()
         messages.count_documents.return_value = 0
         groups = Mock()
-        groups.find.return_value = [{"_id": group_id}]
+        joined_at = main.datetime(2026, 1, 1, tzinfo=main.timezone.utc)
+        groups.find.return_value = [{
+            "_id": group_id,
+            "members": [{"userId": user_id, "joinedAt": joined_at}],
+        }]
         channels = Mock()
         channels.find.return_value = []
         users = Mock()
@@ -36,7 +40,8 @@ class UnreadSummaryTests(unittest.TestCase):
             expiry_clauses = query["$or"]
             self.assertEqual(expiry_clauses[0], {"expiresAt": {"$exists": False}})
             self.assertIn("$gt", expiry_clauses[1]["expiresAt"])
-        self.assertEqual(group_filter["groupId"], {"$in": [str(group_id)]})
+        self.assertEqual(group_filter["groupId"], str(group_id))
+        self.assertEqual(group_filter["createdAt"], {"$gte": joined_at})
 
 
 if __name__ == "__main__":
