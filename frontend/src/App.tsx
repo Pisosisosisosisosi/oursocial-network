@@ -1,6 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { applyAppPreferences } from './preferences';
+import { getSocket } from './api/socket';
+import { ToastProvider } from './context/ToastContext';
+import { useToast } from './context/useToast';
+import { CallProvider } from './context/CallContext';
+
 const Chats = lazy(() => import('./pages/Chats'));
 const Login = lazy(() => import('./pages/Login'));
 const Profile = lazy(() => import('./pages/Profile'));
@@ -10,11 +16,6 @@ const UserProfile = lazy(() => import('./pages/UserProfile'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Groups = lazy(() => import('./pages/Groups'));
 const WorkspaceLayout = lazy(() => import('./components/layout/WorkspaceLayout'));
-import { applyAppPreferences } from './preferences';
-import { getSocket } from './api/socket';
-import { ToastProvider } from './context/ToastContext';
-import { useToast } from './context/useToast';
-import { CallProvider } from './context/CallContext';
 
 const Channels = lazy(() => import('./pages/Channels'));
 const Premium = lazy(() => import('./pages/Premium'));
