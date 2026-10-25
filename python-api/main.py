@@ -1001,9 +1001,18 @@ def get_contacts(current=Depends(get_current_user)):
     }
     current_id = current["userId"]
 
-    # Переписки: партнёр → непрочитанные + время последнего сообщения (Telegram-стиль)
+    # Exclude deleted and expired messages from previews and per-chat unread counts.
+    now = datetime.now(timezone.utc)
     chat_pipeline = [
-        {"$match": {"$or": [{"senderId": current_id}, {"receiverId": current_id}], "groupId": {"$exists": False}}},
+        {"$match": {
+            "$or": [{"senderId": current_id}, {"receiverId": current_id}],
+            "groupId": {"$exists": False},
+            "deletedForAll": {"$ne": True},
+            "$and": [{"$or": [
+                {"expiresAt": {"$exists": False}},
+                {"expiresAt": {"$gt": now}},
+            ]}],
+        }},
         {"$sort": {"createdAt": 1, "_id": 1}},
         {"$addFields": {
             "partner": {"$cond": [{"$eq": ["$senderId", current_id]}, "$receiverId", "$senderId"]},
