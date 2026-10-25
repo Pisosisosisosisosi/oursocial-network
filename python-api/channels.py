@@ -55,7 +55,7 @@ class ChannelPostRequest(BaseModel):
 
 
 class ChannelReactionRequest(BaseModel):
-    emoji: Literal["❤️", "👍", "😂"]
+    emoji: Literal["❤️", "👍", "😂", "🔥", "🎉", "😢"]
 
 
 def channel_by_id(channel_id: str):
