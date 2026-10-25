@@ -51,7 +51,37 @@ class UpdateChannelRequest(BaseModel):
 
 
 class ChannelPostRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=10_000)
+    text: str = Field(default="", max_length=10_000)
+    fileName: str | None = Field(default=None, max_length=255)
+    contentType: str | None = Field(default=None, max_length=100)
+    fileData: str | None = Field(default=None, max_length=2_800_000)
+
+    @field_validator("contentType")
+    @classmethod
+    def validate_content_type(cls, value: str | None) -> str | None:
+        allowed = {
+            "image/jpeg", "image/png", "image/gif", "image/webp",
+            "application/pdf", "text/plain", "text/csv", "application/zip",
+            "audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav",
+        }
+        if value is not None and value not in allowed:
+            raise ValueError("Unsupported channel attachment type")
+        return value
+
+    @field_validator("fileData")
+    @classmethod
+    def validate_file_data(cls, value: str | None, info):
+        if value is None or value == "":
+            return value
+        content_type = info.data.get("contentType")
+        if not content_type or not value.startswith(f"data:{content_type};base64,"):
+            raise ValueError("Attachment data must match its content type")
+        encoded = value.split(",", 1)[1] if "," in value else ""
+        if not encoded or not re.fullmatch(r"[A-Za-z0-9+/]*={0,2}", encoded):
+            raise ValueError("Invalid base64 attachment data")
+        if len(encoded) > 2_796_204:
+            raise ValueError("Channel attachments cannot exceed 2 MB")
+        return value
 
 
 class ChannelReactionRequest(BaseModel):
@@ -114,7 +144,11 @@ def serialize_post(post: dict) -> dict:
         "id": str(post["_id"]),
         "channelId": post["channelId"],
         "senderId": post["senderId"],
-        "text": post["text"],
+        "text": post.get("text", ""),
+        "type": post.get("type", "text"),
+        "fileName": post.get("fileName"),
+        "contentType": post.get("contentType"),
+        "fileData": post.get("fileData"),
         "reactions": post.get("reactions", []),
         "pinned": post.get("pinned", False),
         "pinnedAt": post.get("pinnedAt").isoformat() if post.get("pinnedAt") else None,
@@ -429,13 +463,21 @@ async def create_channel_post(
     channel = channel_by_id(channel_id)
     require_owner(channel, current["userId"])
     text = payload.text.strip()
-    if not text:
-        raise HTTPException(status_code=422, detail="Post cannot be empty")
+    file_data = payload.fileData
+    content_type = payload.contentType
+    if not text and not file_data:
+        raise HTTPException(status_code=422, detail="Post must contain text or an attachment")
+    if file_data and (not content_type or not payload.fileName):
+        raise HTTPException(status_code=422, detail="Attachment name and content type are required")
     now = datetime.now(timezone.utc)
     post = {
         "channelId": channel_id,
         "senderId": current["userId"],
         "text": text,
+        "fileName": payload.fileName if file_data else None,
+        "contentType": content_type if file_data else None,
+        "fileData": file_data if file_data else None,
+        "type": "image" if content_type and content_type.startswith("image/") else "file" if file_data else "text",
         "reactions": [],
         "pinned": False,
         "createdAt": now,
