@@ -205,7 +205,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                 onClick={() => selectCategory(category.id)}
                 className={`grid h-9 w-10 shrink-0 place-items-center rounded-lg text-lg transition-colors ${activeCategory === category.id ? 'bg-accent/20 text-accent' : 'text-t-secondary hover:bg-white/[0.08] hover:text-t-primary'}`}
               >
-                <span aria-hidden="true">{category.icon}</span>
+                <img src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(category.icon)}.svg`} alt="" aria-hidden="true" draggable={false} className="h-5 w-5 object-contain" />
               </button>
             ))}
           </div>
@@ -241,7 +241,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
           <div className="space-y-3">
             {CATEGORIES.map((category) => (
               <section key={category.id} ref={(node) => { categorySectionRefs.current[category.id] = node; }} aria-label={category.name}>
-                <h3 className="mb-1.5 px-1 text-base" aria-label={category.name} title={category.name}>{category.icon}</h3>
+                <h3 className="mb-1.5 px-1 text-base" aria-label={category.name} title={category.name}>{category.name}</h3>
                 <div className="grid grid-cols-8 gap-1" role="list">
                   {category.emojis.map(([emoji, tags]) => (
                     <button
