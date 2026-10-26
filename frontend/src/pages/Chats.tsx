@@ -44,7 +44,7 @@ type WorkspaceEntry =
   | { kind: 'group'; key: string; id: string; title: string; subtitle: string; time?: string | null }
   | { kind: 'channel'; key: string; id: string; title: string; subtitle: string; avatarUrl?: string; time?: string | null };
 
-const REACTIONS = ['❤️', '👍', '😂', '🔥', '🎉', '😢'] as const;
+const REACTIONS = ['👍', '👎', '❤️', '🔥', '😂', '😁', '😢', '🎉'] as const;
 const ALLOWED_ATTACHMENT_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'application/pdf', 'text/plain', 'text/csv', 'application/zip',
@@ -2171,12 +2171,11 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
             onAnimationEnd={(event) => {
               if (messageMenuClosing && event.currentTarget === event.target) setOpenMessageMenu(null);
             }}
-            className={`message-action-menu fixed z-[100] max-h-[calc(100dvh-16px)] w-52 overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
+            className={`message-action-menu fixed z-[100] max-h-[calc(100dvh-16px)] w-56 overflow-y-auto overscroll-contain rounded-xl border border-white/[0.12] bg-[#202124]/[0.98] p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.42)] backdrop-blur-2xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
             style={position}
           >
-            <div className="message-reaction-picker mb-2 rounded-xl bg-white/[0.035] p-1.5">
-              <p className="px-1.5 pb-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">Быстрая реакция</p>
-              <div className="flex items-center justify-between gap-1">
+            <div className="message-reaction-picker mb-1.5 border-b border-white/[0.09] px-1 pb-2 pt-1">
+              <div className="flex items-center justify-between gap-0.5">
                 {REACTIONS.map((emoji) => {
                   const active = menuMessage.reactions.some((reaction) =>
                     reaction.userId === currentUser?.id && reaction.emoji === emoji,
@@ -2188,7 +2187,8 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                       role="menuitem"
                       onClick={() => void handleReaction(menuMessage, emoji)}
                       aria-label={`Поставить реакцию ${emoji}`}
-                      className={`message-reaction-option flex h-10 min-w-10 items-center justify-center rounded-xl text-xl transition ${active ? 'bg-accent/20 ring-1 ring-accent/30' : 'hover:bg-white/10'}`}
+                      title={`Реакция ${emoji}`}
+                      className={`message-reaction-option flex h-8 min-w-0 flex-1 items-center justify-center rounded-lg text-[22px] leading-none transition duration-150 hover:scale-110 hover:bg-white/[0.10] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 ${active ? 'bg-sky-400/15 ring-1 ring-sky-300/40' : ''}`}
                     >
                       {emoji}
                     </button>
@@ -2204,7 +2204,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                 closeMessageMenu();
                 window.setTimeout(() => textInputRef.current?.focus(), 50);
               }}
-              className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-accent/10 hover:text-accent"
+              className="message-action-item flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-normal text-slate-100 transition-colors hover:bg-white/[0.09] hover:text-white"
             >
               <Reply size={15} /> Ответить
             </button>
@@ -2238,7 +2238,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
               role="menuitem"
               disabled={pinningMessageId === menuMessage.id}
               onClick={() => void handleTogglePin(menuMessage)}
-              className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-amber-300/10 hover:text-amber-200 disabled:opacity-50"
+              className="message-action-item flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-normal text-slate-100 transition-colors hover:bg-white/[0.09] hover:text-white disabled:opacity-50"
             >
               <Pin size={15} className={menuMessage.pinned ? 'text-amber-300' : ''} />
               {pinningMessageId === menuMessage.id ? 'Сохраняю...' : menuMessage.pinned ? 'Открепить сообщение' : 'Закрепить сообщение'}
@@ -2260,7 +2260,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
               )
             )}
             <button type="button" role="menuitem" onClick={() => void handleSaveMessage(menuMessage)} className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-slate-200 transition hover:bg-accent/10 hover:text-accent"><Bookmark size={15} /> Сохранить в «Избранное»</button>
-            {canDeleteMessage && <button type="button" role="menuitem" onClick={() => void handleDeleteForAll(menuMessage)} className="message-action-item flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium text-rose-300 transition hover:bg-rose-400/10"><Trash2 size={15} /> Удалить у всех</button>}
+            {canDeleteMessage && <button type="button" role="menuitem" onClick={() => void handleDeleteForAll(menuMessage)} className="message-action-item flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-normal text-rose-300 transition-colors hover:bg-rose-400/10"><Trash2 size={15} /> Удалить у всех</button>}
             {canDeleteMessage && (
               <button
                 type="button"
