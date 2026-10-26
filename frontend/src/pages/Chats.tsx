@@ -75,12 +75,16 @@ function renderTextWithFlags(text: string, query: string) {
     parts.push(
       <img
         key={'flag-' + index + '-' + code}
-        src={'https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/' + assetCode + '.svg'}
+        src={'https://flagcdn.com/w40/' + code + '.png'}
         onError={(event) => {
           const image = event.currentTarget;
-          if (image.dataset.fallback !== 'true') {
-            image.dataset.fallback = 'true';
-            image.src = 'https://flagcdn.com/w40/' + code + '.png';
+          const fallback = Number(image.dataset.fallback ?? '0');
+          if (fallback === 0) {
+            image.dataset.fallback = '1';
+            image.src = 'https://cdn.jsdelivr.net/npm/country-flag-icons@1.5.15/3x2/' + code.toUpperCase() + '.svg';
+          } else if (fallback === 1) {
+            image.dataset.fallback = '2';
+            image.src = 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/' + assetCode + '.svg';
           } else {
             image.style.display = 'none';
           }
