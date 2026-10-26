@@ -72,6 +72,35 @@ const emojiAssetCode = (emoji: string): string =>
     .filter((codePoint) => codePoint !== 0xFE0F)
     .map((codePoint) => codePoint.toString(16))
     .join('-');
+
+const regionalIndicatorStart = 0x1F1E6;
+const flagCountryCode = (emoji: string): string | null => {
+  const codePoints = Array.from(emoji, (character) => character.codePointAt(0)!);
+  if (codePoints.length !== 2 || codePoints.some((point) => point < regionalIndicatorStart || point > 0x1F1FF)) {
+    return null;
+  }
+  return codePoints.map((point) => String.fromCharCode(point - regionalIndicatorStart + 97)).join('');
+};
+
+const emojiImageSource = (emoji: string): string => {
+  const countryCode = flagCountryCode(emoji);
+  return countryCode
+    ? `https://flagcdn.com/w40/${countryCode}.png`
+    : `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`;
+};
+
+const handleEmojiImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
+  const image = event.currentTarget;
+  if (image.dataset.fallback !== 'true') {
+    image.dataset.fallback = 'true';
+    const emoji = image.dataset.emoji;
+    if (emoji) {
+      image.src = `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`;
+      return;
+    }
+  }
+  image.style.visibility = 'hidden';
+};
 for (const key of ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '#', '*']) {
   addGeneratedEmoji(key + '\uFE0F\u20E3', 'symbols', `keycap ${key}`);
 }
@@ -278,7 +307,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                 title={tags || emoji}
                 className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
               >
-                <img src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`} alt={emoji} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
+                <img src={emojiImageSource(emoji)} data-emoji={emoji} alt="" aria-hidden="true" onError={handleEmojiImageError} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
               </button>
             ))}
             {!filtered.length && <p className="col-span-8 py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
@@ -299,7 +328,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                       title={tags || emoji}
                       className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
                     >
-                      <img src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`} alt={emoji} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
+                      <img src={emojiImageSource(emoji)} data-emoji={emoji} alt="" aria-hidden="true" onError={handleEmojiImageError} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
                     </button>
                   )) : <p className="col-span-8 px-1 py-2 text-xs text-t-secondary">Здесь появятся 15 последних использованных эмодзи</p>}
                 </div>
