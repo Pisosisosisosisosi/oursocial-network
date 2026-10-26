@@ -107,6 +107,51 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
         notify.assert_awaited_once()
         self.assertEqual(notify.await_args.args[1]["action"], "post_created")
 
+    async def test_owner_can_edit_post_text_and_broadcast_update(self):
+        post = {
+            "_id": POST_ID,
+            "channelId": str(CHANNEL_ID),
+            "senderId": OWNER_ID,
+            "text": "Old announcement",
+            "fileData": None,
+            "reactions": [],
+            "pinned": False,
+            "pinnedAt": None,
+            "createdAt": datetime.now(timezone.utc),
+        }
+        posts = Mock()
+        posts.update_one.return_value.matched_count = 1
+        with (
+            patch("channels.channel_by_id", return_value=make_channel()),
+            patch("channels.find_channel_post", return_value=post),
+            patch("channels.channel_posts_collection", return_value=posts),
+            patch("channels.notify_members", new_callable=AsyncMock) as notify,
+        ):
+            response = await channels.edit_channel_post(
+                str(CHANNEL_ID),
+                str(POST_ID),
+                channels.ChannelPostEditRequest(text="  Corrected announcement  "),
+                {"userId": OWNER_ID},
+            )
+        self.assertEqual(response["text"], "Corrected announcement")
+        posts.update_one.assert_called_once_with(
+            {"_id": POST_ID, "channelId": str(CHANNEL_ID)},
+            {"$set": {"text": "Corrected announcement"}},
+        )
+        notify.assert_awaited_once()
+        self.assertEqual(notify.await_args.args[1]["action"], "post_updated")
+
+    async def test_subscriber_cannot_edit_channel_post(self):
+        with patch("channels.channel_by_id", return_value=make_channel()):
+            with self.assertRaises(HTTPException) as error:
+                await channels.edit_channel_post(
+                    str(CHANNEL_ID),
+                    str(POST_ID),
+                    channels.ChannelPostEditRequest(text="Unauthorized"),
+                    {"userId": SUBSCRIBER_ID},
+                )
+        self.assertEqual(error.exception.status_code, 403)
+
     async def test_subscriber_can_toggle_a_reaction_atomically(self):
         post = {
             "_id": POST_ID,
