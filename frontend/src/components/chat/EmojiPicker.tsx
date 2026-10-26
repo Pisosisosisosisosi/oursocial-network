@@ -61,7 +61,7 @@ const FLAG_CODES = (
   'SL SM SN SO SR SS ST SV SX SY SZ TA TC TD TF TG TH TJ TK TL TM TN ' +
   'TO TR TT TV TW TZ UA UG UM UN US UY UZ VA VC VE VG VI VN VU WF WS ' +
   'XK YE YT ZA ZM ZW'
-).split(/\\s+/);
+).split(/\s+/);
 for (const code of FLAG_CODES) {
   const points = [...code].map((letter) => 0x1F1E6 + letter.charCodeAt(0) - 65);
   addGeneratedEmoji(String.fromCodePoint(...points), 'flags', `flag ${code.toLowerCase()} country region`);
