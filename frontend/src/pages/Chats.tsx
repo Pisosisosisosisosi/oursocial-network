@@ -272,10 +272,8 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     const handleOutsidePopoverPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (showEmojiPicker && emojiPickerWrapperRef.current?.contains(target)) return;
-      if (quickRepliesOpen && quickRepliesWrapperRef.current?.contains(target)) return;
-      setShowEmojiPicker(false);
-      setQuickRepliesOpen(false);
+      if (showEmojiPicker && !emojiPickerWrapperRef.current?.contains(target)) setShowEmojiPicker(false);
+      if (quickRepliesOpen && !quickRepliesWrapperRef.current?.contains(target)) setQuickRepliesOpen(false);
     };
     const handlePopoverEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
