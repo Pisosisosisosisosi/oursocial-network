@@ -1440,8 +1440,6 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
 
   const showMessageMenu = (messageId: string, x: number, y: number) => {
     if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
-    // Remove any stale menu left by another responsive chat surface before opening this one.
-    document.querySelectorAll('[data-message-menu]').forEach((menu) => menu.remove());
     setMessageMenuClosing(false);
     setOpenMessageMenu(messageId);
     setMessageMenuPosition({
