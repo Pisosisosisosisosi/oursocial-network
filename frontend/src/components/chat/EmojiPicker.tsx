@@ -88,8 +88,10 @@ const CATEGORIES: EmojiCategory[] = [
 
 export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
-  const [scrollLeft, setScrollLeft] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
+  const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]?.id ?? 'smileys');
+  const [categoryScrollLeft, setCategoryScrollLeft] = useState(0);
+  const categoryStripRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startScrollLeft: number } | null>(null);
 
   const allEmojis = useMemo(() => {
     const unique = new Map<string, EmojiEntry>();
@@ -101,21 +103,36 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return allEmojis;
-    return allEmojis.filter(([emoji, tags]) => emoji.includes(q) || tags.toLowerCase().includes(q));
-  }, [allEmojis, query]);
+    if (q) return allEmojis.filter(([emoji, tags]) => emoji.includes(q) || tags.toLowerCase().includes(q));
+    return CATEGORIES.find((category) => category.id === activeCategory)?.emojis ?? allEmojis;
+  }, [activeCategory, allEmojis, query]);
 
-  const stride = 44;
-  const visibleStart = filtered.length
-    ? Math.min(filtered.length, Math.floor(scrollLeft / stride) + 1)
+  const handleCategoryMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 1 || !categoryStripRef.current) return;
+    event.preventDefault();
+    dragRef.current = {
+      startX: event.clientX,
+      startScrollLeft: categoryStripRef.current.scrollLeft,
+    };
+  };
+
+  const handleCategoryMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragRef.current || !categoryStripRef.current) return;
+    event.preventDefault();
+    const deltaX = event.clientX - dragRef.current.startX;
+    categoryStripRef.current.scrollLeft = dragRef.current.startScrollLeft - deltaX;
+  };
+
+  const stopCategoryDrag = () => {
+    dragRef.current = null;
+  };
+
+  const categoryMaxScroll = categoryStripRef.current
+    ? Math.max(0, categoryStripRef.current.scrollWidth - categoryStripRef.current.clientWidth)
     : 0;
-  const visibleEnd = filtered.length && listRef.current
-    ? Math.min(filtered.length, Math.max(visibleStart, Math.ceil((scrollLeft + listRef.current.clientWidth) / stride)))
-    : Math.min(filtered.length, 7);
-  const maxScroll = listRef.current
-    ? Math.max(0, listRef.current.scrollWidth - listRef.current.clientWidth)
-    : 0;
-  const progress = listRef.current ? (maxScroll > 0 ? Math.min(100, Math.round((scrollLeft / maxScroll) * 100)) : 100) : 0;
+  const categoryProgress = categoryMaxScroll > 0
+    ? Math.min(100, Math.round((categoryScrollLeft / categoryMaxScroll) * 100))
+    : 100;
 
   return (
     <div className="glass-panel w-[min(25rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/40 backdrop-blur-2xl animate-scale-in" data-emoji-picker>
@@ -123,11 +140,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
         <Search size={14} className="shrink-0 text-t-secondary" />
         <input
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setScrollLeft(0);
-            if (listRef.current) listRef.current.scrollLeft = 0;
-          }}
+          onChange={(e) => setQuery(e.target.value)}
           placeholder="Поиск эмодзи"
           className="min-w-0 flex-1 bg-transparent text-sm text-t-primary placeholder-slate-500 focus:outline-none"
         />
@@ -135,31 +148,55 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
           <X size={14} />
         </button>
       </div>
-      <div className="border-b border-white/[0.08] px-3 py-2.5">
-        <div className="flex items-center justify-between gap-2 text-[11px] text-t-secondary">
-          <span>{filtered.length ? `Эмодзи ${visibleStart}–${visibleEnd} из ${filtered.length}` : 'Эмодзи не найдены'}</span>
-          <span className="shrink-0 tabular-nums">{progress}%</span>
+      {!query.trim() && (
+        <div className="border-b border-white/[0.08] px-2 pt-2">
+          <div
+            ref={categoryStripRef}
+            onScroll={(event) => setCategoryScrollLeft(event.currentTarget.scrollLeft)}
+            onMouseDown={handleCategoryMouseDown}
+            onMouseMove={handleCategoryMouseMove}
+            onMouseUp={stopCategoryDrag}
+            onMouseLeave={stopCategoryDrag}
+            onAuxClick={(event) => {
+              if (event.button === 1) event.preventDefault();
+            }}
+            className={`custom-scrollbar flex gap-1.5 overflow-x-auto overflow-y-hidden pb-2 select-none ${dragRef.current ? 'cursor-grabbing' : 'cursor-grab'}`}
+            aria-label="Категории эмодзи. Зажмите среднюю кнопку мыши и двигайте мышь для прокрутки"
+            role="tablist"
+          >
+            {CATEGORIES.map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                role="tab"
+                aria-selected={activeCategory === category.id}
+                onClick={() => setActiveCategory(category.id)}
+                className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-colors ${activeCategory === category.id ? 'bg-accent/20 text-accent' : 'text-t-secondary hover:bg-white/[0.08] hover:text-t-primary'}`}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+          <div className="mb-1 h-0.5 overflow-hidden rounded-full bg-white/[0.07]" aria-hidden="true">
+            <div className="h-full rounded-full bg-accent/70 transition-[width] duration-100" style={{ width: categoryMaxScroll > 0 ? '24%' : '100%', marginLeft: categoryMaxScroll > 0 ? `calc(${categoryProgress * 0.76}%)` : '0' }} />
+          </div>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Позиция в списке эмодзи" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-          <div className="h-full rounded-full bg-accent transition-[width] duration-100" style={{ width: `${progress}%` }} />
+      )}
+      {query.trim() && (
+        <div className="border-b border-white/[0.08] px-3 py-2 text-[11px] text-t-secondary">
+          Результаты поиска: {filtered.length}
         </div>
-      </div>
-      <div
-        ref={listRef}
-        onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
-        className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto overflow-y-hidden p-2.5"
-        aria-label="Все эмодзи. Прокручивайте по горизонтали"
-        role="list"
-      >
-        {filtered.map(([emoji]: [string, string]) => (
+      )}
+      <div className="custom-scrollbar grid max-h-60 grid-cols-8 gap-1 overflow-y-auto p-2.5" aria-label={query.trim() ? 'Результаты поиска эмодзи' : 'Эмодзи выбранной категории'} role="list">
+        {filtered.map(([emoji, tags]) => (
           <button
             key={emoji}
             type="button"
             role="listitem"
             onClick={() => onPick(emoji)}
-            aria-label={emoji}
-            title={emoji}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            aria-label={tags || emoji}
+            title={tags || emoji}
+            className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
             <img
               src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`}
@@ -170,11 +207,11 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
             />
           </button>
         ))}
-        {!filtered.length && <p className="w-full py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
+        {!filtered.length && <p className="col-span-8 py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
       </div>
       <div className="flex items-center justify-between border-t border-white/[0.08] px-3 py-2 text-[10px] text-t-secondary">
-        <span>Прокручивайте список по горизонтали</span>
-        <span>← →</span>
+        <span>{query.trim() ? 'Ищите по названию или ключевому слову' : 'Категории можно прокручивать СКМ'}</span>
+        <span>{filtered.length} эмодзи</span>
       </div>
     </div>
   );
