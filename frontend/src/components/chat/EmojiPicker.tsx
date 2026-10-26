@@ -205,7 +205,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                 onClick={() => selectCategory(category.id)}
                 className={`grid h-9 w-10 shrink-0 place-items-center rounded-lg text-lg transition-colors ${activeCategory === category.id ? 'bg-accent/20 text-accent' : 'text-t-secondary hover:bg-white/[0.08] hover:text-t-primary'}`}
               >
-                <img src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(category.icon)}.svg`} alt="" aria-hidden="true" draggable={false} className="h-5 w-5 object-contain" />
+                <img src={`/emoji-category-icons/${emojiAssetCode(category.icon)}.svg`} alt="" aria-hidden="true" draggable={false} className="h-5 w-5 object-contain" />
               </button>
             ))}
           </div>
