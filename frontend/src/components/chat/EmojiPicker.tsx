@@ -294,7 +294,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                       key={emoji}
                       type="button"
                       role="listitem"
-                      onClick={() => onPick(emoji)}
+                      onClick={() => pickEmoji(emoji)}
                       aria-label={tags || emoji}
                       title={tags || emoji}
                       className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
