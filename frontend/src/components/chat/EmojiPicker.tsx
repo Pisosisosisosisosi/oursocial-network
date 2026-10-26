@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 
 type EmojiEntry = [emoji: string, tags: string];
@@ -88,14 +88,34 @@ const CATEGORIES: EmojiCategory[] = [
 
 export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('smileys');
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const allEmojis = useMemo(() => {
+    const unique = new Map<string, EmojiEntry>();
+    for (const category of CATEGORIES) {
+      for (const entry of category.emojis) unique.set(entry[0], entry);
+    }
+    return Array.from(unique.values());
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const selected = CATEGORIES.find((c) => c.id === category)?.emojis ?? [];
-    if (!q) return selected;
-    return CATEGORIES.flatMap((c) => c.emojis).filter(([emoji, tags]) => emoji.includes(q) || tags.toLowerCase().includes(q));
-  }, [query, category]);
+    if (!q) return allEmojis;
+    return allEmojis.filter(([emoji, tags]) => emoji.includes(q) || tags.toLowerCase().includes(q));
+  }, [allEmojis, query]);
+
+  const stride = 44;
+  const visibleStart = filtered.length
+    ? Math.min(filtered.length, Math.floor(scrollLeft / stride) + 1)
+    : 0;
+  const visibleEnd = filtered.length && listRef.current
+    ? Math.min(filtered.length, Math.max(visibleStart, Math.ceil((scrollLeft + listRef.current.clientWidth) / stride)))
+    : filtered.length;
+  const maxScroll = listRef.current
+    ? Math.max(0, listRef.current.scrollWidth - listRef.current.clientWidth)
+    : 0;
+  const progress = maxScroll > 0 ? Math.min(100, Math.round((scrollLeft / maxScroll) * 100)) : 100;
 
   return (
     <div className="glass-panel w-[min(25rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/40 backdrop-blur-2xl animate-scale-in" data-emoji-picker>
@@ -103,7 +123,11 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
         <Search size={14} className="shrink-0 text-t-secondary" />
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setScrollLeft(0);
+            if (listRef.current) listRef.current.scrollLeft = 0;
+          }}
           placeholder="Поиск эмодзи"
           className="min-w-0 flex-1 bg-transparent text-sm text-t-primary placeholder-slate-500 focus:outline-none"
         />
@@ -111,29 +135,31 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
           <X size={14} />
         </button>
       </div>
-      {!query && (
-        <div className="flex gap-1.5 overflow-x-auto border-b border-white/[0.08] bg-white/[0.02] px-2.5 py-2 custom-scrollbar">
-          {CATEGORIES.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setCategory(c.id)}
-              className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] transition-all duration-200 ${category === c.id ? 'bg-accent/15 text-accent ring-1 ring-accent/20' : 'text-t-secondary hover:bg-white/[0.06] hover:text-t-primary'}`}
-            >
-              {c.name}
-            </button>
-          ))}
+      <div className="border-b border-white/[0.08] px-3 py-2.5">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-t-secondary">
+          <span>{filtered.length ? `Эмодзи ${visibleStart}–${visibleEnd} из ${filtered.length}` : 'Эмодзи не найдены'}</span>
+          <span className="shrink-0 tabular-nums">{progress}%</span>
         </div>
-      )}
-      <div className="custom-scrollbar grid max-h-[min(24rem,55vh)] grid-cols-8 gap-1 overflow-y-auto p-2.5">
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label="Позиция в списке эмодзи" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+          <div className="h-full rounded-full bg-accent transition-[width] duration-100" style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+      <div
+        ref={listRef}
+        onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
+        className="custom-scrollbar flex max-w-full gap-1 overflow-x-auto overflow-y-hidden p-2.5"
+        aria-label="Все эмодзи. Прокручивайте по горизонтали"
+        role="list"
+      >
         {filtered.map(([emoji]: [string, string]) => (
           <button
             key={emoji}
             type="button"
+            role="listitem"
             onClick={() => onPick(emoji)}
             aria-label={emoji}
             title={emoji}
-            className="grid aspect-square min-w-0 place-items-center rounded-xl text-[1.45rem] leading-none transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
             <img
               src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`}
@@ -144,7 +170,11 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
             />
           </button>
         ))}
-        {!filtered.length && <p className="col-span-8 py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
+        {!filtered.length && <p className="w-full py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
+      </div>
+      <div className="flex items-center justify-between border-t border-white/[0.08] px-3 py-2 text-[10px] text-t-secondary">
+        <span>Прокручивайте список по горизонтали</span>
+        <span>← →</span>
       </div>
     </div>
   );
