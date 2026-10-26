@@ -44,11 +44,34 @@ for (let cp = 0x2300; cp <= 0x1FAFF; cp += 1) {
     for (const tone of SKIN_TONES) addGeneratedEmoji(emoji + tone, 'gestures', `emoji skin tone ${cp.toString(16)}`);
   }
 }
-for (let first = 0x1F1E6; first <= 0x1F1FF; first += 1) {
-  for (let second = 0x1F1E6; second <= 0x1F1FF; second += 1) {
-    addGeneratedEmoji(String.fromCodePoint(first, second), 'flags', 'flag country region');
-  }
+// Only create real ISO 3166-1 country/territory flags. Generating every
+// possible regional-indicator pair creates unsupported combinations that
+// appear as two plain letters on many systems.
+const FLAG_CODES = (
+  'AC AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ ' +
+  'BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ ' +
+  'CA CC CD CF CG CH CI CK CL CM CN CO CP CR CU CV CW CX CY CZ ' +
+  'DE DG DJ DK DM DO DZ EA EC EE EG EH ER ES ET EU FI FJ FK FM FO FR ' +
+  'GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY ' +
+  'HK HM HN HR HT HU IC ID IE IL IM IN IO IQ IR IS IT JE JM JO JP ' +
+  'KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY ' +
+  'MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY ' +
+  'MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM ' +
+  'PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK ' +
+  'SL SM SN SO SR SS ST SV SX SY SZ TA TC TD TF TG TH TJ TK TL TM TN ' +
+  'TO TR TT TV TW TZ UA UG UM UN US UY UZ VA VC VE VG VI VN VU WF WS ' +
+  'XK YE YT ZA ZM ZW'
+).split(/\s+/);
+for (const code of FLAG_CODES) {
+  const points = [...code].map((letter) => 0x1F1E6 + letter.charCodeAt(0) - 65);
+  addGeneratedEmoji(String.fromCodePoint(...points), 'flags', `flag ${code.toLowerCase()} country region`);
 }
+
+const emojiAssetCode = (emoji: string): string =>
+  Array.from(emoji, (character) => character.codePointAt(0)!)
+    .filter((codePoint) => codePoint !== 0xFE0F)
+    .map((codePoint) => codePoint.toString(16))
+    .join('-');
 for (const key of ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '#', '*']) {
   addGeneratedEmoji(key + '\uFE0F\u20E3', 'symbols', `keycap ${key}`);
 }
@@ -108,9 +131,17 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
             key={emoji}
             type="button"
             onClick={() => onPick(emoji)}
+            aria-label={emoji}
+            title={emoji}
             className="grid aspect-square min-w-0 place-items-center rounded-xl text-[1.45rem] leading-none transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
-            {emoji}
+            <img
+              src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`}
+              alt={emoji}
+              draggable={false}
+              loading="lazy"
+              className="h-[1.45rem] w-[1.45rem] object-contain"
+            />
           </button>
         ))}
         {!filtered.length && <p className="col-span-8 py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
