@@ -259,10 +259,38 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
   const chatSettingsMenuRef = useRef<HTMLDivElement>(null);
   const chatSettingsButtonRef = useRef<HTMLButtonElement>(null);
+  const emojiPickerWrapperRef = useRef<HTMLDivElement>(null);
+  const quickRepliesWrapperRef = useRef<HTMLDivElement>(null);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
   const voiceRecordingCancelledRef = useRef(false);
+
+  useEffect(() => {
+    if (!showEmojiPicker && !quickRepliesOpen) return;
+
+    const handleOutsidePopoverPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (showEmojiPicker && emojiPickerWrapperRef.current?.contains(target)) return;
+      if (quickRepliesOpen && quickRepliesWrapperRef.current?.contains(target)) return;
+      setShowEmojiPicker(false);
+      setQuickRepliesOpen(false);
+    };
+    const handlePopoverEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowEmojiPicker(false);
+        setQuickRepliesOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePopoverPointerDown);
+    document.addEventListener('keydown', handlePopoverEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePopoverPointerDown);
+      document.removeEventListener('keydown', handlePopoverEscape);
+    };
+  }, [showEmojiPicker, quickRepliesOpen]);
 
   useEffect(() => {
     if (!chatSettingsOpen) return;
@@ -2026,7 +2054,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                 </div>
               )}
                <form ref={messageFormRef} onSubmit={handleSend} className="glass-panel p-1.5 sm:p-2 rounded-2xl flex items-end gap-1 sm:gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-accent/30 transition-all">
-                 <div className="relative">
+                 <div ref={emojiPickerWrapperRef} className="relative">
                    <button type="button" onClick={() => setShowEmojiPicker((v) => !v)} className={`p-2.5 rounded-xl transition-all ${showEmojiPicker ? 'text-accent bg-accent/10' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title="Эмодзи" aria-label="Эмодзи" aria-expanded={showEmojiPicker}>
                      <Smile size={19} />
                    </button>
@@ -2039,7 +2067,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                  <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={sending} className="p-2.5 rounded-xl text-t-secondary hover:text-slate-200 hover:bg-slate-800/80 transition-all disabled:opacity-50" title="Прикрепить изображение или файл" aria-label="Прикрепить файл">
                    <Paperclip size={19} />
                  </button>
-                  <div className="relative">
+                  <div ref={quickRepliesWrapperRef} className="relative">
                     <button type="button" onClick={() => { setQuickRepliesOpen((open) => !open); if (!quickReplies.length) void loadQuickReplies(); }} disabled={sending} className={`p-2.5 rounded-xl transition-all ${quickRepliesOpen ? 'text-accent bg-accent/10' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title="Быстрые ответы" aria-label="Быстрые ответы" aria-expanded={quickRepliesOpen}><Zap size={18} /></button>
                     {quickRepliesOpen && <div className="absolute bottom-full left-0 z-40 mb-2 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-xl"><div className="flex items-center justify-between px-2 py-1.5"><span className="text-xs font-semibold text-slate-200">Быстрые ответы</span><button type="button" onClick={() => void handleSaveQuickReply()} className="text-[10px] font-medium text-accent hover:underline">Сохранить текст</button></div>{quickRepliesLoading ? <p className="px-2 py-3 text-xs text-slate-500">Загрузка…</p> : quickReplies.length ? quickReplies.map((reply) => <button key={reply.id} type="button" onClick={() => { handleTextChange(reply.text); setQuickRepliesOpen(false); textInputRef.current?.focus(); }} className="block w-full rounded-xl px-2.5 py-2 text-left transition hover:bg-white/[0.07]"><span className="block truncate text-xs font-medium text-slate-200">{reply.emoji ? `${reply.emoji} ` : ''}{reply.title}</span><span className="mt-0.5 block truncate text-[10px] text-slate-500">{reply.text}</span></button>) : <p className="px-2 py-3 text-xs text-slate-500">Нет сохранённых ответов. Введите текст и нажмите «Сохранить текст».</p>}</div>}
                   </div>
