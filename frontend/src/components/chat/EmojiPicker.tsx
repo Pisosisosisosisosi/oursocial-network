@@ -205,7 +205,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                 onClick={() => selectCategory(category.id)}
                 className={`grid h-9 w-10 shrink-0 place-items-center rounded-lg text-lg transition-colors ${activeCategory === category.id ? 'bg-accent/20 text-accent' : 'text-t-secondary hover:bg-white/[0.08] hover:text-t-primary'}`}
               >
-                <img src={`/emoji-category-icons/${emojiAssetCode(category.icon)}.svg`} alt="" aria-hidden="true" draggable={false} className="h-5 w-5 object-contain" />
+                <span aria-hidden="true" className="h-5 w-5 bg-current" style={{ maskImage: `url(/emoji-category-icons/${emojiAssetCode(category.icon)}.svg)`, WebkitMaskImage: `url(/emoji-category-icons/${emojiAssetCode(category.icon)}.svg)`, maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat", maskPosition: "center", WebkitMaskPosition: "center", maskSize: "contain", WebkitMaskSize: "contain" }} />
               </button>
             ))}
           </div>
