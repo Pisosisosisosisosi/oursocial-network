@@ -1439,7 +1439,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     if (Math.abs(left - messageMenuPosition.x) > 1 || Math.abs(top - messageMenuPosition.y) > 1) {
       setMessageMenuPosition({ x: left, y: top });
     }
-  }, [openMessageMenu, messageMenuAnchorPosition.x, messageMenuAnchorPosition.y]);
+  }, [openMessageMenu, messageMenuAnchorPosition.x, messageMenuAnchorPosition.y, messageMenuPosition.x, messageMenuPosition.y]);
 
   const showMessageMenu = (messageId: string, x: number, y: number) => {
     if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
@@ -2163,7 +2163,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
             onAnimationEnd={(event) => {
               if (messageMenuClosing && event.currentTarget === event.target) setOpenMessageMenu(null);
             }}
-            className={`message-action-menu fixed z-[100] w-52 rounded-2xl border border-white/10 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
+            className={`message-action-menu fixed z-[100] max-h-[calc(100dvh-16px)] w-52 overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
             style={position}
           >
             <div className="message-reaction-picker mb-2 rounded-xl bg-white/[0.035] p-1.5">
