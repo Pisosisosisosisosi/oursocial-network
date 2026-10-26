@@ -1453,6 +1453,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
 
   const showMessageMenu = (messageId: string, x: number, y: number) => {
     if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
+    setShowAllMessageReactions(false);
     setMessageMenuClosing(false);
     setOpenMessageMenu(messageId);
     setMessageMenuAnchorPosition({ x, y });
