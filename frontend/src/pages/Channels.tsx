@@ -98,6 +98,14 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const voiceCancelledRef = useRef(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => () => {
+    voiceCancelledRef.current = true;
+    voiceChunksRef.current = [];
+    const recorder = voiceRecorderRef.current;
+    voiceRecorderRef.current = null;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  }, []);
   const [inviteLink, setInviteLink] = useState('');
   const [membersOpen, setMembersOpen] = useState(false);
   const [channelMembers, setChannelMembers] = useState<ChannelMember[]>([]);
