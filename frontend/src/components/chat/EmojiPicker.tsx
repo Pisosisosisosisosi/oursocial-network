@@ -111,11 +111,11 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
     : 0;
   const visibleEnd = filtered.length && listRef.current
     ? Math.min(filtered.length, Math.max(visibleStart, Math.ceil((scrollLeft + listRef.current.clientWidth) / stride)))
-    : filtered.length;
+    : Math.min(filtered.length, 7);
   const maxScroll = listRef.current
     ? Math.max(0, listRef.current.scrollWidth - listRef.current.clientWidth)
     : 0;
-  const progress = maxScroll > 0 ? Math.min(100, Math.round((scrollLeft / maxScroll) * 100)) : 100;
+  const progress = listRef.current ? (maxScroll > 0 ? Math.min(100, Math.round((scrollLeft / maxScroll) * 100)) : 100) : 0;
 
   return (
     <div className="glass-panel w-[min(25rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/40 backdrop-blur-2xl animate-scale-in" data-emoji-picker>
