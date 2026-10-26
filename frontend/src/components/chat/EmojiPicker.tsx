@@ -13,8 +13,8 @@ const BASE_CATEGORIES: EmojiCategory[] = [
   { id: 'symbols', name: 'Символы', emojis: [['❤️', 'сердце love red heart'], ['💙', 'синее сердце blue'], ['💚', 'зеленое сердце green'], ['💛', 'желтое сердце yellow'], ['💜', 'фиолетовое сердце purple'], ['🔥', 'огонь fire hot'], ['✨', 'блеск sparkles'], ['🎉', 'праздник tada party'], ['🎊', 'конфетти confetti'], ['💯', '100 сто hundred'], ['✅', 'галочка check done'], ['⭐', 'звезда star'], ['🌙', 'луна moon'], ['☀️', 'солнце sun'], ['🌈', 'радуга rainbow'], ['💤', 'сплю zzz'], ['⚡', 'молния zap'], ['🆒', 'круто cool']] },
 ];
 
-const isEmojiPresentation = /\\p{Emoji_Presentation}/u;
-const isEmojiModifierBase = /\\p{Emoji_Modifier_Base}/u;
+const isEmojiPresentation = /\p{Emoji_Presentation}/u;
+const isEmojiModifierBase = /\p{Emoji_Modifier_Base}/u;
 const SKIN_TONES = ['🏻', '🏼', '🏽', '🏾', '🏿'];
 const categoryForCodePoint = (cp: number): string => {
   if ((cp >= 0x1F600 && cp <= 0x1F64F) || (cp >= 0x1F910 && cp <= 0x1F92F) || (cp >= 0x1F970 && cp <= 0x1F97A) || (cp >= 0x1FAE0 && cp <= 0x1FAE8)) return 'smileys';
@@ -50,7 +50,7 @@ for (let first = 0x1F1E6; first <= 0x1F1FF; first += 1) {
   }
 }
 for (const key of ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '#', '*']) {
-  addGeneratedEmoji(key + '\\uFE0F\\u20E3', 'symbols', `keycap ${key}`);
+  addGeneratedEmoji(key + '\uFE0F\u20E3', 'symbols', `keycap ${key}`);
 }
 const CATEGORIES: EmojiCategory[] = [
   ...BASE_CATEGORIES.map((category) => ({
