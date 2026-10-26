@@ -1714,7 +1714,6 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>
                   </div>
-                  </div>
                 </div>
               </div>
               {activePinnedMessage && (
