@@ -92,7 +92,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
   const [categoryScrollLeft, setCategoryScrollLeft] = useState(0);
   const categoryStripRef = useRef<HTMLDivElement>(null);
   const emojiListRef = useRef<HTMLDivElement>(null);
-  const categorySectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const categorySectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const dragRef = useRef<{ startX: number; startScrollLeft: number } | null>(null);
 
   const allEmojis = useMemo(() => {
