@@ -91,6 +91,8 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]?.id ?? 'smileys');
   const [categoryScrollLeft, setCategoryScrollLeft] = useState(0);
   const categoryStripRef = useRef<HTMLDivElement>(null);
+  const emojiListRef = useRef<HTMLDivElement>(null);
+  const categorySectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const dragRef = useRef<{ startX: number; startScrollLeft: number } | null>(null);
 
   const allEmojis = useMemo(() => {
@@ -103,9 +105,18 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (q) return allEmojis.filter(([emoji, tags]) => emoji.includes(q) || tags.toLowerCase().includes(q));
-    return CATEGORIES.find((category) => category.id === activeCategory)?.emojis ?? allEmojis;
-  }, [activeCategory, allEmojis, query]);
+    if (!q) return allEmojis;
+    return allEmojis.filter(([emoji, tags]) => emoji.includes(q) || tags.toLowerCase().includes(q));
+  }, [allEmojis, query]);
+
+  const selectCategory = (categoryId: string) => {
+    setActiveCategory(categoryId);
+    const list = emojiListRef.current;
+    const section = categorySectionRefs.current[categoryId];
+    if (list && section) {
+      list.scrollTo({ top: section.offsetTop, behavior: 'smooth' });
+    }
+  };
 
   const handleCategoryMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 1 || !categoryStripRef.current) return;
@@ -170,7 +181,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                 type="button"
                 role="tab"
                 aria-selected={activeCategory === category.id}
-                onClick={() => setActiveCategory(category.id)}
+                onClick={() => selectCategory(category.id)}
                 className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-colors ${activeCategory === category.id ? 'bg-accent/20 text-accent' : 'text-t-secondary hover:bg-white/[0.08] hover:text-t-primary'}`}
               >
                 {category.name}
@@ -187,30 +198,51 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
           Результаты поиска: {filtered.length}
         </div>
       )}
-      <div className="custom-scrollbar grid max-h-60 grid-cols-8 gap-1 overflow-y-auto p-2.5" aria-label={query.trim() ? 'Результаты поиска эмодзи' : 'Эмодзи выбранной категории'} role="list">
-        {filtered.map(([emoji, tags]) => (
-          <button
-            key={emoji}
-            type="button"
-            role="listitem"
-            onClick={() => onPick(emoji)}
-            aria-label={tags || emoji}
-            title={tags || emoji}
-            className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-          >
-            <img
-              src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`}
-              alt={emoji}
-              draggable={false}
-              loading="lazy"
-              className="h-[1.45rem] w-[1.45rem] object-contain"
-            />
-          </button>
-        ))}
-        {!filtered.length && <p className="col-span-8 py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
+      <div ref={emojiListRef} className="custom-scrollbar max-h-60 overflow-y-auto p-2.5" aria-label={query.trim() ? 'Результаты поиска эмодзи' : 'Все эмодзи по категориям'}>
+        {query.trim() ? (
+          <div className="grid grid-cols-8 gap-1" role="list">
+            {filtered.map(([emoji, tags]) => (
+              <button
+                key={emoji}
+                type="button"
+                role="listitem"
+                onClick={() => onPick(emoji)}
+                aria-label={tags || emoji}
+                title={tags || emoji}
+                className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              >
+                <img src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`} alt={emoji} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
+              </button>
+            ))}
+            {!filtered.length && <p className="col-span-8 py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {CATEGORIES.map((category) => (
+              <section key={category.id} ref={(node) => { categorySectionRefs.current[category.id] = node; }} aria-label={category.name}>
+                <h3 className="mb-1.5 px-1 text-[11px] font-semibold text-t-secondary">{category.name}</h3>
+                <div className="grid grid-cols-8 gap-1" role="list">
+                  {category.emojis.map(([emoji, tags]) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      role="listitem"
+                      onClick={() => onPick(emoji)}
+                      aria-label={tags || emoji}
+                      title={tags || emoji}
+                      className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                    >
+                      <img src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`} alt={emoji} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex items-center justify-between border-t border-white/[0.08] px-3 py-2 text-[10px] text-t-secondary">
-        <span>{query.trim() ? 'Ищите по названию или ключевому слову' : 'Категории можно прокручивать СКМ'}</span>
+        <span>{query.trim() ? 'Ищите по названию или ключевому слову' : 'Категории — переходы по общему списку'}</span>
         <span>{filtered.length} эмодзи</span>
       </div>
     </div>
