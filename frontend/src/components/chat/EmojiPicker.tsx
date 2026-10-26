@@ -93,7 +93,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
   const categoryStripRef = useRef<HTMLDivElement>(null);
   const emojiListRef = useRef<HTMLDivElement>(null);
   const categorySectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  const dragRef = useRef<{ startX: number; startScrollLeft: number } | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean } | null>(null);
 
   const allEmojis = useMemo(() => {
     const unique = new Map<string, EmojiEntry>();
@@ -137,24 +137,34 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
     setActiveCategory((current) => current === nextCategory ? current : nextCategory);
   };
 
-  const handleCategoryMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleCategoryPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 1 || !categoryStripRef.current) return;
     event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
+      pointerId: event.pointerId,
       startX: event.clientX,
       startScrollLeft: categoryStripRef.current.scrollLeft,
+      moved: false,
     };
   };
 
-  const handleCategoryMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!dragRef.current || !categoryStripRef.current) return;
+  const handleCategoryPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !categoryStripRef.current) return;
     event.preventDefault();
-    const deltaX = event.clientX - dragRef.current.startX;
-    categoryStripRef.current.scrollLeft = dragRef.current.startScrollLeft - deltaX;
+    const deltaX = event.clientX - drag.startX;
+    if (Math.abs(deltaX) > 3) drag.moved = true;
+    categoryStripRef.current.scrollLeft = drag.startScrollLeft - deltaX;
   };
 
-  const stopCategoryDrag = () => {
+  const stopCategoryDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return;
+    event.preventDefault();
     dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   const categoryMaxScroll = categoryStripRef.current
@@ -183,10 +193,11 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
           <div
             ref={categoryStripRef}
             onScroll={(event) => setCategoryScrollLeft(event.currentTarget.scrollLeft)}
-            onMouseDown={handleCategoryMouseDown}
-            onMouseMove={handleCategoryMouseMove}
-            onMouseUp={stopCategoryDrag}
-            onMouseLeave={stopCategoryDrag}
+            onPointerDown={handleCategoryPointerDown}
+            onPointerMove={handleCategoryPointerMove}
+            onPointerUp={stopCategoryDrag}
+            onPointerCancel={stopCategoryDrag}
+            onLostPointerCapture={() => { dragRef.current = null; }}
             onAuxClick={(event) => {
               if (event.button === 1) event.preventDefault();
             }}
