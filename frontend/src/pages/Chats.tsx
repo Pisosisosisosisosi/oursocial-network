@@ -53,8 +53,8 @@ const ALLOWED_ATTACHMENT_TYPES = new Set([
 
 function highlightText(text: string, query: string) {
   if (!query.trim()) return text;
-  const escapedQuery = query.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
-  return text.split(new RegExp(\`(\${escapedQuery})\`, 'ig')).map((part, index) =>
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.split(new RegExp('(' + escapedQuery + ')', 'ig')).map((part, index) =>
     part.toLocaleLowerCase().includes(query.toLocaleLowerCase())
       ? <mark key={index} className="rounded bg-amber-300/30 text-inherit">{part}</mark>
       : part,
@@ -71,22 +71,23 @@ function renderTextWithFlags(text: string, query: string) {
     const flag = match[0];
     const code = Array.from(flag, (character) => character.codePointAt(0)! - 0x1F1E6 + 97)
       .map((value) => String.fromCharCode(value)).join('');
+    const assetCode = Array.from(flag, (character) => character.codePointAt(0)!.toString(16)).join('-');
     parts.push(
       <img
-        key={\`flag-\${index}-\${code}\`}
-        src={\`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/\${Array.from(flag, (character) => character.codePointAt(0)!.toString(16)).join('-')}.svg\`}
+        key={'flag-' + index + '-' + code}
+        src={'https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/' + assetCode + '.svg'}
         onError={(event) => {
           const image = event.currentTarget;
           if (image.dataset.fallback !== 'true') {
             image.dataset.fallback = 'true';
-            image.src = \`https://flagcdn.com/w40/\${code}.png\`;
+            image.src = 'https://flagcdn.com/w40/' + code + '.png';
           } else {
             image.style.display = 'none';
           }
         }}
         alt={code.toUpperCase()}
         title={code.toUpperCase()}
-        aria-label={\`Флаг \${code.toUpperCase()}\`}
+        aria-label={'Флаг ' + code.toUpperCase()}
         className="mx-0.5 inline-block h-[1.15em] w-[1.5em] align-[-0.15em] object-contain"
         draggable={false}
       />,
@@ -96,7 +97,6 @@ function renderTextWithFlags(text: string, query: string) {
   if (lastIndex < text.length) parts.push(highlightText(text.slice(lastIndex), query));
   return parts.length ? parts : highlightText(text, query);
 }
-
 function formatLastSeen(value?: string | null) {
   if (!value) return 'Не в сети';
 
