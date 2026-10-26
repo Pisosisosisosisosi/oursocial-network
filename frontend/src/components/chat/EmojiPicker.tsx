@@ -38,6 +38,10 @@ const addGeneratedEmoji = (emoji: string, categoryId: string, tags = 'emoji symb
 for (let cp = 0x2300; cp <= 0x1FAFF; cp += 1) {
   const emoji = String.fromCodePoint(cp);
   if (!isEmojiPresentation.test(emoji)) continue;
+  // A single regional indicator is a letter, not a complete country flag.
+  // Keep regional indicators out of the generated emoji list; valid two-letter
+  // flags are added explicitly from FLAG_CODES below.
+  if (cp >= 0x1F1E6 && cp <= 0x1F1FF) continue;
   const categoryId = categoryForCodePoint(cp);
   addGeneratedEmoji(emoji, categoryId, `emoji ${cp.toString(16)}`);
   if (isEmojiModifierBase.test(emoji)) {
@@ -91,7 +95,16 @@ const emojiImageSource = (emoji: string): string => {
 
 const handleEmojiImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
   const image = event.currentTarget;
-  if (image.dataset.fallback !== 'true') {
+  const countryCode = image.dataset.countryCode;
+  const fallback = Number(image.dataset.fallback ?? '0');
+
+  // Keep flag rendering independent from the host OS emoji font.
+  if (countryCode && fallback === 0) {
+    image.dataset.fallback = '1';
+    image.src = `https://cdn.jsdelivr.net/npm/country-flag-icons@1.5.15/3x2/${countryCode.toUpperCase()}.svg`;
+    return;
+  }
+  if (image.dataset.fallback !== 'true' && (!countryCode || fallback === 1)) {
     image.dataset.fallback = 'true';
     const emoji = image.dataset.emoji;
     if (emoji) {
@@ -307,7 +320,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                 title={tags || emoji}
                 className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
               >
-                <img src={emojiImageSource(emoji)} data-emoji={emoji} alt="" aria-hidden="true" onError={handleEmojiImageError} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
+                <img src={emojiImageSource(emoji)} data-emoji={emoji} data-country-code={flagCountryCode(emoji) ?? undefined} alt="" aria-hidden="true" onError={handleEmojiImageError} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
               </button>
             ))}
             {!filtered.length && <p className="col-span-8 py-4 text-center text-xs text-t-secondary">Ничего не найдено</p>}
@@ -328,7 +341,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                       title={tags || emoji}
                       className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
                     >
-                      <img src={emojiImageSource(emoji)} data-emoji={emoji} alt="" aria-hidden="true" onError={handleEmojiImageError} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
+                      <img src={emojiImageSource(emoji)} data-emoji={emoji} data-country-code={flagCountryCode(emoji) ?? undefined} alt="" aria-hidden="true" onError={handleEmojiImageError} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
                     </button>
                   )) : <p className="col-span-8 px-1 py-2 text-xs text-t-secondary">Здесь появятся 15 последних использованных эмодзи</p>}
                 </div>
