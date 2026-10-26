@@ -241,7 +241,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
           <div className="space-y-3">
             {CATEGORIES.map((category) => (
               <section key={category.id} ref={(node) => { categorySectionRefs.current[category.id] = node; }} aria-label={category.name}>
-                <h3 className="mb-1.5 px-1 text-[11px] font-semibold text-t-secondary">{category.name}</h3>
+                <h3 className="mb-1.5 px-1 text-base" aria-label={category.name} title={category.name}>{category.icon}</h3>
                 <div className="grid grid-cols-8 gap-1" role="list">
                   {category.emojis.map(([emoji, tags]) => (
                     <button
