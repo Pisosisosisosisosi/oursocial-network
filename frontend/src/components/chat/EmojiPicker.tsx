@@ -114,7 +114,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
     const list = emojiListRef.current;
     const section = categorySectionRefs.current[categoryId];
     if (list && section) {
-      list.scrollTo({ top: section.offsetTop - list.offsetTop, behavior: 'smooth' });
+      list.scrollTo({ top: section.offsetTop, behavior: 'smooth' });
     }
   };
 
