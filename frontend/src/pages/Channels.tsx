@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Bell, Check, Copy, Download, FileText, Hash, LockKeyhole, Paperclip, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Copy, Download, FileText, Hash, LockKeyhole, Mic, Paperclip, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
 import VoiceMessagePlayer from '../components/chat/VoiceMessagePlayer';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -92,8 +92,20 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [draft, setDraft] = useState('');
   const [postAttachment, setPostAttachment] = useState<File | null>(null);
+  const [recordingVoice, setRecordingVoice] = useState(false);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const voiceCancelledRef = useRef(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => () => {
+    voiceCancelledRef.current = true;
+    voiceChunksRef.current = [];
+    const recorder = voiceRecorderRef.current;
+    voiceRecorderRef.current = null;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  }, []);
   const [inviteLink, setInviteLink] = useState('');
   const [membersOpen, setMembersOpen] = useState(false);
   const [channelMembers, setChannelMembers] = useState<ChannelMember[]>([]);
@@ -378,9 +390,73 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     }
   };
 
+  const startVoiceRecording = async () => {
+    if (recordingVoice || busy) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      showToast('Запись голосовых сообщений не поддерживается этим браузером.', 'error');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ['audio/webm', 'audio/ogg', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      voiceChunksRef.current = [];
+      voiceCancelledRef.current = false;
+      recorder.ondataavailable = (event) => { if (event.data.size) voiceChunksRef.current.push(event.data); };
+      recorder.onerror = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoice(false);
+        showToast('Не удалось записать голосовое сообщение.', 'error');
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setRecordingVoice(false);
+        if (voiceCancelledRef.current) {
+          voiceChunksRef.current = [];
+          voiceCancelledRef.current = false;
+          return;
+        }
+        const type = (recorder.mimeType || 'audio/webm').split(';')[0];
+        const blob = new Blob(voiceChunksRef.current, { type });
+        voiceChunksRef.current = [];
+        if (!blob.size) return;
+        if (blob.size > 2 * 1024 * 1024) {
+          showToast('Запись больше 2 МБ. Запишите голосовое покороче.', 'error');
+          return;
+        }
+        const extension = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
+        setPostAttachment(new File([blob], `voice-message.${extension}`, { type }));
+        showToast('Голосовое готово к публикации. Можно добавить текст или сразу опубликовать.', 'success');
+      };
+      voiceRecorderRef.current = recorder;
+      recorder.start();
+      setRecordingVoice(true);
+      showToast('Запись началась. Нажмите галочку для завершения или крестик для отмены.', 'info');
+    } catch {
+      showToast('Нет доступа к микрофону. Разрешите его в браузере.', 'error');
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current;
+    voiceRecorderRef.current = null;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  };
+
+  const cancelVoiceRecording = () => {
+    const recorder = voiceRecorderRef.current;
+    voiceCancelledRef.current = true;
+    voiceChunksRef.current = [];
+    voiceRecorderRef.current = null;
+    setRecordingVoice(false);
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    else voiceCancelledRef.current = false;
+    showToast('Запись голосового сообщения отменена.', 'info');
+  };
+
   const publishPost = async (event: FormEvent) => {
     event.preventDefault();
-    if (!activeChannel || (!draft.trim() && !postAttachment) || busy) return;
+    if (!activeChannel || recordingVoice || (!draft.trim() && !postAttachment) || busy) return;
     setBusy(true);
     try {
       let attachmentPayload: { fileName?: string; contentType?: string; fileData?: string } = {};
@@ -655,10 +731,13 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
           {activeChannel.isOwner && <form onSubmit={(event) => void publishPost(event)} className="glass-panel relative z-10 mx-3 mb-3 mt-2 rounded-2xl p-1.5 shadow-2xl transition-all focus-within:ring-2 focus-within:ring-accent/30 sm:mx-5 sm:p-2">
             {postAttachment && <div className="mx-auto mb-1 flex max-w-2xl items-center gap-2 rounded-xl border border-accent/20 bg-accent/[0.06] px-3 py-2"><Paperclip size={14} className="shrink-0 text-accent" /><span className="min-w-0 flex-1 truncate text-[11px] text-t-primary">{postAttachment.name} <span className="text-t-secondary">· {(postAttachment.size / 1024 / 1024).toFixed(2)} МБ</span></span><button type="button" onClick={() => setPostAttachment(null)} aria-label="Убрать вложение" className="rounded-lg p-1 text-t-secondary hover:bg-white/5 hover:text-rose-300"><X size={14} /></button></div>}
             <div className="mx-auto flex max-w-2xl items-end gap-2">
+              {recordingVoice && <div className="flex min-h-10 flex-1 items-center gap-2 rounded-xl bg-rose-500/10 px-3 text-sm text-rose-300"><span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />Идёт запись голосового…</div>}
               <input ref={attachmentInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,application/zip,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav" className="hidden" onChange={(event) => { const file = event.target.files?.[0] || null; event.target.value = ''; if (!file) return; if (file.size > 2 * 1024 * 1024) { showToast('Размер вложения не должен превышать 2 МБ.', 'error'); return; } setPostAttachment(file); }} />
-              <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={busy} aria-label="Прикрепить файл к публикации" title="Фото, аудио или файл до 2 МБ" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-t-secondary transition hover:bg-white/[0.06] hover:text-accent disabled:opacity-40"><Paperclip size={17} /></button>
-              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={10_000} rows={1} placeholder="Напишите публикацию или прикрепите файл…" className="max-h-36 min-h-10 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-600" />
-              <button type="submit" disabled={busy || (!draft.trim() && !postAttachment)} aria-label="Опубликовать" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{busy ? <span className="h-4 w-4 animate-spin rounded-full border border-white/40 border-t-white" /> : <Send size={16} />}</button>
+              <button type="button" onClick={() => attachmentInputRef.current?.click()} disabled={busy || recordingVoice} aria-label="Прикрепить файл к публикации" title="Фото, аудио или файл до 2 МБ" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-t-secondary transition hover:bg-white/[0.06] hover:text-accent disabled:opacity-40"><Paperclip size={17} /></button>
+              <textarea value={draft} onChange={(event) => setDraft(event.target.value)} disabled={recordingVoice} maxLength={10_000} rows={1} placeholder="Напишите публикацию или прикрепите файл…" className="max-h-36 min-h-10 flex-1 resize-y bg-transparent px-2 py-2 text-sm leading-5 text-t-primary outline-none placeholder:text-slate-600" />
+              <button type="button" onClick={() => { if (recordingVoice) stopVoiceRecording(); else void startVoiceRecording(); }} disabled={busy || (!!postAttachment && !recordingVoice)} aria-label={recordingVoice ? "Завершить запись голосового сообщения" : "Записать голосовое сообщение"} title={recordingVoice ? "Завершить запись" : "Записать голосовое"} className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl transition disabled:cursor-not-allowed disabled:opacity-40 ${recordingVoice ? "bg-emerald-500 text-white hover:bg-emerald-400" : "text-t-secondary hover:bg-white/[0.06] hover:text-accent"}`}>{recordingVoice ? <Check size={16} /> : <Mic size={17} />}</button>
+              {recordingVoice && <button type="button" onClick={cancelVoiceRecording} aria-label="Отменить запись голосового сообщения" title="Отменить запись" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-rose-300 transition hover:bg-rose-500/10"><X size={17} /></button>}
+              <button type="submit" disabled={busy || recordingVoice || (!draft.trim() && !postAttachment)} aria-label="Опубликовать" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">{busy ? <span className="h-4 w-4 animate-spin rounded-full border border-white/40 border-t-white" /> : <Send size={16} />}</button>
             </div>
           </form>}
         </>}
