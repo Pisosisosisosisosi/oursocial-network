@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Bell, Check, Copy, Download, FileText, Hash, LockKeyhole, Mic, Paperclip, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Copy, Download, FileText, Hash, LockKeyhole, Mic, Paperclip, Pencil, Pin, Plus, Radio, Search, Send, Settings, Share2, Trash2, Users, X } from 'lucide-react';
 import VoiceMessagePlayer from '../components/chat/VoiceMessagePlayer';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -92,6 +92,9 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [draft, setDraft] = useState('');
   const [postAttachment, setPostAttachment] = useState<File | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editPostDraft, setEditPostDraft] = useState('');
+  const [savingPostEdit, setSavingPostEdit] = useState(false);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
@@ -524,6 +527,36 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
     }
   };
 
+  const beginEditPost = (post: ChannelPost) => {
+    setEditingPostId(post.id);
+    setEditPostDraft(post.text);
+  };
+
+  const cancelEditPost = () => {
+    setEditingPostId(null);
+    setEditPostDraft('');
+  };
+
+  const savePostEdit = async (post: ChannelPost) => {
+    if (!activeChannel || !editingPostId || savingPostEdit) return;
+    if (!editPostDraft.trim() && !post.fileData) {
+      showToast('Добавьте текст или вложение в публикацию.', 'error');
+      return;
+    }
+    setSavingPostEdit(true);
+    try {
+      const response = await api.patch<ChannelPost>(`/channels/${activeChannel.id}/posts/${post.id}`, { text: editPostDraft });
+      setPosts((current) => sortChannelPosts(current.map((item) => item.id === post.id ? response.data : item)));
+      cancelEditPost();
+      showToast('Публикация обновлена.', 'success');
+    } catch (error) {
+      console.error('Не удалось изменить публикацию:', error);
+      showToast('Не удалось изменить публикацию.', 'error');
+    } finally {
+      setSavingPostEdit(false);
+    }
+  };
+
   const deletePost = async (post: ChannelPost) => {
     if (!activeChannel || !window.confirm('Удалить эту публикацию?')) return;
     try {
@@ -709,11 +742,18 @@ export default function Channels({ embedded = false }: { embedded?: boolean } = 
                       <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-semibold">{activeChannel.title}</p></div>
                       <button type="button" onClick={() => void copyPostText(post)} title="Скопировать текст публикации" aria-label="Скопировать текст публикации" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/5 hover:text-accent"><Copy size={13} /></button>
                       {activeChannel.isOwner && <div className="flex items-center gap-0.5">
+                        <button type="button" onClick={() => beginEditPost(post)} title="Изменить публикацию" aria-label="Изменить публикацию" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/5 hover:text-accent"><Pencil size={13} /></button>
                         <button type="button" onClick={() => void togglePin(post)} title={post.pinned ? 'Открепить' : 'Закрепить'} aria-label={post.pinned ? 'Открепить публикацию' : 'Закрепить публикацию'} className={`rounded-lg p-1.5 transition hover:bg-white/5 ${post.pinned ? 'text-accent' : 'text-slate-500 hover:text-slate-200'}`}><Pin size={13} /></button>
                         <button type="button" onClick={() => void deletePost(post)} title="Удалить публикацию" aria-label="Удалить публикацию" className="rounded-lg p-1.5 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-300"><Trash2 size={13} /></button>
                       </div>}
                     </div>
-                    {post.text && <div className="chat-message-content whitespace-pre-wrap break-words text-xs leading-relaxed">{post.text}</div>}
+                    {editingPostId === post.id ? <div className="mt-2 space-y-2">
+                      <textarea value={editPostDraft} onChange={(event) => setEditPostDraft(event.target.value)} maxLength={10_000} rows={4} autoFocus className="w-full resize-y rounded-xl border border-accent/25 bg-black/20 p-3 text-xs leading-relaxed text-t-primary outline-none focus:border-accent/60" aria-label="Изменить текст публикации" />
+                      <div className="flex justify-end gap-2">
+                        <button type="button" onClick={cancelEditPost} disabled={savingPostEdit} className="rounded-lg px-3 py-1.5 text-[10px] text-t-secondary transition hover:bg-white/5">Отмена</button>
+                        <button type="button" onClick={() => void savePostEdit(post)} disabled={savingPostEdit} className="rounded-lg bg-accent px-3 py-1.5 text-[10px] font-semibold text-white transition hover:brightness-110 disabled:opacity-50">{savingPostEdit ? 'Сохранение…' : 'Сохранить'}</button>
+                      </div>
+                    </div> : post.text && <div className="chat-message-content whitespace-pre-wrap break-words text-xs leading-relaxed">{post.text}</div>}
                     {post.fileData && post.contentType?.startsWith('image/') && <a href={post.fileData} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl"><img src={post.fileData} alt={post.fileName || 'Изображение из публикации'} loading="lazy" className="max-h-[420px] max-w-full rounded-xl object-contain" /></a>}
                     {post.fileData && post.contentType?.startsWith('audio/') && <div className="mt-2"><VoiceMessagePlayer src={post.fileData} fileName={post.fileName} /></div>}
                     {post.fileData && !post.contentType?.startsWith('image/') && !post.contentType?.startsWith('audio/') && <a href={post.fileData} download={post.fileName || 'attachment'} className="mt-2 flex items-center gap-3 rounded-xl border border-white/[0.08] bg-black/15 p-3 transition hover:border-accent/30"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent"><FileText size={18} /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{post.fileName || 'Вложение'}</span><span className="mt-1 block text-[10px] text-slate-500">{post.contentType || 'Файл'}</span></span><Download size={15} className="shrink-0 text-slate-400" /></a>}

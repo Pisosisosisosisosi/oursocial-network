@@ -84,6 +84,10 @@ class ChannelPostRequest(BaseModel):
         return value
 
 
+class ChannelPostEditRequest(BaseModel):
+    text: str = Field(default="", max_length=10_000)
+
+
 class ChannelReactionRequest(BaseModel):
     emoji: Literal["❤️", "👍", "😂", "🔥", "🎉", "😢"]
 
@@ -501,6 +505,29 @@ def find_channel_post(channel_id: str, post_id: str):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     return post
+
+
+@router.patch("/{channel_id}/posts/{post_id}")
+async def edit_channel_post(
+    channel_id: str,
+    post_id: str,
+    payload: ChannelPostEditRequest,
+    current=Depends(get_current_user),
+):
+    channel = channel_by_id(channel_id)
+    require_owner(channel, current["userId"])
+    post = find_channel_post(channel_id, post_id)
+    text = payload.text.strip()
+    if not text and not post.get("fileData"):
+        raise HTTPException(status_code=422, detail="Post must contain text or an attachment")
+    channel_posts_collection().update_one(
+        {"_id": post["_id"], "channelId": channel_id},
+        {"$set": {"text": text}},
+    )
+    post["text"] = text
+    serialized = serialize_post(post)
+    await notify_members(channel, {"action": "post_updated", "channelId": channel_id, "post": serialized})
+    return serialized
 
 
 @router.delete("/{channel_id}/posts/{post_id}")
