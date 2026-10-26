@@ -1639,7 +1639,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
         {activeChat ? (
           <>
             <EncryptionNotice />
-            <div className="relative z-10 flex flex-col gap-2 border-b border-slate-800/60 p-2.5 glass-panel sm:gap-3 sm:p-4">
+            <div className="relative z-30 flex flex-col gap-2 border-b border-slate-800/60 p-2.5 glass-panel sm:gap-3 sm:p-4">
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                   <button type="button" onClick={() => {
@@ -1672,7 +1672,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                     <button type="button" onClick={() => setChatSettingsOpen((open) => !open)} aria-label="Настройки чата" aria-expanded={chatSettingsOpen} title="Настройки чата" className={`rounded-xl border p-2 transition ${chatSettingsOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[0.08] text-slate-300 hover:bg-white/[0.06] hover:text-white'}`}>
                       <Settings size={17} />
                     </button>
-                    {chatSettingsOpen && <div className="absolute right-0 top-full z-[80] mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                    {chatSettingsOpen && <div className="absolute right-0 top-full z-[100] mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
                       <div className="border-b border-white/[0.08] px-3 pb-2 pt-1">
                         <p className="text-sm font-semibold text-white">Настройки чата</p>
                         <p className="mt-0.5 text-[11px] text-slate-500">Инструменты и действия переписки</p>
