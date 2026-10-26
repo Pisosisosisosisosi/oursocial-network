@@ -86,31 +86,25 @@ const flagCountryCode = (emoji: string): string | null => {
   return codePoints.map((point) => String.fromCharCode(point - regionalIndicatorStart + 97)).join('');
 };
 
-const emojiImageSource = (emoji: string): string => {
-  const countryCode = flagCountryCode(emoji);
-  return countryCode
-    ? `https://flagcdn.com/w40/${countryCode}.png`
-    : `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`;
-};
+const emojiImageSource = (emoji: string): string =>
+  `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`;
 
 const handleEmojiImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
   const image = event.currentTarget;
   const countryCode = image.dataset.countryCode;
   const fallback = Number(image.dataset.fallback ?? '0');
 
-  // Keep flag rendering independent from the host OS emoji font.
+  // Use actual image assets for flags; never fall back to platform-rendered
+  // regional-indicator characters, which may appear as two letters on Windows.
   if (countryCode && fallback === 0) {
     image.dataset.fallback = '1';
-    image.src = `https://cdn.jsdelivr.net/npm/country-flag-icons@1.5.15/3x2/${countryCode.toUpperCase()}.svg`;
+    image.src = `https://flagcdn.com/w40/${countryCode}.png`;
     return;
   }
-  if (image.dataset.fallback !== 'true' && (!countryCode || fallback === 1)) {
-    image.dataset.fallback = 'true';
-    const emoji = image.dataset.emoji;
-    if (emoji) {
-      image.src = `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`;
-      return;
-    }
+  if (countryCode && fallback === 1) {
+    image.dataset.fallback = '2';
+    image.src = `https://cdn.jsdelivr.net/npm/country-flag-icons@1.5.15/3x2/${countryCode.toUpperCase()}.svg`;
+    return;
   }
   image.style.visibility = 'hidden';
 };
