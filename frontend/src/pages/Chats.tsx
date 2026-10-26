@@ -1742,7 +1742,8 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="relative flex shrink-0 items-center gap-1">
-                    <button type="button" onClick={() => setChatSettingsOpen((open) => !open)} aria-label="Настройки чата" aria-expanded={chatSettingsOpen} title="Настройки чата" className={`rounded-xl border p-2 transition ${chatSettingsOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[0.08] text-slate-300 hover:bg-white/[0.06] hover:text-white'}`}>
+                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
+                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>                    <button type="button" onClick={() => setChatSettingsOpen((open) => !open)} aria-label="Настройки чата" aria-expanded={chatSettingsOpen} title="Настройки чата" className={`rounded-xl border p-2 transition ${chatSettingsOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[0.08] text-slate-300 hover:bg-white/[0.06] hover:text-white'}`}>
                       <Settings size={17} />
                     </button>
                     {chatSettingsOpen && <div className="absolute right-0 top-full z-[80] mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
@@ -1784,8 +1785,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                         </button>
                       </div>
                     </div>}
-                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
-                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>
+
                   </div>
                 </div>
               </div>
