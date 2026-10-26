@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
-import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Hourglass, Mic, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X, Zap } from 'lucide-react';
+import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Hourglass, Mic, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Settings, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X, Zap } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -214,6 +214,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [savedMessagesOpen, setSavedMessagesOpen] = useState(false);
   const [savedMessages, setSavedMessages] = useState<Array<{ savedId: string; savedAt: string; message: ChatMessage }>>([]);
   const [savedMessagesLoading, setSavedMessagesLoading] = useState(false);
+  const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
@@ -1667,38 +1668,51 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                   </div>
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
-                  <label className="relative min-w-0 flex-1 sm:flex-initial">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
-                      value={chatSearch}
-                      onChange={(event) => handleChatSearch(event.target.value)}
-                      placeholder="Поиск в переписке"
-                      aria-label="Поиск по сообщениям"
-                      className="w-full sm:w-36 md:w-44 rounded-xl border border-white/[0.08] bg-white/[0.03] py-2 pl-9 pr-2 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-accent/50"
-                    />
-                  </label>
-                  {chatSearch && (
-                    <div className="flex items-center gap-1 text-[10px] text-t-secondary">
-                      <span>{searchMatches.length ? `${selectedSearchResult + 1}/${searchMatches.length}` : '0/0'}</span>
-                      <button type="button" aria-label="Предыдущий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index - 1 + searchMatches.length) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronUp size={14} /></button>
-                      <button type="button" aria-label="Следующий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index + 1) % searchMatches.length)} className="rounded p-1 hover:bg-white/10 disabled:opacity-40"><ChevronDown size={14} /></button>
-                      <button type="button" aria-label="Закрыть поиск" onClick={() => handleChatSearch('')} className="rounded p-1 hover:bg-white/10"><X size={14} /></button>
-                    </div>
-                  )}
-                  {chatSearch && hasMoreMessages && <button type="button" disabled={searchingHistory} onClick={() => void searchEntireHistory()} className="max-w-28 rounded-lg border border-white/10 px-2 py-1.5 text-[10px] leading-tight text-t-secondary hover:border-accent/30 hover:text-accent disabled:opacity-50 sm:max-w-none">{searchingHistory ? `Ищем… ${searchedHistoryPages}` : 'Искать дальше'}</button>}
-                  <button type="button" onClick={() => void openChatProfile()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.08] px-2.5 sm:px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white">
-                    <ContactRound size={15} /> <span className="hidden sm:inline">Профиль</span>
-                  </button>
-                  <button type="button" onClick={() => void openSavedMessages()} title="Избранное" aria-label="Открыть сохранённые сообщения" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Bookmark size={15} /></button>
-                  <button type="button" onClick={() => void openDisappearingSettings()} title="Исчезающие сообщения" aria-label="Настроить таймер исчезающих сообщений" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Hourglass size={15} /></button>
-                  <button type="button" onClick={() => void openScheduledMessages()} title="Запланированные сообщения" aria-label="Запланированные сообщения" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><CalendarClock size={15} /></button>
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="relative flex shrink-0 items-center gap-1">
+                    <button type="button" onClick={() => setChatSettingsOpen((open) => !open)} aria-label="Настройки чата" aria-expanded={chatSettingsOpen} title="Настройки чата" className={`rounded-xl border p-2 transition ${chatSettingsOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[0.08] text-slate-300 hover:bg-white/[0.06] hover:text-white'}`}>
+                      <Settings size={17} />
+                    </button>
+                    {chatSettingsOpen && <div className="absolute right-0 top-full z-[80] mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                      <div className="border-b border-white/[0.08] px-3 pb-2 pt-1">
+                        <p className="text-sm font-semibold text-white">Настройки чата</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">Инструменты и действия переписки</p>
+                      </div>
+                      <div className="max-h-[min(65vh,30rem)] space-y-1 overflow-y-auto py-2">
+                        <button type="button" onClick={() => { setChatSettingsOpen(false); void openChatProfile(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]">
+                          <ContactRound size={16} className="text-slate-400" /><span>Профиль собеседника</span>
+                        </button>
+                        <div className="rounded-xl px-3 py-2">
+                          <label className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-300"><Search size={15} className="text-slate-400" />Поиск в переписке</label>
+                          <input value={chatSearch} onChange={(event) => handleChatSearch(event.target.value)} placeholder="Найти сообщение…" aria-label="Поиск по сообщениям" className="w-full rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-accent/50" />
+                          {chatSearch && <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                            <span>{searchMatches.length ? `${selectedSearchResult + 1}/${searchMatches.length}` : '0/0'}</span>
+                            <button type="button" aria-label="Предыдущий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index - 1 + searchMatches.length) % searchMatches.length)} className="rounded-lg p-1.5 hover:bg-white/10 disabled:opacity-40"><ChevronUp size={14} /></button>
+                            <button type="button" aria-label="Следующий результат" disabled={!searchMatches.length} onClick={() => setActiveSearchResult((index) => (index + 1) % searchMatches.length)} className="rounded-lg p-1.5 hover:bg-white/10 disabled:opacity-40"><ChevronDown size={14} /></button>
+                            <button type="button" aria-label="Закрыть поиск" onClick={() => handleChatSearch('')} className="rounded-lg p-1.5 hover:bg-white/10"><X size={14} /></button>
+                            {hasMoreMessages && <button type="button" disabled={searchingHistory} onClick={() => void searchEntireHistory()} className="ml-auto rounded-lg border border-white/10 px-2 py-1.5 hover:border-accent/30 hover:text-accent disabled:opacity-50">{searchingHistory ? `Ищем… ${searchedHistoryPages}` : 'Искать дальше'}</button>}
+                          </div>}
+                        </div>
+                        <div className="my-1 border-t border-white/[0.07]" />
+                        <button type="button" onClick={() => { setChatSettingsOpen(false); void openSavedMessages(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]">
+                          <Bookmark size={16} className="text-slate-400" /><span>Избранное</span>
+                        </button>
+                        <button type="button" onClick={() => { setChatSettingsOpen(false); void openDisappearingSettings(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]">
+                          <Hourglass size={16} className="text-slate-400" /><span>Исчезающие сообщения</span>
+                        </button>
+                        <button type="button" onClick={() => { setChatSettingsOpen(false); void openScheduledMessages(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]">
+                          <CalendarClock size={16} className="text-slate-400" /><span>Запланированные сообщения</span>
+                        </button>
+                        <div className="my-1 border-t border-white/[0.07]" />
+                        <button type="button" onClick={() => { setChatSettingsOpen(false); void handleExportChat('json'); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]">
+                          <Download size={16} className="text-slate-400" /><span>Экспортировать историю в JSON</span>
+                        </button>
+                        <button type="button" onClick={() => { setChatSettingsOpen(false); void handleExportChat('html'); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]">
+                          <FileText size={16} className="text-slate-400" /><span>Экспортировать историю в HTML</span>
+                        </button>
+                      </div>
+                    </div>}
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button type="button" title="Скачать переписку JSON" aria-label="Экспортировать историю чата в JSON" onClick={() => void handleExportChat('json')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Download size={15} /></button>
-                    <button type="button" title="Скачать переписку HTML" aria-label="Экспортировать историю чата в HTML" onClick={() => void handleExportChat('html')} className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><FileText size={15} /></button>
                   </div>
                 </div>
               </div>
