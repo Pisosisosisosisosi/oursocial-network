@@ -168,6 +168,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [sending, setSending] = useState(false);
   const [openMessageMenu, setOpenMessageMenu] = useState<string | null>(null);
   const [messageMenuPosition, setMessageMenuPosition] = useState({ x: 0, y: 0 });
+  const [messageMenuAnchorPosition, setMessageMenuAnchorPosition] = useState({ x: 0, y: 0 });
   const [messageMenuClosing, setMessageMenuClosing] = useState(false);
   const [pinningMessageId, setPinningMessageId] = useState<string | null>(null);
   const [activePinnedIndex, setActivePinnedIndex] = useState(0);
@@ -246,6 +247,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const pendingScrollHeightRef = useRef<number | null>(null);
   const initialChatLoadRef = useRef(false);
   const messageRefs = useRef(new Map<string, HTMLDivElement>());
+  const messageMenuRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const messageFormRef = useRef<HTMLFormElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1417,14 +1419,34 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     }
   };
 
+  useLayoutEffect(() => {
+    if (!openMessageMenu || !messageMenuRef.current) return;
+
+    const rect = messageMenuRef.current.getBoundingClientRect();
+    const padding = 8;
+    const gap = 8;
+    const maxLeft = Math.max(padding, window.innerWidth - rect.width - padding);
+    const maxTop = Math.max(padding, window.innerHeight - rect.height - padding);
+    const belowTop = messageMenuAnchorPosition.y + gap;
+    const aboveTop = messageMenuAnchorPosition.y - rect.height - gap;
+    const top = belowTop + rect.height <= window.innerHeight - padding
+      ? belowTop
+      : aboveTop >= padding
+        ? aboveTop
+        : Math.min(maxTop, Math.max(padding, belowTop));
+    const left = Math.min(maxLeft, Math.max(padding, messageMenuAnchorPosition.x));
+
+    if (Math.abs(left - messageMenuPosition.x) > 1 || Math.abs(top - messageMenuPosition.y) > 1) {
+      setMessageMenuPosition({ x: left, y: top });
+    }
+  }, [openMessageMenu, messageMenuAnchorPosition.x, messageMenuAnchorPosition.y]);
+
   const showMessageMenu = (messageId: string, x: number, y: number) => {
     if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
     setMessageMenuClosing(false);
     setOpenMessageMenu(messageId);
-    setMessageMenuPosition({
-      x: Math.max(8, Math.min(x, window.innerWidth - 224)),
-      y: Math.max(8, Math.min(y, window.innerHeight - 196)),
-    });
+    setMessageMenuAnchorPosition({ x, y });
+    setMessageMenuPosition({ x, y });
   };
 
   const handleChatSearch = (value: string) => {
@@ -2129,11 +2151,12 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
         if (!menuMessage) return null;
         const canDeleteMessage = menuMessage.senderId === currentUser?.id;
         const position = {
-          left: Math.max(8, Math.min(messageMenuPosition.x, window.innerWidth - 216)),
-          top: Math.max(8, Math.min(messageMenuPosition.y, window.innerHeight - 190)),
+          left: messageMenuPosition.x,
+          top: messageMenuPosition.y,
         };
         return createPortal(
           <div
+            ref={messageMenuRef}
             data-message-menu
             role="menu"
             aria-label="Действия с сообщением"
