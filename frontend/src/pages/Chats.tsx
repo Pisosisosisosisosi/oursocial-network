@@ -1639,7 +1639,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
         {activeChat ? (
           <>
             <EncryptionNotice />
-            <div className="relative z-10 flex flex-col gap-2 border-b border-slate-800/60 p-2.5 glass-panel sm:gap-3 sm:p-4">
+            <div className="relative z-30 flex flex-col gap-2 border-b border-slate-800/60 p-2.5 glass-panel sm:gap-3 sm:p-4">
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                   <button type="button" onClick={() => {
