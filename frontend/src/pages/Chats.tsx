@@ -215,6 +215,27 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [savedMessages, setSavedMessages] = useState<Array<{ savedId: string; savedAt: string; message: ChatMessage }>>([]);
   const [savedMessagesLoading, setSavedMessagesLoading] = useState(false);
   const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
+  const chatSettingsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [chatSettingsPosition, setChatSettingsPosition] = useState({ top: 72, right: 16 });
+
+  useLayoutEffect(() => {
+    if (!chatSettingsOpen) return;
+    const updatePosition = () => {
+      const rect = chatSettingsButtonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setChatSettingsPosition({
+        top: Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 120)),
+        right: Math.max(8, window.innerWidth - rect.right),
+      });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [chatSettingsOpen]);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
@@ -1669,10 +1690,10 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="relative flex shrink-0 items-center gap-1">
-                    <button type="button" onClick={() => setChatSettingsOpen((open) => !open)} aria-label="Настройки чата" aria-expanded={chatSettingsOpen} title="Настройки чата" className={`rounded-xl border p-2 transition ${chatSettingsOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[0.08] text-slate-300 hover:bg-white/[0.06] hover:text-white'}`}>
+                    <button ref={chatSettingsButtonRef} type="button" onClick={() => setChatSettingsOpen((open) => !open)} aria-label="Настройки чата" aria-expanded={chatSettingsOpen} title="Настройки чата" className={`rounded-xl border p-2 transition ${chatSettingsOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[0.08] text-slate-300 hover:bg-white/[0.06] hover:text-white'}`}>
                       <Settings size={17} />
                     </button>
-                    {chatSettingsOpen && <div className="absolute right-0 top-full z-[100] mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                    {chatSettingsOpen && createPortal(<div style={{ top: chatSettingsPosition.top, right: chatSettingsPosition.right }} className="fixed z-[9999] w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
                       <div className="border-b border-white/[0.08] px-3 pb-2 pt-1">
                         <p className="text-sm font-semibold text-white">Настройки чата</p>
                         <p className="mt-0.5 text-[11px] text-slate-500">Инструменты и действия переписки</p>
@@ -1710,7 +1731,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                           <FileText size={16} className="text-slate-400" /><span>Экспортировать историю в HTML</span>
                         </button>
                       </div>
-                    </div>}
+                    </div>, document.body)}
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>
                   </div>
