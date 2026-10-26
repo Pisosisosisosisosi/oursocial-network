@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type FormEvent, type ReactNode } from 'react';
 import { ArrowLeft, Bookmark, CalendarClock, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ContactRound, Copy, Crown, Download, ExternalLink, FileText, Forward, Hourglass, Mic, Paperclip, Pencil, Phone, Pin, Radio, Reply, Search, Settings, Smile, Trash2, UserRoundPlus, UserRoundX, Users, Video, X, Zap } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { createPortal } from 'react-dom';
@@ -53,59 +53,47 @@ const ALLOWED_ATTACHMENT_TYPES = new Set([
 
 function highlightText(text: string, query: string) {
   if (!query.trim()) return text;
-  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\function highlightText(text: string, query: string) {
-  if (!query.trim()) return text;
-  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return text.split(new RegExp(`(${escapedQuery})`, 'ig')).map((part, index) =>
-    part.toLocaleLowerCase().includes(query.toLocaleLowerCase())
-      ? <mark key={index} className="rounded bg-amber-300/30 text-inherit">{part}</mark>
-      : part,
-  );
-}');
-  return text.split(new RegExp(`(${escapedQuery})`, 'ig')).map((part, index) =>
+  const escapedQuery = query.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+  return text.split(new RegExp(\`(\${escapedQuery})\`, 'ig')).map((part, index) =>
     part.toLocaleLowerCase().includes(query.toLocaleLowerCase())
       ? <mark key={index} className="rounded bg-amber-300/30 text-inherit">{part}</mark>
       : part,
   );
 }
 
-const FLAG_SEQUENCE = /[\\u{1F1E6}-\\u{1F1FF}]{2}/gu;
+const FLAG_SEQUENCE = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
 function renderTextWithFlags(text: string, query: string) {
-  const parts: React.ReactNode[] = [];
+  const parts: ReactNode[] = [];
   let lastIndex = 0;
   for (const match of text.matchAll(FLAG_SEQUENCE)) {
     const index = match.index ?? 0;
-    if (index > lastIndex) {
-      parts.push(...React.Children.toArray(highlightText(text.slice(lastIndex, index), query)));
-    }
+    if (index > lastIndex) parts.push(highlightText(text.slice(lastIndex, index), query));
     const flag = match[0];
-    const code = Array.from(flag, (character) => (character.codePointAt(0)! - 0x1F1E6 + 97))
+    const code = Array.from(flag, (character) => character.codePointAt(0)! - 0x1F1E6 + 97)
       .map((value) => String.fromCharCode(value)).join('');
     parts.push(
       <img
-        key={`flag-${index}-${code}`}
-        src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${Array.from(flag, (character) => character.codePointAt(0)!.toString(16)).join('-')}.svg`}
+        key={\`flag-\${index}-\${code}\`}
+        src={\`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/\${Array.from(flag, (character) => character.codePointAt(0)!.toString(16)).join('-')}.svg\`}
         onError={(event) => {
           const image = event.currentTarget;
           if (image.dataset.fallback !== 'true') {
             image.dataset.fallback = 'true';
-            image.src = `https://flagcdn.com/w40/${code}.png`;
+            image.src = \`https://flagcdn.com/w40/\${code}.png\`;
           } else {
             image.style.display = 'none';
           }
         }}
         alt={code.toUpperCase()}
         title={code.toUpperCase()}
-        aria-label={`Флаг ${code.toUpperCase()}`}
+        aria-label={\`Флаг \${code.toUpperCase()}\`}
         className="mx-0.5 inline-block h-[1.15em] w-[1.5em] align-[-0.15em] object-contain"
         draggable={false}
       />,
     );
     lastIndex = index + flag.length;
   }
-  if (lastIndex < text.length) {
-    parts.push(...React.Children.toArray(highlightText(text.slice(lastIndex), query)));
-  }
+  if (lastIndex < text.length) parts.push(highlightText(text.slice(lastIndex), query));
   return parts.length ? parts : highlightText(text, query);
 }
 
