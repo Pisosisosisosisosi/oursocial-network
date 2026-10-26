@@ -24,8 +24,8 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
   }, [query, category]);
 
   return (
-    <div className="glass-panel w-[320px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-3xl shadow-2xl animate-scale-in" data-emoji-picker>
-      <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2.5">
+    <div className="glass-panel w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/40 backdrop-blur-2xl animate-scale-in" data-emoji-picker>
+      <div className="flex items-center gap-2 border-b border-white/[0.08] bg-white/[0.025] px-3 py-3">
         <Search size={14} className="shrink-0 text-t-secondary" />
         <input
           value={query}
@@ -38,26 +38,26 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
         </button>
       </div>
       {!query && (
-        <div className="flex gap-1 overflow-x-auto border-b border-white/[0.06] px-2 py-1.5 custom-scrollbar">
+        <div className="flex gap-1.5 overflow-x-auto border-b border-white/[0.08] bg-white/[0.02] px-2.5 py-2 custom-scrollbar">
           {CATEGORIES.map((c) => (
             <button
               key={c.id}
               type="button"
               onClick={() => setCategory(c.id)}
-              className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] transition-all duration-200 ${category === c.id ? 'bg-accent/20 text-accent' : 'text-t-secondary hover:bg-white/5'}`}
+              className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] transition-all duration-200 ${category === c.id ? 'bg-accent/15 text-accent ring-1 ring-accent/20' : 'text-t-secondary hover:bg-white/[0.06] hover:text-t-primary'}`}
             >
               {c.name}
             </button>
           ))}
         </div>
       )}
-      <div className="custom-scrollbar grid max-h-56 grid-cols-8 gap-0.5 overflow-y-auto p-2">
+      <div className="custom-scrollbar grid max-h-64 grid-cols-8 gap-1 overflow-y-auto p-2.5">
         {filtered.map(([emoji]: [string, string]) => (
           <button
             key={emoji}
             type="button"
             onClick={() => onPick(emoji)}
-            className="grid h-9 place-items-center rounded-lg text-xl transition-all duration-200 hover:scale-125 hover:bg-white/5 active:scale-95"
+            className="grid aspect-square min-w-0 place-items-center rounded-xl text-[1.35rem] leading-none transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
             {emoji}
           </button>
