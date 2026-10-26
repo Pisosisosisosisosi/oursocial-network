@@ -118,6 +118,25 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
     }
   };
 
+  const handleEmojiListScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    if (query.trim()) return;
+
+    const activationLine = event.currentTarget.getBoundingClientRect().top + 20;
+    let nextCategory = CATEGORIES[0]?.id ?? 'smileys';
+
+    for (const category of CATEGORIES) {
+      const section = categorySectionRefs.current[category.id];
+      if (!section) continue;
+      if (section.getBoundingClientRect().top <= activationLine) {
+        nextCategory = category.id;
+      } else {
+        break;
+      }
+    }
+
+    setActiveCategory((current) => current === nextCategory ? current : nextCategory);
+  };
+
   const handleCategoryMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 1 || !categoryStripRef.current) return;
     event.preventDefault();
@@ -198,7 +217,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
           Результаты поиска: {filtered.length}
         </div>
       )}
-      <div ref={emojiListRef} className="custom-scrollbar max-h-60 overflow-y-auto p-2.5" aria-label={query.trim() ? 'Результаты поиска эмодзи' : 'Все эмодзи по категориям'}>
+      <div ref={emojiListRef} onScroll={handleEmojiListScroll} className="custom-scrollbar max-h-60 overflow-y-auto p-2.5" aria-label={query.trim() ? 'Результаты поиска эмодзи' : 'Все эмодзи по категориям'}>
         {query.trim() ? (
           <div className="grid grid-cols-8 gap-1" role="list">
             {filtered.map(([emoji, tags]) => (
