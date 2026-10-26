@@ -168,6 +168,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [sending, setSending] = useState(false);
   const [openMessageMenu, setOpenMessageMenu] = useState<string | null>(null);
   const [messageMenuPosition, setMessageMenuPosition] = useState({ x: 0, y: 0 });
+  const [messageMenuAnchorPosition, setMessageMenuAnchorPosition] = useState({ x: 0, y: 0 });
   const [messageMenuClosing, setMessageMenuClosing] = useState(false);
   const [pinningMessageId, setPinningMessageId] = useState<string | null>(null);
   const [activePinnedIndex, setActivePinnedIndex] = useState(0);
@@ -246,6 +247,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const pendingScrollHeightRef = useRef<number | null>(null);
   const initialChatLoadRef = useRef(false);
   const messageRefs = useRef(new Map<string, HTMLDivElement>());
+  const messageMenuRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const messageFormRef = useRef<HTMLFormElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1417,14 +1419,42 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     }
   };
 
+  useLayoutEffect(() => {
+    if (!openMessageMenu || !messageMenuRef.current) return;
+
+    const menuRect = messageMenuRef.current.getBoundingClientRect();
+    const viewportPadding = 8;
+    const pointerGap = 8;
+    const maxLeft = Math.max(viewportPadding, window.innerWidth - menuRect.width - viewportPadding);
+    const maxTop = Math.max(viewportPadding, window.innerHeight - menuRect.height - viewportPadding);
+    const belowTop = messageMenuAnchorPosition.y + pointerGap;
+    const aboveTop = messageMenuAnchorPosition.y - menuRect.height - pointerGap;
+
+    // Keep the whole menu visible; prefer below the pointer, then above it.
+    const top = belowTop + menuRect.height <= window.innerHeight - viewportPadding
+      ? belowTop
+      : aboveTop >= viewportPadding
+        ? aboveTop
+        : Math.min(maxTop, Math.max(viewportPadding, belowTop));
+    const left = Math.min(maxLeft, Math.max(viewportPadding, messageMenuAnchorPosition.x));
+
+    if (Math.abs(left - messageMenuPosition.x) > 1 || Math.abs(top - messageMenuPosition.y) > 1) {
+      setMessageMenuPosition({ x: left, y: top });
+    }
+  }, [
+    openMessageMenu,
+    messageMenuAnchorPosition.x,
+    messageMenuAnchorPosition.y,
+    messageMenuPosition.x,
+    messageMenuPosition.y,
+  ]);
+
   const showMessageMenu = (messageId: string, x: number, y: number) => {
     if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
     setMessageMenuClosing(false);
     setOpenMessageMenu(messageId);
-    setMessageMenuPosition({
-      x: Math.max(8, Math.min(x, window.innerWidth - 224)),
-      y: Math.max(8, Math.min(y, window.innerHeight - 196)),
-    });
+    setMessageMenuAnchorPosition({ x, y });
+    setMessageMenuPosition({ x, y });
   };
 
   const handleChatSearch = (value: string) => {
@@ -2129,18 +2159,19 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
         if (!menuMessage) return null;
         const canDeleteMessage = menuMessage.senderId === currentUser?.id;
         const position = {
-          left: Math.max(8, Math.min(messageMenuPosition.x, window.innerWidth - 216)),
-          top: Math.max(8, Math.min(messageMenuPosition.y, window.innerHeight - 190)),
+          left: messageMenuPosition.x,
+          top: messageMenuPosition.y,
         };
         return createPortal(
           <div
+            ref={messageMenuRef}
             data-message-menu
             role="menu"
             aria-label="Действия с сообщением"
             onAnimationEnd={(event) => {
               if (messageMenuClosing && event.currentTarget === event.target) setOpenMessageMenu(null);
             }}
-            className={`message-action-menu fixed z-[100] w-52 rounded-2xl border border-white/10 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
+            className={`message-action-menu fixed z-[100] max-h-[calc(100dvh-16px)] w-52 overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
             style={position}
           >
             <div className="message-reaction-picker mb-2 rounded-xl bg-white/[0.035] p-1.5">
