@@ -167,6 +167,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [chatError, setChatError] = useState('');
   const [sending, setSending] = useState(false);
   const [openMessageMenu, setOpenMessageMenu] = useState<string | null>(null);
+  const [showAllMessageReactions, setShowAllMessageReactions] = useState(false);
   const [messageMenuPosition, setMessageMenuPosition] = useState({ x: 0, y: 0 });
   const [messageMenuAnchorPosition, setMessageMenuAnchorPosition] = useState({ x: 0, y: 0 });
   const [messageMenuClosing, setMessageMenuClosing] = useState(false);
@@ -1443,6 +1444,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     }
   }, [
     openMessageMenu,
+    showAllMessageReactions,
     messageMenuAnchorPosition.x,
     messageMenuAnchorPosition.y,
     messageMenuPosition.x,
@@ -1451,6 +1453,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
 
   const showMessageMenu = (messageId: string, x: number, y: number) => {
     if (messageMenuCloseTimeoutRef.current) clearTimeout(messageMenuCloseTimeoutRef.current);
+    setShowAllMessageReactions(false);
     setMessageMenuClosing(false);
     setOpenMessageMenu(messageId);
     setMessageMenuAnchorPosition({ x, y });
@@ -2171,7 +2174,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
             onAnimationEnd={(event) => {
               if (messageMenuClosing && event.currentTarget === event.target) setOpenMessageMenu(null);
             }}
-            className={`message-action-menu fixed z-[100] max-h-[calc(100dvh-16px)] w-56 overflow-y-auto overscroll-contain rounded-xl border border-white/[0.12] bg-[#202124]/[0.98] p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.42)] backdrop-blur-2xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
+            className={`message-action-menu fixed z-[100] max-h-[calc(100dvh-16px)] ${showAllMessageReactions ? 'w-[min(25rem,calc(100vw-16px))]' : 'w-56'} overflow-y-auto overscroll-contain rounded-xl border border-white/[0.12] bg-[#202124]/[0.98] p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.42)] backdrop-blur-2xl ${messageMenuClosing ? 'message-menu-out' : 'message-menu-in'}`}
             style={position}
           >
             <div className="message-reaction-picker mb-1.5 border-b border-white/[0.09] px-1 pb-2 pt-1">
@@ -2196,6 +2199,26 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                 })}
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowAllMessageReactions((value) => !value)}
+              className="mb-1 flex w-full items-center justify-center gap-2 rounded-lg px-2 py-1.5 text-xs text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+              aria-expanded={showAllMessageReactions}
+            >
+              <Smile size={14} /> {showAllMessageReactions ? 'Скрыть эмодзи' : 'Все эмодзи'}
+            </button>
+            {showAllMessageReactions && (
+              <div className="mb-2 overflow-hidden rounded-xl border border-white/10">
+                <EmojiPicker
+                  onPick={(emoji) => {
+                    void handleReaction(menuMessage, emoji);
+                    setShowAllMessageReactions(false);
+                    closeMessageMenu();
+                  }}
+                  onClose={() => setShowAllMessageReactions(false)}
+                />
+              </div>
+            )}
             <button
               type="button"
               role="menuitem"
