@@ -88,7 +88,16 @@ const CATEGORIES: EmojiCategory[] = [
 
 export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]?.id ?? 'smileys');
+  const [recentEmojis, setRecentEmojis] = useState<string[]>(() => {
+    try {
+      const stored = window.localStorage.getItem('skyline-recent-emojis');
+      const parsed: unknown = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string').slice(0, 15) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeCategory, setActiveCategory] = useState('recent');
   const [categoryScrollLeft, setCategoryScrollLeft] = useState(0);
   const categoryStripRef = useRef<HTMLDivElement>(null);
   const emojiListRef = useRef<HTMLDivElement>(null);
@@ -103,11 +112,37 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
     return Array.from(unique.values());
   }, []);
 
+  const displayedCategories = useMemo<EmojiCategory[]>(() => {
+    const tagsByEmoji = new Map(allEmojis.map(([emoji, tags]) => [emoji, tags]));
+    return [
+      {
+        id: 'recent',
+        name: 'Недавние',
+        icon: '🕒',
+        emojis: recentEmojis.map((emoji) => [emoji, tagsByEmoji.get(emoji) ?? 'недавние emoji'] as EmojiEntry),
+      },
+      ...CATEGORIES,
+    ];
+  }, [allEmojis, recentEmojis]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return allEmojis;
     return allEmojis.filter(([emoji, tags]) => emoji.includes(q) || tags.toLowerCase().includes(q));
   }, [allEmojis, query]);
+
+  const pickEmoji = (emoji: string) => {
+    setRecentEmojis((current) => {
+      const next = [emoji, ...current.filter((item) => item !== emoji)].slice(0, 15);
+      try {
+        window.localStorage.setItem('skyline-recent-emojis', JSON.stringify(next));
+      } catch {
+        // Recent emoji history remains available for this picker session.
+      }
+      return next;
+    });
+    onPick(emoji);
+  };
 
   const selectCategory = (categoryId: string) => {
     setActiveCategory(categoryId);
@@ -122,9 +157,9 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
     if (query.trim()) return;
 
     const activationLine = event.currentTarget.getBoundingClientRect().top + 20;
-    let nextCategory = CATEGORIES[0]?.id ?? 'smileys';
+    let nextCategory = displayedCategories[0]?.id ?? 'recent';
 
-    for (const category of CATEGORIES) {
+    for (const category of displayedCategories) {
       const section = categorySectionRefs.current[category.id];
       if (!section) continue;
       if (section.getBoundingClientRect().top <= activationLine) {
@@ -205,7 +240,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
             aria-label="Категории эмодзи. Зажмите среднюю кнопку мыши и двигайте мышь для прокрутки"
             role="tablist"
           >
-            {CATEGORIES.map((category) => (
+            {displayedCategories.map((category) => (
               <button
                 key={category.id}
                 type="button"
@@ -238,7 +273,7 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
                 key={emoji}
                 type="button"
                 role="listitem"
-                onClick={() => onPick(emoji)}
+                onClick={() => pickEmoji(emoji)}
                 aria-label={tags || emoji}
                 title={tags || emoji}
                 className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
@@ -250,23 +285,23 @@ export default function EmojiPicker({ onPick, onClose }: { onPick: (emoji: strin
           </div>
         ) : (
           <div className="space-y-3">
-            {CATEGORIES.map((category) => (
+            {displayedCategories.map((category) => (
               <section key={category.id} ref={(node) => { categorySectionRefs.current[category.id] = node; }} aria-label={category.name}>
                 <h3 className="mb-1.5 px-1 text-base" aria-label={category.name} title={category.name}>{category.name}</h3>
                 <div className="grid grid-cols-8 gap-1" role="list">
-                  {category.emojis.map(([emoji, tags]) => (
+                  {category.emojis.length ? category.emojis.map(([emoji, tags]) => (
                     <button
                       key={emoji}
                       type="button"
                       role="listitem"
-                      onClick={() => onPick(emoji)}
+                      onClick={() => pickEmoji(emoji)}
                       aria-label={tags || emoji}
                       title={tags || emoji}
                       className="grid h-10 w-10 place-items-center rounded-xl transition-colors duration-150 hover:bg-white/[0.09] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
                     >
                       <img src={`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${emojiAssetCode(emoji)}.svg`} alt={emoji} draggable={false} loading="lazy" className="h-[1.45rem] w-[1.45rem] object-contain" />
                     </button>
-                  ))}
+                  )) : <p className="col-span-8 px-1 py-2 text-xs text-t-secondary">Здесь появятся 15 последних использованных эмодзи</p>}
                 </div>
               </section>
             ))}
