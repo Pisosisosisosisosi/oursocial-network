@@ -257,10 +257,33 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const [savedMessages, setSavedMessages] = useState<Array<{ savedId: string; savedAt: string; message: ChatMessage }>>([]);
   const [savedMessagesLoading, setSavedMessagesLoading] = useState(false);
   const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
+  const chatSettingsMenuRef = useRef<HTMLDivElement>(null);
+  const chatSettingsButtonRef = useRef<HTMLButtonElement>(null);
   const [recordingVoice, setRecordingVoice] = useState(false);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
   const voiceRecordingCancelledRef = useRef(false);
+
+  useEffect(() => {
+    if (!chatSettingsOpen) return;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (chatSettingsMenuRef.current?.contains(target) || chatSettingsButtonRef.current?.contains(target)) return;
+      setChatSettingsOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setChatSettingsOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [chatSettingsOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1743,10 +1766,10 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="relative flex shrink-0 items-center gap-1">
                     <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, false)} title="Голосовой звонок" aria-label="Начать голосовой звонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Phone size={15} /></button>
-                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>                    <button type="button" onClick={() => setChatSettingsOpen((open) => !open)} aria-label="Настройки чата" aria-expanded={chatSettingsOpen} title="Настройки чата" className={`rounded-xl border p-2 transition ${chatSettingsOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[0.08] text-slate-300 hover:bg-white/[0.06] hover:text-white'}`}>
+                    <button type="button" onClick={() => startCall({ id: String(activeChat.id), name: activeChat.nickname || activeChat.displayName || activeChat.username, avatarUrl: activeChat.avatarUrl }, true)} title="Видеозвонок" aria-label="Начать видеозвонок" className="rounded-lg p-2 text-slate-500 transition hover:bg-white/[0.06] hover:text-accent"><Video size={15} /></button>                    <button ref={chatSettingsButtonRef} type="button" onClick={() => setChatSettingsOpen((open) => !open)} aria-label="Настройки чата" aria-expanded={chatSettingsOpen} title="Настройки чата" className={`rounded-xl border p-2 transition ${chatSettingsOpen ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[0.08] text-slate-300 hover:bg-white/[0.06] hover:text-white'}`}>
                       <Settings size={17} />
                     </button>
-                    {chatSettingsOpen && <div className="absolute right-0 top-full z-[80] mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                    {chatSettingsOpen && <div ref={chatSettingsMenuRef} className="absolute right-0 top-full z-[80] mt-2 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
                       <div className="border-b border-white/[0.08] px-3 pb-2 pt-1">
                         <p className="text-sm font-semibold text-white">Настройки чата</p>
                         <p className="mt-0.5 text-[11px] text-slate-500">Инструменты и действия переписки</p>
@@ -1782,6 +1805,19 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                         </button>
                         <button type="button" onClick={() => { setChatSettingsOpen(false); void handleExportChat('html'); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/[0.06]">
                           <FileText size={16} className="text-slate-400" /><span>Экспортировать историю в HTML</span>
+                        </button>
+                        <div className="my-1 border-t border-white/[0.07]" />
+                        <button
+                          type="button"
+                          disabled={!contacts.some((contact) => String(contact.id) === String(activeChat.id))}
+                          onClick={() => {
+                            setChatSettingsOpen(false);
+                            const contact = contacts.find((item) => String(item.id) === String(activeChat.id));
+                            if (contact) void handleDeleteChat(contact);
+                          }}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-rose-300 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Trash2 size={16} /><span>Удалить чат</span>
                         </button>
                       </div>
                     </div>}
