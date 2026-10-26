@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, MessageSquarePlus, Pencil, Radio, Users } from 'lucide-react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, UserRound, X } from 'lucide-react';
@@ -14,6 +14,7 @@ export default function WorkspaceLayout() {
   const [newChatResults, setNewChatResults] = useState<User[]>([]);
   const [newChatLoading, setNewChatLoading] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const createMenuWrapperRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -23,6 +24,24 @@ export default function WorkspaceLayout() {
   const activeId = isGroup ? params.get('group') || (params.get('discover') === '1' ? 'discover' : null) : isChannel ? params.get('channel') : params.get('chat') || params.get('user');
   const showDiscover = params.get('discover') === '1';
   const showCreateChat = !isGroup && !isChannel && params.get('create') === '1';
+
+  useEffect(() => {
+    if (!createMenuOpen) return;
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || createMenuWrapperRef.current?.contains(target)) return;
+      setCreateMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCreateMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', handleOutsidePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [createMenuOpen]);
 
   useEffect(() => {
     const query = newChatSearch.trim().replace(/^@/, '');
@@ -46,7 +65,7 @@ export default function WorkspaceLayout() {
         <div className="flex items-center justify-between px-4 pb-1 pt-3"><span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Все переписки</span>
           <button type="button" onClick={() => navigate(showDiscover ? '/channels' : '/channels?discover=1')} className="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-accent"><Radio size={12} /> {showDiscover ? 'Мои каналы' : 'Найти каналы'}</button></div>
         <UnifiedWorkspaceList key={user?.id || 'anonymous'} search={search} activeKind={activeKind} activeId={activeId} includeDiscover={showDiscover} />
-        <div className="absolute bottom-4 left-4 z-50" onMouseEnter={() => setCreateMenuOpen(true)} onMouseLeave={() => setCreateMenuOpen(false)} onKeyDown={(event) => { if (event.key === 'Escape') setCreateMenuOpen(false); }}>
+        <div ref={createMenuWrapperRef} className="absolute bottom-4 left-4 z-50" onMouseEnter={() => setCreateMenuOpen(true)} onMouseLeave={() => setCreateMenuOpen(false)} onKeyDown={(event) => { if (event.key === 'Escape') setCreateMenuOpen(false); }}>
           <button
             type="button"
             aria-label="Создать новую переписку"
