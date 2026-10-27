@@ -417,6 +417,7 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshContacts() {
+        stopTyping();
         // Leaving the conversation screen must also clear the active chat reference;
         // otherwise realtime events can unexpectedly reopen a chat over the list.
         activeContactId = null;
@@ -697,6 +698,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openFeature(String feature) {
+        stopTyping();
         activeGroupId = null;
         activeGroup = null;
         activeContactId = null;
@@ -1228,7 +1230,17 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void stopTyping() {
+        if (isTypingToContact && realtime != null && activeContactId != null) {
+            realtime.setTyping(activeContactId, false);
+        }
+        if (typingStopRunnable != null) typingHandler.removeCallbacks(typingStopRunnable);
+        typingStopRunnable = null;
+        isTypingToContact = false;
+    }
+
     private void disconnectRealtime() {
+        stopTyping();
         if (realtime != null) {
             if (messageChangedListener != null) realtime.off("message_changed", messageChangedListener);
             if (typingListener != null) realtime.off("user_typing", typingListener);
