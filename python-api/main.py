@@ -130,7 +130,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
-    verificationToken: str = Field(min_length=32, max_length=256)
+    # Email verification is optional; email + password are sufficient to create an account.
+    verificationToken: str | None = Field(default=None, min_length=32, max_length=256)
 
 
 class SendEmailCodeRequest(BaseModel):
@@ -485,14 +486,8 @@ def register(payload: RegisterRequest):
     if users.find_one({"username": {"$regex": f"^{re.escape(username)}$", "$options": "i"}}):
         raise HTTPException(status_code=409, detail="Username already taken")
 
-    registration_token_hash = hashlib.sha256(payload.verificationToken.encode()).hexdigest()
-    verified_email_token = verified_email_tokens_collection().find_one_and_delete({
-        "email": email,
-        "tokenHash": registration_token_hash,
-        "expiresAt": {"$gt": datetime.now(timezone.utc)},
-    })
-    if not verified_email_token:
-        raise HTTPException(status_code=400, detail="Подтвердите email перед регистрацией.")
+    # Verification codes remain available as an optional account-security feature,
+    # but must not block registration on web or Android.
     if users.find_one({"email": email}):
         raise HTTPException(
             status_code=400,
@@ -504,7 +499,7 @@ def register(payload: RegisterRequest):
         "email": email,
         "username": username,
         "displayName": username,
-        "isEmailVerified": True,
+        "isEmailVerified": False,
         "passwordHash": hash_password(payload.password),
         "avatarUrl": "",
         "bio": "",
@@ -532,7 +527,7 @@ def register(payload: RegisterRequest):
             "email": email,
             "username": payload.username,
             "displayName": payload.username,
-            "isEmailVerified": True,
+            "isEmailVerified": False,
             "isPremium": False,
             "premiumUntil": None,
             "coinsBalance": 0,

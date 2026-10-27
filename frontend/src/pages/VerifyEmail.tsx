@@ -48,11 +48,11 @@ export default function VerifyEmail() {
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            if (parsed.email && parsed.password && parsed.username && registrationToken) {
-              await register(parsed.email, parsed.password, parsed.username, registrationToken);
+            if (parsed.email && parsed.password && parsed.username) {
+              await register(parsed.email, parsed.password, parsed.username);
               sessionStorage.removeItem('pendingRegistration');
               setStatus('success');
-              setMessage('Почта успешно подтверждена! Входим в аккаунт…');
+              setMessage('Аккаунт готов. Входим в Skyline…');
               window.setTimeout(() => navigate('/', { replace: true }), 1200);
               return;
             }
