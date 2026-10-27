@@ -6,7 +6,7 @@ This folder now contains a **minimal standalone Android app prototype** and the 
 
 - Gradle Android application module (app).
 - Launcher activity with a basic Skyline sign-in screen.
-- HTTP bridge for POST /auth/login, GET /auth/me, and GET /users/search?q=...
+- HTTP bridge for POST /auth/login, GET /auth/me, GET /users/search?q=..., GET /contacts, and GET /messages/{user_id}.
 - Bearer JWT authorization and HTTP error details.
 - Android Internet permission and a GitHub Actions build workflow.
 - Socket.IO Java adapter with JWT auth, reconnection, chat join/leave, typing, and generic event listeners/emits.
@@ -32,7 +32,7 @@ The first build requires network access to resolve Gradle and Android Gradle Plu
 1. Replace the prototype login flow with Skyline registration, email verification, session restore and secure token storage.
 2. Add Socket.IO Java integration and map Skyline's actual event names and payloads.
 3. Replace Telegram's MTProto dialog/message/contact/group/channel data sources with Skyline REST and Socket.IO. Telegram's MTProto protocol is not compatible with Skyline's API.
-4. Implement chat list and messaging UI, then media uploads, voice messages, replies, edits/deletes, reactions, read receipts, groups/channels, notifications and calls according to server support.
+4. Expand the initial chat list/history screens into complete messaging UI, then media uploads, voice messages, replies, edits/deletes, reactions, read receipts, groups/channels, notifications and calls according to server support.
 5. Verify compatible cryptographic formats before enabling end-to-end encryption; do not claim E2EE parity until interoperability tests pass.
 6. Create Skyline-specific Firebase configuration, application signing and release settings before publishing.
 
