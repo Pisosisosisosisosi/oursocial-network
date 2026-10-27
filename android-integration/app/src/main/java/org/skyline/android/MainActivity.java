@@ -14,6 +14,8 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.skyline.android.api.SkylineApiClient;
+import org.skyline.android.api.SkylineRealtimeClient;
+import io.socket.emitter.Emitter;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -29,6 +31,9 @@ public final class MainActivity extends Activity {
     private LinearLayout root;
     private JSONObject currentUser;
     private String activeContactId;
+    private String activeConversationTitle;
+    private SkylineRealtimeClient realtime;
+    private Emitter.Listener messageChangedListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -117,6 +122,7 @@ public final class MainActivity extends Activity {
                 JSONArray contacts = api.getContacts();
                 runOnUiThread(() -> {
                     currentUser = user;
+                    connectRealtime();
                     renderContacts(contacts, null);
                 });
             } catch (Exception error) {
@@ -183,9 +189,11 @@ public final class MainActivity extends Activity {
         Button logout = new Button(this);
         logout.setText("Выйти");
         logout.setOnClickListener(v -> {
+            disconnectRealtime();
             api.clearSession();
             currentUser = null;
             activeContactId = null;
+            activeConversationTitle = null;
             renderLogin();
         });
         screen.addView(logout, matchWrap());
@@ -208,6 +216,7 @@ public final class MainActivity extends Activity {
 
     private void openConversation(String contactId, String title) {
         activeContactId = contactId;
+        activeConversationTitle = title;
         LinearLayout screen = createScreen();
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -272,6 +281,45 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void connectRealtime() {
+        disconnectRealtime();
+        try {
+            realtime = new SkylineRealtimeClient(SkylineApiClient.DEFAULT_BASE_URL, api.getAccessToken());
+            messageChangedListener = args -> {
+                if (args == null || args.length == 0 || !(args[0] instanceof JSONObject)) return;
+                JSONObject event = (JSONObject) args[0];
+                runOnUiThread(() -> {
+                    if (currentUser == null) return;
+                    String senderId = event.optString("senderId", "");
+                    String receiverId = event.optString("receiverId", "");
+                    String currentId = currentUser.optString("id", currentUser.optString("userId", ""));
+                    if (activeContactId != null &&
+                            (activeContactId.equals(senderId) || activeContactId.equals(receiverId))) {
+                        openConversation(activeContactId, activeConversationTitle == null ? "Чат" : activeConversationTitle);
+                    } else if (activeContactId == null &&
+                            (!currentId.equals(senderId) || !receiverId.isEmpty())) {
+                        refreshContacts();
+                    }
+                });
+            };
+            realtime.on("message_changed", messageChangedListener);
+            realtime.connect();
+        } catch (Exception error) {
+            // REST chat/history remain available if the realtime endpoint is unavailable.
+            realtime = null;
+            messageChangedListener = null;
+        }
+    }
+
+    private void disconnectRealtime() {
+        if (realtime != null) {
+            if (messageChangedListener != null) realtime.off("message_changed", messageChangedListener);
+            realtime.disconnect();
+            realtime = null;
+        }
+        messageChangedListener = null;
+    }
+
     private LinearLayout createScreen() {
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
@@ -303,6 +351,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        disconnectRealtime();
         executor.shutdownNow();
         super.onDestroy();
     }
