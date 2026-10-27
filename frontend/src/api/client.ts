@@ -19,6 +19,7 @@ api.interceptors.request.use((config) => {
 export interface User {
   id: string;
   email?: string;
+  phone?: string;
   isEmailVerified?: boolean;
   username: string;
   displayName?: string;
