@@ -1,35 +1,43 @@
-# Skyline Android integration bridge
+# Skyline Android integration prototype
 
-This directory is the first integration layer for adapting the Telegram Android client to Skyline's existing API. It is **not yet a complete Android application or a modified Telegram APK**.
+This folder now contains a **minimal standalone Android app prototype** and the first Skyline API bridge. It is not yet the full Telegram Android client: Telegram's screens and MTProto data layer have not been ported/replaced.
 
-## Current Skyline connection details
+## Included in this PR
 
-- API origin used by the web client: `https://oursocial-python.onrender.com`
-- Login: `POST /auth/login` with `{ "email": "...", "password": "..." }`; response contains `token` and `user`.
-- Current-user profile: `GET /auth/me` with `Authorization: Bearer <token>`.
-- User search: `GET /users/search?q=<query>`.
-- Realtime: Socket.IO at the same origin, authenticated with `auth: { token }` (not Telegram's MTProto protocol).
-- Backend stack: FastAPI/Python API, MongoDB and Socket.IO. The separate Node service is not the web client's primary API origin.
+- Gradle Android application module (app).
+- Launcher activity with a basic Skyline sign-in screen.
+- HTTP bridge for POST /auth/login, GET /auth/me, and GET /users/search?q=...
+- Bearer JWT authorization and HTTP error details.
+- Android Internet permission and a GitHub Actions build workflow.
 
-## Java bridge
+## Build locally
 
-`SkylineApiClient.java` uses Android's built-in `HttpURLConnection` and `org.json` to avoid introducing a new HTTP dependency prematurely. All network methods are blocking: call them from an executor/background thread, never the Android UI thread. Store the token in Android's secure storage in production; do not persist it in plain preferences.
+Install Android Studio and Android SDK 35, then open the android-integration/ directory as a Gradle project. Run the assembleDebug task or use:
 
-The generic `request` method is intentionally a transport foundation, not a promise that every Telegram feature maps to a Skyline endpoint. Each screen/action must be mapped to the matching Skyline endpoint and response model.
+    gradle -p android-integration assembleDebug
 
-## Integration sequence
+The first build requires network access to resolve Gradle and Android Gradle Plugin dependencies. The APK, if the build succeeds, is generated under android-integration/app/build/outputs/apk/debug/.
 
-1. Fork `DrKLO/Telegram` into a separately maintained Skyline Android repository. Keep the GPL-2.0 license and required notices; use Skyline branding and icons, not Telegram's name/logo.
-2. Replace Telegram account onboarding and session handling with Skyline login/registration and JWT session storage.
-3. Replace Telegram's MTProto data sources for dialogs, messages, contacts, groups and channels with Skyline REST calls and Socket.IO events. Do not point the Telegram MTProto client at Skyline; it speaks a different protocol.
-4. Map media upload/download, voice recording, message edits/deletes, replies, reactions, read receipts, group/channel permissions and calls one by one. Features without matching Skyline API support must be implemented server-side before being exposed in Android.
-5. Port the existing client-side encryption carefully. Skyline currently uses browser Web Crypto formats; Android must implement compatible formats and key handling, with interoperability tests before enabling encrypted messaging.
-6. Configure the app ID, Firebase configuration, signing keys and API origin for Skyline. Never ship upstream dummy signing or Firebase credentials.
-7. Build and test on an Android emulator and physical device, including account login, message delivery, reconnects, attachments and encrypted-message interoperability.
+## Current Skyline API assumptions
 
-## Known gaps before this can be called complete
+- API origin: https://oursocial-python.onrender.com (the same default origin configured in the web frontend).
+- Login: POST /auth/login with an email and password; response contains token and user.
+- Current-user profile: GET /auth/me with Authorization: Bearer token.
+- User search: GET /users/search?q=query.
+- Realtime: Socket.IO at the configured API origin, authenticated with auth: { token } in the web client. The Android Socket.IO integration is not yet implemented.
 
-- The Telegram Android source has not yet been forked or patched by this bridge.
-- Socket.IO Java client dependency and event mapping are not added here.
-- No complete Android screen flow, registration/email verification, chat list, messaging, group/channel UI, calls, push notifications or end-to-end encryption integration is implemented yet.
-- The web repo's CI does not compile this Java file as an Android module. A real Android Gradle project and device/emulator build are required before claiming an APK is buildable.
+## Next integration stages
+
+1. Replace the prototype login flow with Skyline registration, email verification, session restore and secure token storage.
+2. Add Socket.IO Java integration and map Skyline's actual event names and payloads.
+3. Replace Telegram's MTProto dialog/message/contact/group/channel data sources with Skyline REST and Socket.IO. Telegram's MTProto protocol is not compatible with Skyline's API.
+4. Implement chat list and messaging UI, then media uploads, voice messages, replies, edits/deletes, reactions, read receipts, groups/channels, notifications and calls according to server support.
+5. Verify compatible cryptographic formats before enabling end-to-end encryption; do not claim E2EE parity until interoperability tests pass.
+6. Create Skyline-specific Firebase configuration, application signing and release settings before publishing.
+
+## Security and limitations
+
+- The prototype keeps the token in memory only; it does not persist it. Production session storage must use Android Keystore-backed encrypted storage.
+- API calls are blocking and are run on a background executor, not the UI thread.
+- This is not yet a modified Telegram APK, and it has not been device-tested in this environment.
+- The upstream Telegram Android repository is GPL-2.0. If we distribute a derivative build, preserve required notices and comply with source publication obligations. Do not use Telegram branding in a way that implies this is an official Telegram app.
