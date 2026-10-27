@@ -960,7 +960,7 @@ public final class MainActivity extends Activity {
                 try (android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
                     if (cursor != null) { int column = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME); if (column >= 0 && cursor.moveToFirst()) { String value = cursor.getString(column); if (value != null && !value.trim().isEmpty()) filename = value.replace("\\n", "").replace("\\r", ""); } }
                 } catch (Exception ignored) { }
-                String payload = "skyline-attachment:v1\\n" + mime + "\\n" + filename + "\\n" + Base64.encodeToString(bytes, Base64.NO_WRAP);
+                String payload = "skyline-attachment:v1\n" + mime + "\n" + filename + "\n" + Base64.encodeToString(bytes, Base64.NO_WRAP);
                 String encrypted = crypto.encryptMessage(payload, senderId, ownPublicKey, recipientId, recipientPublicKey);
                 api.sendAttachment(recipientId, "image", encrypted);
                 runOnUiThread(() -> { Toast.makeText(this, "Зашифрованное изображение отправлено.", Toast.LENGTH_SHORT).show(); if (recipientId.equals(activeContactId)) openConversation(recipientId, title == null ? "Чат" : title); });
