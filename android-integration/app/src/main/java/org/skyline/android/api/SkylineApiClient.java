@@ -52,7 +52,11 @@ public final class SkylineApiClient {
 
     /** Returns the current user's personal chats, including recent-message previews. */
     public JSONArray getContacts() throws Exception {
-        JSONArray items = request("GET", "/contacts", null, true).optJSONArray("items");
+        JSONObject response = request("GET", "/contacts", null, true);
+        // Skyline's FastAPI endpoint returns a JSON array directly, while compatible
+        // deployments may wrap the collection in an object.
+        JSONArray items = response.optJSONArray("items");
+        if (items == null) items = response.optJSONArray("contacts");
         return items == null ? new JSONArray() : items;
     }
 
