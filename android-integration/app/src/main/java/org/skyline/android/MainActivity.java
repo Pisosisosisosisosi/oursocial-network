@@ -439,6 +439,12 @@ public final class MainActivity extends Activity {
     }
 
     private void openConversation(String contactId, String title) {
+        if (activeContactId != null && !activeContactId.equals(contactId)) {
+            if (isTypingToContact && realtime != null) realtime.setTyping(activeContactId, false);
+            if (typingStopRunnable != null) typingHandler.removeCallbacks(typingStopRunnable);
+            typingStopRunnable = null;
+            isTypingToContact = false;
+        }
         activeGroupId = null;
         activeGroup = null;
         // Realtime refreshes rebuild the screen. Preserve the current draft when
