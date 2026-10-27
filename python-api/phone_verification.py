@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 from db import get_db, users_collection
 
 router = APIRouter(prefix="/auth/phone", tags=["phone-verification"])
-PHONE_RE = re.compile(r"^\\+[1-9]\\d{7,14}$")
+PHONE_RE = re.compile(r"^\+[1-9]\d{7,14}$")
 CODE_TTL_SECONDS = 600
 TOKEN_TTL_SECONDS = 600
 
@@ -42,7 +42,7 @@ _rate_attempts: dict[str, Deque[float]] = defaultdict(deque)
 
 
 def normalize_phone(value: str) -> str:
-    phone = re.sub(r"[\\s().-]", "", value)
+    phone = re.sub(r"[\s().-]", "", value)
     if not PHONE_RE.fullmatch(phone):
         raise HTTPException(
             status_code=422,
