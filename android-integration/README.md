@@ -4,8 +4,8 @@ This directory contains a **standalone native Android prototype** for Skyline. I
 
 ## Included now
 
-- Native Skyline sign-in screen and personal chat list/history.
-- REST API bridge for login, contacts, message history, public-key lookup/registration, and sending encrypted text messages.
+- Native Skyline sign-in screen, personal chat list/history, user search by username/display name, and add-contact flow.
+- REST API bridge for login, user search, adding contacts, message history, public-key lookup/registration, and sending encrypted text messages.
 - Socket.IO client authenticated with the Skyline JWT and a `message_changed` listener to refresh the active conversation or chat list.
 - Initial Skyline v4 E2EE implementation: P-256 ECDH, HKDF-SHA256, AES-GCM, and an Android Keystore AES key used to encrypt the locally stored PKCS#8 private key.
 - A key-safety check at login: if the server already has a different public key for the account, the app does not overwrite it and disables encrypted sending. This avoids silently breaking access to existing encrypted conversations.
@@ -34,7 +34,7 @@ The APK is generated at:
 
 - Default API origin: `https://oursocial-python.onrender.com`.
 - Login: `POST /auth/login` with email/password; response contains `token` and `user`.
-- Contacts: `GET /contacts`; personal history: `GET /messages/{user_id}?limit=50`.
+- User search: `GET /users/search?q=...`; add contact: `PUT /contacts`; contacts: `GET /contacts`; personal history: `GET /messages/{user_id}?limit=50`.
 - Key registration/lookup: `POST /keys/upload`, `GET /keys/me`, and `GET /keys/{user_id}`.
 - Sending text: `POST /messages` with `receiverId`, `text` (encrypted envelope), and `type: "text"`.
 - v4 envelopes are shaped to match the web implementation's `skyline-e2e:v4:` format. The implementation has been compiled but still needs cross-client test vectors and live testing with real accounts/devices before it can be treated as interoperable.
