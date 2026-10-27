@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { isAxiosError } from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, CloudLightning, Mail, Phone, User as UserIcon, AtSign, LockKeyhole } from 'lucide-react';
-import { authApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
