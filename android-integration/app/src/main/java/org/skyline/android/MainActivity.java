@@ -8,8 +8,10 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.skyline.android.api.SkylineApiClient;
 
@@ -24,6 +26,9 @@ public final class MainActivity extends Activity {
     private TextView statusView;
     private Button loginButton;
     private ProgressBar progress;
+    private LinearLayout root;
+    private JSONObject currentUser;
+    private String activeContactId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,7 +37,7 @@ public final class MainActivity extends Activity {
     }
 
     private void renderLogin() {
-        LinearLayout root = new LinearLayout(this);
+        root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
         int horizontal = dp(28);
@@ -108,22 +113,11 @@ public final class MainActivity extends Activity {
             try {
                 JSONObject response = api.login(email, password);
                 JSONObject user = response.optJSONObject("user");
-                String name = user == null ? email : user.optString("displayName", user.optString("username", email));
+                if (user == null) throw new IllegalStateException("В ответе Skyline API отсутствуют данные пользователя");
+                JSONArray contacts = api.getContacts();
                 runOnUiThread(() -> {
-                    setBusy(false);
-                    statusView.setText("Вход выполнен. Добро пожаловать, " + name + "!");
-                    emailInput.setVisibility(View.GONE);
-                    passwordInput.setVisibility(View.GONE);
-                    loginButton.setText("Выйти");
-                    loginButton.setOnClickListener(v -> {
-                        api.clearSession();
-                        emailInput.setVisibility(View.VISIBLE);
-                        passwordInput.setVisibility(View.VISIBLE);
-                        passwordInput.setText("");
-                        loginButton.setText("Войти");
-                        loginButton.setOnClickListener(ignored -> login());
-                        statusView.setText("Вы вышли из аккаунта.");
-                    });
+                    currentUser = user;
+                    renderContacts(contacts, null);
                 });
             } catch (Exception error) {
                 String message = error.getMessage() == null ? "Не удалось подключиться к API." : error.getMessage();
@@ -135,9 +129,167 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void renderContacts(JSONArray contacts, String errorText) {
+        LinearLayout screen = createScreen();
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        TextView title = text("Skyline", 25, 0xFF1877D2);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        Button refresh = new Button(this);
+        refresh.setText("Обновить");
+        refresh.setOnClickListener(v -> refreshContacts());
+        header.addView(refresh);
+        screen.addView(header, matchWrap());
+
+        TextView account = text("Вы вошли как " + currentUser.optString("username", currentUser.optString("email", "")), 13, 0xFF586778);
+        LinearLayout.LayoutParams accountParams = matchWrap();
+        accountParams.topMargin = dp(4);
+        accountParams.bottomMargin = dp(12);
+        screen.addView(account, accountParams);
+
+        if (errorText != null) screen.addView(text(errorText, 13, 0xFFB42318), matchWrap());
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        if (contacts.length() == 0) {
+            TextView empty = text("Пока нет личных чатов. Добавьте контакт в веб-версии Skyline.", 15, 0xFF586778);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dp(12), dp(28), dp(12), dp(28));
+            list.addView(empty, matchWrap());
+        }
+        for (int i = 0; i < contacts.length(); i++) {
+            JSONObject contact = contacts.optJSONObject(i);
+            if (contact == null) continue;
+            final String id = contact.optString("id", "");
+            if (id.isEmpty()) continue;
+            String name = contact.optString("nickname", contact.optString("displayName", contact.optString("username", "Пользователь")));
+            String preview = contact.optString("lastMessageText", "");
+            if (!preview.isEmpty() && (preview.startsWith("skyline-e2e:") || preview.startsWith("oursocial-e2e:"))) {
+                preview = "🔒 Зашифрованное сообщение";
+            }
+            if (preview.isEmpty()) preview = "Открыть переписку";
+            TextView item = text(name + "\n@" + contact.optString("username", "") + "\n" + preview, 15, 0xFF263445);
+            item.setPadding(dp(14), dp(14), dp(14), dp(14));
+            item.setBackgroundColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFFF0F4F8);
+            item.setOnClickListener(v -> openConversation(id, name));
+            list.addView(item, matchWrap());
+        }
+        scroll.addView(list);
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        scrollParams.topMargin = dp(8);
+        screen.addView(scroll, scrollParams);
+
+        Button logout = new Button(this);
+        logout.setText("Выйти");
+        logout.setOnClickListener(v -> {
+            api.clearSession();
+            currentUser = null;
+            activeContactId = null;
+            renderLogin();
+        });
+        screen.addView(logout, matchWrap());
+        setContentView(screen);
+        setBusy(false);
+    }
+
+    private void refreshContacts() {
+        setBusy(true);
+        executor.execute(() -> {
+            try {
+                JSONArray contacts = api.getContacts();
+                runOnUiThread(() -> renderContacts(contacts, null));
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось загрузить чаты." : error.getMessage();
+                runOnUiThread(() -> renderContacts(new JSONArray(), "Ошибка загрузки чатов: " + message));
+            }
+        });
+    }
+
+    private void openConversation(String contactId, String title) {
+        activeContactId = contactId;
+        LinearLayout screen = createScreen();
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        Button back = new Button(this);
+        back.setText("‹ Назад");
+        back.setOnClickListener(v -> refreshContacts());
+        header.addView(back);
+        TextView heading = text(title, 20, 0xFF1877D2);
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(0, -2, 1);
+        headingParams.leftMargin = dp(8);
+        header.addView(heading, headingParams);
+        screen.addView(header, matchWrap());
+
+        TextView notice = text("История загружается с сервера. Для отправки сообщений требуется подключить совместимый E2EE-модуль Skyline.", 12, 0xFF586778);
+        LinearLayout.LayoutParams noticeParams = matchWrap();
+        noticeParams.topMargin = dp(8);
+        noticeParams.bottomMargin = dp(8);
+        screen.addView(notice, noticeParams);
+
+        TextView messagesView = text("Загрузка сообщений…", 14, 0xFF263445);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(messagesView);
+        screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        setContentView(screen);
+        setBusy(true);
+        executor.execute(() -> {
+            try {
+                JSONArray messages = api.getMessages(contactId);
+                StringBuilder history = new StringBuilder();
+                for (int i = 0; i < messages.length(); i++) {
+                    JSONObject message = messages.optJSONObject(i);
+                    if (message == null) continue;
+                    boolean own = currentUser != null && currentUser.optString("id", "").equals(message.optString("senderId", ""));
+                    String sender = own ? "Вы" : title;
+                    String body = message.optString("text", "");
+                    if (body.startsWith("skyline-e2e:") || body.startsWith("oursocial-e2e:")) {
+                        body = "🔒 Зашифрованное сообщение (расшифровка на Android ещё не подключена)";
+                    } else if (!"text".equals(message.optString("type", "text"))) {
+                        body = "📎 Вложение";
+                    }
+                    if (history.length() > 0) history.append("\n\n");
+                    history.append(sender).append("\n").append(body);
+                }
+                if (history.length() == 0) history.append("Сообщений пока нет.");
+                final String rendered = history.toString();
+                runOnUiThread(() -> {
+                    if (contactId.equals(activeContactId)) {
+                        messagesView.setText(rendered);
+                        messagesView.setPadding(dp(8), dp(12), dp(8), dp(12));
+                        setBusy(false);
+                    }
+                });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось загрузить историю." : error.getMessage();
+                runOnUiThread(() -> {
+                    messagesView.setText("Ошибка загрузки сообщений: " + message);
+                    setBusy(false);
+                });
+            }
+        });
+    }
+
+    private LinearLayout createScreen() {
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setPadding(dp(16), dp(18), dp(16), dp(12));
+        screen.setBackgroundColor(0xFFF5F8FC);
+        return screen;
+    }
+
+    private TextView text(String value, int size, int color) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        return view;
+    }
+
     private void setBusy(boolean busy) {
-        loginButton.setEnabled(!busy);
-        progress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        if (loginButton != null) loginButton.setEnabled(!busy);
+        if (progress != null) progress.setVisibility(busy ? View.VISIBLE : View.GONE);
     }
 
     private LinearLayout.LayoutParams matchWrap() {
