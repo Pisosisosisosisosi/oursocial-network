@@ -37,6 +37,8 @@ public final class MainActivity extends Activity {
     private JSONObject currentUser;
     private String activeContactId;
     private String activeConversationTitle;
+    private String activeGroupId;
+    private JSONObject activeGroup;
     private EditText activeMessageInput;
     private LinearLayout searchResultsContainer;
     private ScrollView searchResultsScroll;
@@ -346,6 +348,8 @@ public final class MainActivity extends Activity {
         // otherwise realtime events can unexpectedly reopen a chat over the list.
         activeContactId = null;
         activeConversationTitle = null;
+        activeGroupId = null;
+        activeGroup = null;
         activeMessageInput = null;
         searchResultsContainer = null;
         searchResultsScroll = null;
@@ -362,6 +366,8 @@ public final class MainActivity extends Activity {
     }
 
     private void openConversation(String contactId, String title) {
+        activeGroupId = null;
+        activeGroup = null;
         // Realtime refreshes rebuild the screen. Preserve the current draft when
         // refreshing the same conversation so incoming events don't erase typing.
         String draft = contactId.equals(activeContactId) && activeMessageInput != null
@@ -495,6 +501,8 @@ public final class MainActivity extends Activity {
     }
 
     private void openFeature(String feature) {
+        activeGroupId = null;
+        activeGroup = null;
         activeContactId = null;
         activeConversationTitle = null;
         activeMessageInput = null;
@@ -666,6 +674,10 @@ public final class MainActivity extends Activity {
     private void openGroup(JSONObject group) {
         String groupId = group.optString("id", "");
         String title = group.optString("title", "Группа");
+        activeGroupId = groupId;
+        activeGroup = group;
+        activeContactId = null;
+        activeConversationTitle = null;
         LinearLayout screen = createScreen();
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -679,22 +691,90 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(content);
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        LinearLayout composer = new LinearLayout(this);
+        composer.setOrientation(LinearLayout.HORIZONTAL);
+        EditText input = new EditText(this);
+        input.setHint("Сообщение в группу…");
+        input.setMinLines(1);
+        input.setMaxLines(4);
+        composer.addView(input, new LinearLayout.LayoutParams(0, -2, 1));
+        Button send = new Button(this);
+        send.setText("Отправить");
+        send.setOnClickListener(v -> {
+            String plaintext = input.getText().toString().trim();
+            if (plaintext.isEmpty()) return;
+            if (!e2eeReady) {
+                input.setError("Отправка отключена: ключ аккаунта не совпадает с ключом устройства.");
+                return;
+            }
+            JSONArray members = group.optJSONArray("members");
+            JSONObject recipientKeys = new JSONObject();
+            String ownId = currentUser == null ? "" : currentUser.optString("id", currentUser.optString("userId", ""));
+            try {
+                if (members == null || members.length() == 0) throw new IllegalStateException("Не удалось получить список участников группы.");
+                String ownPublicKey = crypto.ensurePublicKey();
+                for (int i = 0; i < members.length(); i++) {
+                    JSONObject member = members.optJSONObject(i);
+                    if (member == null) continue;
+                    String memberId = member.optString("userId", "");
+                    String memberKey = member.optString("publicKey", "");
+                    if (memberId.equals(ownId) && memberKey.isEmpty()) memberKey = ownPublicKey;
+                    if (memberId.isEmpty() || memberKey.isEmpty()) {
+                        throw new IllegalStateException("У всех участников должен быть зарегистрирован E2EE-ключ. Попросите участника открыть Skyline и повторите попытку.");
+                    }
+                    recipientKeys.put(memberId, memberKey);
+                }
+            } catch (Exception keyError) {
+                input.setError(keyError.getMessage() == null ? "Не удалось подготовить ключи группы." : keyError.getMessage());
+                return;
+            }
+            send.setEnabled(false);
+            executor.execute(() -> {
+                try {
+                    String encrypted = crypto.encryptMessageForRecipients(plaintext, recipientKeys);
+                    api.sendGroupMessage(groupId, encrypted);
+                    runOnUiThread(() -> {
+                        input.setText("");
+                        send.setEnabled(true);
+                        openGroup(group);
+                    });
+                } catch (Exception error) {
+                    String message = error.getMessage() == null ? "Не удалось отправить сообщение в группу." : error.getMessage();
+                    runOnUiThread(() -> {
+                        send.setEnabled(true);
+                        input.setError(message);
+                    });
+                }
+            });
+        });
+        composer.addView(send);
+        screen.addView(composer, matchWrap());
         setContentView(screen);
         executor.execute(() -> {
             try {
                 JSONArray messages = api.getGroupMessages(groupId);
                 StringBuilder output = new StringBuilder();
+                String ownId = currentUser == null ? "" : currentUser.optString("id", currentUser.optString("userId", ""));
                 for (int i = 0; i < messages.length(); i++) {
                     JSONObject m = messages.optJSONObject(i);
                     if (m == null) continue;
                     if (output.length() > 0) output.append("\n\n");
+                    String senderId = m.optString("senderId", "");
                     String body = m.optString("text", "");
-                    output.append(m.optString("senderId", "Участник")).append(": ")
-                            .append(body.startsWith("skyline-e2e:") ? "🔒 Зашифрованное сообщение группы" : body);
+                    if (body.startsWith("skyline-e2e:v4:")) {
+                        try { body = crypto.decryptMessage(body, ownId); }
+                        catch (Exception decryptError) { body = "🔒 Не удалось расшифровать сообщение для этого аккаунта"; }
+                    } else if (body.startsWith("skyline-e2e:") || body.startsWith("oursocial-e2e:")) {
+                        body = "🔒 Сообщение использует старый формат шифрования";
+                    }
+                    output.append(senderId.equals(ownId) ? "Вы" : senderId).append(": ").append(body);
                 }
-                if (output.length() == 0) output.append("Сообщений пока нет. Отправка групповых E2EE-сообщений появится после реализации управления групповыми ключами.");
+                if (output.length() == 0) output.append("Сообщений пока нет. Отправьте первое сообщение.");
                 String rendered = output.toString();
-                runOnUiThread(() -> content.setText(rendered));
+                runOnUiThread(() -> {
+                    if (groupId.equals(activeGroupId)) content.setText(rendered);
+                });
             } catch (Exception error) {
                 String message = error.getMessage() == null ? "Ошибка загрузки сообщений." : error.getMessage();
                 runOnUiThread(() -> content.setText(message));
@@ -703,6 +783,9 @@ public final class MainActivity extends Activity {
     }
 
     private void openChannel(JSONObject channel) {
+        activeGroupId = null;
+        activeGroup = null;
+        activeContactId = null;
         String channelId = channel.optString("id", "");
         String title = channel.optString("title", "Канал");
         LinearLayout screen = createScreen();
@@ -797,6 +880,11 @@ public final class MainActivity extends Activity {
                     String senderId = event.optString("senderId", "");
                     String receiverId = event.optString("receiverId", "");
                     String currentId = currentUser.optString("id", currentUser.optString("userId", ""));
+                    String eventGroupId = event.optString("groupId", "");
+                    if (activeGroupId != null) {
+                        if (activeGroup != null && activeGroupId.equals(eventGroupId)) openGroup(activeGroup);
+                        return;
+                    }
                     if (activeContactId != null &&
                             (activeContactId.equals(senderId) || activeContactId.equals(receiverId))) {
                         openConversation(activeContactId, activeConversationTitle == null ? "Чат" : activeConversationTitle);
