@@ -48,7 +48,7 @@ The APK is generated at:
 
 - No registration/email verification or persisted login session yet.
 - No safe cross-device private-key recovery/sync.
-- Group/channel browsing and creation are present, but group E2EE sending and complete member/admin management are not implemented. Channel publishing is text-only in this Android prototype.
+- Group/channel browsing and creation are present. Group text sending now builds a v4 E2EE envelope for every current member; it fails closed if any member lacks a public key. Complete member/admin management is not implemented. Channel publishing is text-only in this Android prototype.
 - Stories can be browsed and marked viewed, but story upload/media playback is not yet implemented in Android. Saved messages can be browsed, but saving/forwarding/reacting/editing/deleting messages from Android is not yet implemented.
 - No attachment picker, voice-message recording/playback, calls, push notifications, chat folders, bot UI, or full privacy/session management yet.
 - No real-device or live-server integration test has been performed in this environment. CI confirms compilation and APK packaging only; it does not prove that authentication, live API responses, realtime events, or cross-client cryptography work end to end.
