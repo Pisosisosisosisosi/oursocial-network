@@ -57,8 +57,12 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  register: (email: string, password: string, username: string, verificationToken: string) =>
-    api.post<AuthResponse>('/auth/register', { email, password, username, verificationToken }),
+  register: (email: string, password: string, username: string, verificationToken: string, phone?: string, phoneVerificationToken?: string) =>
+    api.post<AuthResponse>('/auth/register', { email, password, username, verificationToken, ...(phone && phoneVerificationToken ? { phone, phoneVerificationToken } : {}) }),
+  sendPhoneCode: (phone: string) =>
+    api.post<{ status: string; message: string; expiresInSeconds: number }>('/auth/phone/send-code', { phone }),
+  verifyPhoneCode: (phone: string, code: string) =>
+    api.post<{ status: string; phoneVerificationToken: string; expiresInSeconds: number }>('/auth/phone/verify-code', { phone, code }),
   sendEmailCode: (email: string) =>
     api.post<{
       status: string;
