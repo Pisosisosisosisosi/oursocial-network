@@ -39,6 +39,12 @@ export default function Register() {
     }
   });
   const [password, setPassword] = useState(() => savedRegistration?.password || '');
+  const [phone, setPhone] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneVerificationToken, setPhoneVerificationToken] = useState('');
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneNotice, setPhoneNotice] = useState('');
+  const [phoneError, setPhoneError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(() => Boolean(savedRegistration));
@@ -66,16 +72,56 @@ export default function Register() {
     return () => window.clearTimeout(timer);
   }, [verificationOpen, secondsRemaining]);
 
+  const handleSendPhoneCode = async () => {
+    setPhoneError('');
+    setPhoneNotice('');
+    setPhoneBusy(true);
+    try {
+      const response = await authApi.sendPhoneCode(phone.trim());
+      setPhoneNotice(response.data.message || 'Если номер можно использовать, инструкция будет отправлена.');
+    } catch (sendError: unknown) {
+      const data = isAxiosError(sendError)
+        ? sendError.response?.data as { detail?: string; error?: string } | undefined
+        : undefined;
+      setPhoneError(data?.detail || data?.error || 'Не удалось отправить SMS. Проверьте номер и попробуйте снова.');
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  const handleVerifyPhoneCode = async () => {
+    setPhoneError('');
+    setPhoneNotice('');
+    setPhoneBusy(true);
+    try {
+      const response = await authApi.verifyPhoneCode(phone.trim(), phoneCode.trim());
+      setPhoneVerificationToken(response.data.phoneVerificationToken);
+      setPhoneNotice('Номер телефона подтверждён.');
+      setPhoneCode('');
+    } catch (verifyError: unknown) {
+      const data = isAxiosError(verifyError)
+        ? verifyError.response?.data as { detail?: string; error?: string } | undefined
+        : undefined;
+      setPhoneError(data?.detail || data?.error || 'Не удалось подтвердить номер телефона.');
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+    if (!phoneVerificationToken) {
+      setError('Сначала подтвердите номер телефона по SMS.');
+      return;
+    }
 
     const verifiedToken = sessionStorage.getItem('verifiedEmailToken');
     const verifiedEmail = sessionStorage.getItem('verifiedEmailAddress');
     if (verifiedToken && verifiedEmail && verifiedEmail.toLowerCase() === email.trim().toLowerCase()) {
       setLoading(true);
       try {
-        await register(email.trim(), password, username.trim(), verifiedToken);
+        await register(email.trim(), password, username.trim(), verifiedToken, phone.trim(), phoneVerificationToken);
         sessionStorage.removeItem('verifiedEmailToken');
         sessionStorage.removeItem('verifiedEmailAddress');
         const redirectPath = sessionStorage.getItem('skylineAfterLogin');
@@ -148,7 +194,7 @@ export default function Register() {
     setVerificationLoading(true);
     try {
       const response = await authApi.verifyEmailCode(email.trim(), codeToUse);
-      await register(email.trim(), password, username.trim(), response.data.registrationToken);
+      await register(email.trim(), password, username.trim(), response.data.registrationToken, phone.trim(), phoneVerificationToken);
       sessionStorage.removeItem('pendingRegistration');
       sessionStorage.removeItem('verifiedEmailToken');
       sessionStorage.removeItem('verifiedEmailAddress');
@@ -204,6 +250,45 @@ export default function Register() {
               required
               placeholder="username"
             />
+            <div className="space-y-2">
+              <Input
+                type="tel"
+                label="Номер телефона"
+                value={phone}
+                onChange={(event) => {
+                  setPhone(event.target.value);
+                  setPhoneVerificationToken('');
+                  setPhoneNotice('');
+                }}
+                autoComplete="tel"
+                required
+                placeholder="+12025550123"
+              />
+              {!phoneVerificationToken && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={phoneCode}
+                    onChange={(event) => setPhoneCode(event.target.value.replace(/\\D/g, '').slice(0, 8))}
+                    placeholder="Код из SMS"
+                    aria-label="Код подтверждения телефона"
+                    className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 text-sm text-t-primary outline-none focus:border-accent/50"
+                  />
+                  <Button type="button" variant="glass" onClick={() => void handleSendPhoneCode()} disabled={phoneBusy || !phone.trim()}>
+                    {phoneBusy ? 'Подождите…' : 'Получить SMS'}
+                  </Button>
+                </div>
+              )}
+              {!phoneVerificationToken && phoneCode.length >= 4 && (
+                <Button type="button" variant="glass" onClick={() => void handleVerifyPhoneCode()} disabled={phoneBusy}>
+                  Подтвердить номер
+                </Button>
+              )}
+              {phoneError && <p role="alert" className="text-xs text-rose-300">{phoneError}</p>}
+              {phoneNotice && <p role="status" className="text-xs text-t-secondary">{phoneNotice}</p>}
+            </div>
             <Input
               type="email"
               label="Электронная почта"
