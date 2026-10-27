@@ -888,11 +888,7 @@ public final class MainActivity extends Activity {
         startActivityForResult(intent, PICK_CHAT_IMAGE);
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != PICK_CHAT_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
-        final Uri uri = data.getData();
+    private void sendChatImageResult(Intent data) {final Uri uri = data.getData();
         final String recipientId = activeContactId;
         final String title = activeConversationTitle;
         if (recipientId == null || currentUser == null) { Toast.makeText(this, "Сначала откройте личный чат.", Toast.LENGTH_SHORT).show(); return; }
@@ -922,7 +918,8 @@ public final class MainActivity extends Activity {
                 runOnUiThread(() -> { Toast.makeText(this, "Зашифрованное изображение отправлено.", Toast.LENGTH_SHORT).show(); if (recipientId.equals(activeContactId)) openConversation(recipientId, title == null ? "Чат" : title); });
             } catch (Exception error) { String message = error.getMessage() == null ? "Не удалось отправить изображение." : error.getMessage(); runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show()); }
         });
-    }
+        }
+
     private void sendMessage(String recipientId, String title, EditText input, Button sendButton) {
         String plainText = input.getText().toString().trim();
         if (plainText.isEmpty()) return;
@@ -1093,6 +1090,10 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_CHAT_IMAGE) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) sendChatImageResult(data);
+            return;
+        }
         if (requestCode != PICK_STORY_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         setBusy(true);
