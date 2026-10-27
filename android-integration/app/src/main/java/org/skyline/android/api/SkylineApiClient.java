@@ -46,7 +46,24 @@ public final class SkylineApiClient {
 
     public JSONArray searchUsers(String query) throws Exception {
         String encoded = java.net.URLEncoder.encode(query == null ? "" : query, "UTF-8");
-        return request("GET", "/users/search?q=" + encoded, null, true).optJSONArray("items");
+        JSONArray items = request("GET", "/users/search?q=" + encoded, null, true).optJSONArray("items");
+        return items == null ? new JSONArray() : items;
+    }
+
+    /** Returns the current user's personal chats, including recent-message previews. */
+    public JSONArray getContacts() throws Exception {
+        JSONArray items = request("GET", "/contacts", null, true).optJSONArray("items");
+        return items == null ? new JSONArray() : items;
+    }
+
+    /** Loads the newest messages for a personal conversation. */
+    public JSONArray getMessages(String otherUserId) throws Exception {
+        if (otherUserId == null || otherUserId.trim().isEmpty()) {
+            throw new IllegalArgumentException("A conversation user ID is required");
+        }
+        String encoded = java.net.URLEncoder.encode(otherUserId, "UTF-8");
+        JSONArray items = request("GET", "/messages/" + encoded + "?limit=50", null, true).optJSONArray("items");
+        return items == null ? new JSONArray() : items;
     }
 
     public JSONObject request(String method, String path, JSONObject body, boolean authenticated) throws Exception {
