@@ -457,3 +457,131 @@ html[data-reduce-motion='true'] *, html[data-reduce-motion='true'] *::before, ht
     radial-gradient(circle at 12px 12px, rgba(94,181,247,.035) 1px, transparent 1.2px);
   background-size: cover, 24px 24px;
 }
+
+
+/* Telegram-inspired full workspace pass: navigation, controls, overlays and composer.
+   Scoped to the messaging workspace so profile and account pages keep their own layout. */
+.telegram-workspace {
+  font-family: Roboto, "Arial", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: normal;
+}
+.telegram-workspace .telegram-workspace__sidebar header {
+  min-height: 58px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-color: rgba(255,255,255,.055);
+}
+.telegram-workspace .telegram-workspace__sidebar input[type="search"],
+.telegram-workspace input:not([type="checkbox"]):not([type="radio"]),
+.telegram-workspace textarea,
+.telegram-workspace select {
+  border-radius: 8px;
+  border-color: rgba(255,255,255,.07);
+  background-color: #242f3d;
+  box-shadow: none;
+}
+.telegram-workspace .telegram-workspace__sidebar input[type="search"] {
+  min-height: 40px;
+  border: 0;
+  background: #242f3d;
+}
+.telegram-workspace input::placeholder,
+.telegram-workspace textarea::placeholder {
+  color: #708499;
+  opacity: 1;
+}
+.telegram-workspace button {
+  -webkit-tap-highlight-color: transparent;
+}
+.telegram-workspace .chat-card,
+.telegram-workspace .chat-list-item {
+  border-radius: 10px;
+  box-shadow: none;
+}
+.telegram-workspace .chat-card:not(.chat-active):hover,
+.telegram-workspace .chat-list-item:not(.chat-active):hover {
+  transform: none;
+  background: rgba(255,255,255,.045);
+}
+.telegram-workspace .chat-card.chat-active,
+.telegram-workspace .chat-list-item.chat-active {
+  background: #2b5278;
+  box-shadow: none;
+}
+.telegram-workspace .chat-message-own,
+.telegram-workspace .chat-message-other,
+.telegram-workspace .chat-message-bubble {
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.telegram-workspace .chat-message-own {
+  background: #2b5278;
+  border-radius: 12px 12px 3px 12px;
+}
+.telegram-workspace .chat-message-other {
+  background: #182533;
+  border-radius: 12px 12px 12px 3px;
+}
+.telegram-workspace .chat-message-bubble {
+  border-radius: 12px;
+}
+.telegram-workspace .chat-wallpaper-surface {
+  background-color: #0e1621;
+  background-image:
+    radial-gradient(circle at 14px 14px, rgba(94,181,247,.025) 1px, transparent 1.3px);
+  background-size: 28px 28px;
+}
+.telegram-workspace .glass-panel,
+.telegram-workspace [role="dialog"],
+.telegram-workspace [data-radix-popper-content-wrapper] > *,
+.telegram-workspace [role="menu"] {
+  background-color: #17212b;
+  border-color: rgba(255,255,255,.08);
+  box-shadow: 0 12px 36px rgba(0,0,0,.28);
+  backdrop-filter: none;
+}
+.telegram-workspace [role="menu"] button,
+.telegram-workspace [role="menuitem"] {
+  border-radius: 7px;
+}
+.telegram-workspace [role="menu"] button:hover,
+.telegram-workspace [role="menuitem"]:hover {
+  background: rgba(94,181,247,.12);
+}
+.telegram-workspace .pinned-strip {
+  background: #17212b;
+  border-color: rgba(255,255,255,.06);
+}
+.telegram-workspace .chat-skeleton {
+  background: linear-gradient(90deg,#182533 25%,#202f3e 50%,#182533 75%);
+  background-size: 200% 100%;
+}
+.telegram-workspace button:focus-visible,
+.telegram-workspace input:focus-visible,
+.telegram-workspace textarea:focus-visible,
+.telegram-workspace select:focus-visible {
+  outline: 2px solid rgba(94,181,247,.65);
+  outline-offset: 1px;
+}
+.telegram-workspace .btn-glow:hover:not(:disabled),
+.telegram-workspace .card-hover:hover {
+  transform: none;
+  box-shadow: none;
+}
+.telegram-workspace ::-webkit-scrollbar { width: 6px; height: 6px; }
+.telegram-workspace ::-webkit-scrollbar-thumb {
+  background: rgba(135,155,175,.32);
+  border-radius: 999px;
+}
+.telegram-workspace ::-webkit-scrollbar-thumb:hover { background: rgba(135,155,175,.5); }
+@media (max-width: 767px) {
+  .telegram-workspace .telegram-workspace__sidebar header { padding-inline: 14px; }
+  .telegram-workspace .chat-message-own,
+  .telegram-workspace .chat-message-other { max-width: min(88%, 520px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .telegram-workspace .chat-card,
+  .telegram-workspace .chat-list-item,
+  .telegram-workspace button { transition-duration: .01ms !important; }
+}
