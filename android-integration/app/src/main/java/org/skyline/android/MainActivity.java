@@ -460,8 +460,6 @@ public final class MainActivity extends Activity {
                 Toast.makeText(this, "Вы вошли как " + currentUser.optString("username", currentUser.optString("email", "")), Toast.LENGTH_LONG).show();
                 return true;
             });
-            menu.getMenu().add("Контакты и поиск").setOnMenuItemClickListener(item -> { userSearch.requestFocus();
-                ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(userSearch, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT); return true; });
             menu.getMenu().add("Группы").setOnMenuItemClickListener(item -> { openFeature("groups"); return true; });
             menu.getMenu().add("Каналы").setOnMenuItemClickListener(item -> { openFeature("channels"); return true; });
             menu.getMenu().add("Истории").setOnMenuItemClickListener(item -> { openFeature("stories"); return true; });
