@@ -33,14 +33,23 @@ function toObjectId(id) {
  */
 router.post('/register', async (req, res, next) => {
   try {
-    const { username, password, name, avatar, email, verificationToken } = req.body;
+    const { username, password, name, displayName, avatar, email, phone } = req.body;
 
-    if (!username || !password || !email || !verificationToken) {
-      return res.status(400).json({ error: 'Email, username, password, and verified email token are required' });
+    if (!username || !password || !email || !phone || !(displayName || name)) {
+      return res.status(400).json({ error: 'Email, phone, display name, username, and password are required' });
     }
 
     const cleanUsername = String(username).trim().toLowerCase();
     const cleanEmail = String(email).trim().toLowerCase();
+    const cleanPhone = String(phone).trim().replace(/[\\s().-]/g, '');
+    const cleanDisplayName = String(displayName || name).trim();
+
+    if (!/^\\+?[0-9]{7,15}$/.test(cleanPhone)) {
+      return res.status(400).json({ error: 'Enter a valid phone number' });
+    }
+    if (!cleanDisplayName || cleanDisplayName.length > 64) {
+      return res.status(400).json({ error: 'Display name must be between 1 and 64 characters' });
+    }
 
     if (!/^[a-z0-9_.-]{3,32}$/.test(cleanUsername)) {
       return res.status(400).json({ error: 'Username must be 3–32 letters, digits, dots, underscores, or hyphens' });
@@ -52,20 +61,10 @@ router.post('/register', async (req, res, next) => {
 
     const db = getDB();
     const existing = await db.collection('users').findOne({
-      $or: [{ username: cleanUsername }, { email: cleanEmail }],
+      $or: [{ username: cleanUsername }, { email: cleanEmail }, { phone: cleanPhone }],
     });
     if (existing) {
       return res.status(409).json({ error: 'Username or email is already taken' });
-    }
-
-    const verificationTokenHash = crypto.createHash('sha256').update(String(verificationToken)).digest('hex');
-    const consumedToken = await db.collection('verified_email_tokens').findOneAndDelete({
-      email: cleanEmail,
-      tokenHash: verificationTokenHash,
-      expiresAt: { $gt: new Date() },
-    });
-    if (!consumedToken) {
-      return res.status(400).json({ error: 'Verify your email before registering' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -74,8 +73,10 @@ router.post('/register', async (req, res, next) => {
     const newUser = {
       username: cleanUsername,
       email: cleanEmail,
-      isEmailVerified: true,
-      name: name ? String(name).trim() : cleanUsername,
+      phone: cleanPhone,
+      isEmailVerified: false,
+      name: cleanDisplayName,
+      displayName: cleanDisplayName,
       avatar: avatar || null,
       avatarUrl: avatar || '',
       passwordHash,
@@ -104,8 +105,11 @@ router.post('/register', async (req, res, next) => {
       user: {
         id: userId,
         email: newUser.email,
+        phone: newUser.phone,
         username: newUser.username,
         name: newUser.name,
+        displayName: newUser.displayName,
+        isEmailVerified: false,
         avatar: newUser.avatar,
         avatarUrl: newUser.avatarUrl,
       },
