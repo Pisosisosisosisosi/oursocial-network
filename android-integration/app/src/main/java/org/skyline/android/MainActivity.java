@@ -51,6 +51,56 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         crypto = new SkylineCrypto(this);
         renderLogin();
+        restoreSession();
+    }
+
+    private void restoreSession() {
+        String encryptedToken = getSharedPreferences("skyline_session", MODE_PRIVATE).getString("encrypted_token", "");
+        if (encryptedToken == null || encryptedToken.isEmpty()) return;
+        try {
+            String token = crypto.unprotectLocalSecret(encryptedToken);
+            if (token.isEmpty()) return;
+            api.setAccessToken(token);
+            setBusy(true);
+            if (statusView != null) statusView.setText("Восстановление защищённой сессии…");
+            executor.execute(() -> {
+                try {
+                    JSONObject user = api.getCurrentUser();
+                    String publicKey = crypto.ensurePublicKey();
+                    boolean keyReady = false;
+                    String warning = null;
+                    try {
+                        JSONObject serverKey = api.getMyPublicKey();
+                        keyReady = publicKey.equals(serverKey.optString("publicKey", ""));
+                        if (!keyReady) warning = "Ключ аккаунта отличается от ключа устройства. Отправка E2EE отключена.";
+                    } catch (SkylineApiClient.SkylineApiException keyError) {
+                        if (keyError.getStatusCode() == 404) {
+                            api.uploadPublicKey(publicKey);
+                            keyReady = true;
+                        } else throw keyError;
+                    }
+                    JSONArray contacts = api.getContacts();
+                    final boolean cryptoReady = keyReady;
+                    final String cryptoWarning = warning;
+                    runOnUiThread(() -> {
+                        currentUser = user;
+                        e2eeReady = cryptoReady;
+                        connectRealtime();
+                        renderContacts(contacts, cryptoWarning);
+                    });
+                } catch (Exception error) {
+                    api.clearSession();
+                    getSharedPreferences("skyline_session", MODE_PRIVATE).edit().remove("encrypted_token").apply();
+                    String message = error.getMessage() == null ? "Сохранённая сессия истекла." : error.getMessage();
+                    runOnUiThread(() -> {
+                        setBusy(false);
+                        if (statusView != null) statusView.setText("Войдите снова: " + message);
+                    });
+                }
+            });
+        } catch (Exception error) {
+            getSharedPreferences("skyline_session", MODE_PRIVATE).edit().remove("encrypted_token").apply();
+        }
     }
 
     private void renderLogin() {
@@ -129,6 +179,8 @@ public final class MainActivity extends Activity {
         executor.execute(() -> {
             try {
                 JSONObject response = api.login(email, password);
+                getSharedPreferences("skyline_session", MODE_PRIVATE).edit()
+                        .putString("encrypted_token", crypto.protectLocalSecret(api.getAccessToken())).apply();
                 JSONObject user = response.optJSONObject("user");
                 if (user == null) throw new IllegalStateException("В ответе Skyline API отсутствуют данные пользователя");
                 String publicKey = crypto.ensurePublicKey();
@@ -330,6 +382,7 @@ public final class MainActivity extends Activity {
         logout.setText("Выйти");
         logout.setOnClickListener(v -> {
             disconnectRealtime();
+            getSharedPreferences("skyline_session", MODE_PRIVATE).edit().remove("encrypted_token").apply();
             api.clearSession();
             currentUser = null;
             e2eeReady = false;
