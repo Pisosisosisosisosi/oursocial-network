@@ -180,33 +180,33 @@ class EmailVerificationTests(unittest.TestCase):
             "code": "000042",
         })
 
-    def test_register_requires_and_consumes_a_verified_email_token(self) -> None:
+    def test_register_does_not_require_email_or_phone_verification(self) -> None:
         users = Mock()
         users.find_one.return_value = None
         users.insert_one.return_value.inserted_id = ObjectId(USER_ID)
-        verified_tokens = Mock()
-        verified_tokens.find_one_and_delete.return_value = {"email": "person@example.com"}
         payload = main.RegisterRequest(
             email="Person@Example.com",
             password="password123",
             username="person_one",
-            verificationToken="one-time-registration-token-1234567890",
+            displayName="Person One",
+            phone="+37360000000",
         )
 
         with (
             patch("main.users_collection", return_value=users),
-            patch("main.verified_email_tokens_collection", return_value=verified_tokens),
             patch("main.hash_password", return_value="password-hash"),
             patch("main.create_token", return_value="auth-token"),
         ):
             response = main.register(payload)
 
-        self.assertTrue(response["user"]["isEmailVerified"])
+        self.assertFalse(response["user"]["isEmailVerified"])
         self.assertEqual(response["user"]["email"], "person@example.com")
-        self.assertTrue(users.insert_one.call_args.args[0]["isEmailVerified"])
-        verified_tokens.find_one_and_delete.assert_called_once()
+        self.assertEqual(response["user"]["phone"], "+37360000000")
+        self.assertEqual(response["user"]["displayName"], "Person One")
+        self.assertFalse(users.insert_one.call_args.args[0]["isEmailVerified"])
+        self.assertEqual(users.insert_one.call_args.args[0]["phone"], "+37360000000")
 
-    def test_register_requires_a_verification_token(self) -> None:
+    def test_register_requires_profile_fields_but_not_a_verification_token(self) -> None:
         with self.assertRaises(ValidationError):
             main.RegisterRequest(
                 email="person@example.com",

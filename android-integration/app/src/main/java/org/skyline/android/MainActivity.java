@@ -48,6 +48,7 @@ public final class MainActivity extends Activity {
     private EditText emailInput;
     private EditText passwordInput;
     private EditText registerUsernameInput;
+    private EditText registerDisplayNameInput;
     private EditText registerPhoneInput;
     private EditText emailCodeInput;
     private EditText phoneCodeInput;
@@ -211,7 +212,7 @@ public final class MainActivity extends Activity {
         TextView title = text("Регистрация Skyline", 28, 0xFF5EB5F7);
         title.setGravity(Gravity.CENTER);
         root.addView(title, matchWrap());
-        TextView subtitle = text("Подтвердите электронную почту и номер телефона", 14, 0xFF8A9AA9);
+        TextView subtitle = text("Заполните данные. Подтверждение email и телефона не требуется.", 14, 0xFF8A9AA9);
         subtitle.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams subParams = matchWrap();
         subParams.topMargin = dp(6);
@@ -222,33 +223,12 @@ public final class MainActivity extends Activity {
         LinearLayout fields = new LinearLayout(this);
         fields.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(fields);
-        registerUsernameInput = addRegistrationField(fields, "Имя пользователя (латиница)", 33);
+        registerDisplayNameInput = addRegistrationField(fields, "Ник (отображаемое имя)", 1);
+        registerUsernameInput = addRegistrationField(fields, "Юзернейм (латиница)", 33);
         emailInput = addRegistrationField(fields, "Электронная почта", 33);
-        passwordInput = addRegistrationField(fields, "Пароль (не менее 6 символов)", 129);
         registerPhoneInput = addRegistrationField(fields, "Телефон, например +373...", 3);
-        emailCodeInput = addRegistrationField(fields, "Код из письма", 2);
-        phoneCodeInput = addRegistrationField(fields, "Код из SMS", 2);
+        passwordInput = addRegistrationField(fields, "Пароль для входа (не менее 6 символов)", 129);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-
-        Button sendEmail = createThemedButton();
-        sendEmail.setText("Отправить код на почту");
-        fields.addView(sendEmail, matchWrap());
-        sendEmail.setOnClickListener(v -> sendRegistrationEmailCode());
-
-        Button verifyEmail = createThemedButton();
-        verifyEmail.setText("Подтвердить почту");
-        fields.addView(verifyEmail, matchWrap());
-        verifyEmail.setOnClickListener(v -> verifyRegistrationEmailCode());
-
-        Button sendPhone = createThemedButton();
-        sendPhone.setText("Отправить SMS-код");
-        fields.addView(sendPhone, matchWrap());
-        sendPhone.setOnClickListener(v -> sendRegistrationPhoneCode());
-
-        Button verifyPhone = createThemedButton();
-        verifyPhone.setText("Подтвердить телефон");
-        fields.addView(verifyPhone, matchWrap());
-        verifyPhone.setOnClickListener(v -> verifyRegistrationPhoneCode());
 
         Button create = createThemedButton();
         create.setText("Зарегистрироваться");
@@ -261,7 +241,7 @@ public final class MainActivity extends Activity {
         back.setOnClickListener(v -> renderLogin());
 
         statusView = new TextView(this);
-        statusView.setText("Для регистрации нужны подтверждённые email и телефон.");
+        statusView.setText("Пароль нужен для последующего входа. Email и телефон подтверждать не нужно.");
         statusView.setTextColor(0xFF8A9AA9);
         statusView.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams statusParams = matchWrap();
@@ -356,21 +336,22 @@ public final class MainActivity extends Activity {
 
     private void completeRegistration() {
         String username = registerUsernameInput.getText().toString().trim();
+        String displayName = registerDisplayNameInput.getText().toString().trim();
         String email = emailInput.getText().toString().trim();
         String password = passwordInput.getText().toString();
         String phone = registerPhoneInput.getText().toString().trim();
         if (!username.matches("[A-Za-z0-9_.-]{3,32}")) {
-            statusView.setText("Имя пользователя: 3–32 символа, латиница, цифры, точка, дефис или подчёркивание."); return;
+            statusView.setText("Юзернейм: 3–32 символа, латиница, цифры, точка, дефис или подчёркивание."); return;
         }
+        if (displayName.isEmpty()) { statusView.setText("Введите ник."); return; }
+        if (email.isEmpty()) { statusView.setText("Введите электронную почту."); return; }
+        if (!phone.matches("\\+?[0-9\\s().-]{7,24}")) { statusView.setText("Введите корректный номер телефона."); return; }
         if (password.length() < 6) { statusView.setText("Пароль должен содержать минимум 6 символов."); return; }
-        if (emailRegistrationToken == null || phoneRegistrationToken == null) {
-            statusView.setText("Сначала подтвердите email и телефон."); return;
-        }
         setBusy(true);
         statusView.setText("Создаём аккаунт…");
         executor.execute(() -> {
             try {
-                JSONObject response = api.register(email, password, username, emailRegistrationToken, phone, phoneRegistrationToken);
+                JSONObject response = api.register(email, password, username, displayName, phone);
                 String token = response.optString("token", "");
                 JSONObject user = response.optJSONObject("user");
                 if (token.isEmpty() || user == null) throw new IllegalStateException("Неполный ответ регистрации.");
