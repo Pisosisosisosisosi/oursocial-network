@@ -24,6 +24,7 @@ import org.json.JSONObject;
 import android.util.Base64;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import org.skyline.android.api.SkylineApiClient;
 import org.skyline.android.api.SkylineRealtimeClient;
 import org.skyline.android.api.SkylineCrypto;
@@ -457,9 +458,11 @@ public final class MainActivity extends Activity {
         noticeParams.bottomMargin = dp(8);
         screen.addView(notice, noticeParams);
 
-        TextView messagesView = text("Загрузка сообщений…", 14, 0xFF263445);
+        LinearLayout messagesContainer = new LinearLayout(this);
+        messagesContainer.setOrientation(LinearLayout.VERTICAL);
+        messagesContainer.addView(text("Загрузка сообщений…", 14, 0xFF263445), matchWrap());
         ScrollView scroll = new ScrollView(this);
-        scroll.addView(messagesView);
+        scroll.addView(messagesContainer);
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout composer = new LinearLayout(this);
@@ -485,7 +488,8 @@ public final class MainActivity extends Activity {
         executor.execute(() -> {
             try {
                 JSONArray messages = api.getMessages(contactId);
-                StringBuilder history = new StringBuilder();
+                ArrayList<JSONObject> messageItems = new ArrayList<>();
+                ArrayList<String> displayRows = new ArrayList<>();
                 for (int i = 0; i < messages.length(); i++) {
                     JSONObject message = messages.optJSONObject(i);
                     if (message == null) continue;
@@ -493,37 +497,120 @@ public final class MainActivity extends Activity {
                     boolean own = !currentUserId.isEmpty() && currentUserId.equals(message.optString("senderId", ""));
                     String sender = own ? "Вы" : title;
                     String body = message.optString("text", "");
-                    if (body.startsWith("skyline-e2e:v4:")) {
-                        try {
-                            body = crypto.decryptMessage(body, currentUserId);
-                        } catch (Exception decryptError) {
-                            body = "🔒 Не удалось расшифровать сообщение на этом устройстве";
-                        }
+                    if (message.optBoolean("deletedForAll", false)) body = "Это сообщение удалено";
+                    else if (body.startsWith("skyline-e2e:v4:")) {
+                        try { body = crypto.decryptMessage(body, currentUserId); }
+                        catch (Exception decryptError) { body = "🔒 Не удалось расшифровать сообщение на этом устройстве"; }
                     } else if (body.startsWith("skyline-e2e:") || body.startsWith("oursocial-e2e:")) {
                         body = "🔒 Сообщение использует старый формат шифрования, пока не поддерживаемый Android";
                     } else if (!"text".equals(message.optString("type", "text"))) {
                         body = "📎 Вложение";
                     }
-                    if (history.length() > 0) history.append("\n\n");
-                    history.append(sender).append("\n").append(body);
+                    String createdAt = message.optString("createdAt", "");
+                    if (createdAt.length() > 16) createdAt = createdAt.substring(0, 16).replace('T', ' ');
+                    displayRows.add((message.optBoolean("pinned", false) ? "📌 " : "") + sender + (createdAt.isEmpty() ? "" : " · " + createdAt) + "\n" + body);
+                    messageItems.add(message);
                 }
-                if (history.length() == 0) history.append("Сообщений пока нет.");
-                final String rendered = history.toString();
                 runOnUiThread(() -> {
-                    if (contactId.equals(activeContactId)) {
-                        messagesView.setText(rendered);
-                        messagesView.setPadding(dp(8), dp(12), dp(8), dp(12));
-                        setBusy(false);
+                    if (!contactId.equals(activeContactId)) return;
+                    messagesContainer.removeAllViews();
+                    if (displayRows.isEmpty()) {
+                        messagesContainer.addView(text("Сообщений пока нет.", 14, 0xFF586778), matchWrap());
+                    } else {
+                        for (int i = 0; i < displayRows.size(); i++) {
+                            final JSONObject message = messageItems.get(i);
+                            TextView row = text(displayRows.get(i), 14, 0xFF263445);
+                            row.setPadding(dp(12), dp(10), dp(12), dp(10));
+                            row.setBackgroundColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFFEAF2FA);
+                            LinearLayout.LayoutParams rowParams = matchWrap();
+                            rowParams.bottomMargin = dp(5);
+                            messagesContainer.addView(row, rowParams);
+                            row.setOnLongClickListener(v -> {
+                                showMessageActions(message, contactId, title);
+                                return true;
+                            });
+                        }
                     }
+                    setBusy(false);
                 });
             } catch (Exception error) {
                 String message = error.getMessage() == null ? "Не удалось загрузить историю." : error.getMessage();
                 runOnUiThread(() -> {
-                    messagesView.setText("Ошибка загрузки сообщений: " + message);
+                    messagesContainer.removeAllViews();
+                    messagesContainer.addView(text("Ошибка загрузки сообщений: " + message, 14, 0xFFB42318), matchWrap());
                     setBusy(false);
                 });
             }
         });
+    }
+
+    private void showMessageActions(JSONObject message, String recipientId, String title) {
+        boolean own = currentUser != null && currentUser.optString("id", currentUser.optString("userId", ""))
+                .equals(message.optString("senderId", ""));
+        ArrayList<String> labels = new ArrayList<>();
+        labels.add("Реакция 👍");
+        labels.add(message.optBoolean("pinned", false) ? "Открепить" : "Закрепить");
+        labels.add("Сохранить в избранное");
+        labels.add("Ответить");
+        if (own) labels.add("Удалить у всех");
+        new AlertDialog.Builder(this).setTitle("Действия с сообщением")
+                .setItems(labels.toArray(new String[0]), (dialog, which) -> {
+                    String action = labels.get(which);
+                    if ("Ответить".equals(action)) {
+                        showReplyDialog(message, recipientId, title);
+                        return;
+                    }
+                    String messageId = message.optString("id", message.optString("messageId", ""));
+                    if (messageId.isEmpty()) {
+                        Toast.makeText(this, "У сообщения отсутствует идентификатор.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    executor.execute(() -> {
+                        try {
+                            if ("Реакция 👍".equals(action)) api.reactToMessage(messageId, "👍");
+                            else if ("Закрепить".equals(action) || "Открепить".equals(action)) api.pinMessage(messageId, !message.optBoolean("pinned", false));
+                            else if ("Сохранить в избранное".equals(action)) api.saveMessage(messageId);
+                            else if ("Удалить у всех".equals(action)) api.deleteMessageForAll(messageId);
+                            runOnUiThread(() -> {
+                                Toast.makeText(this, "Готово.", Toast.LENGTH_SHORT).show();
+                                openConversation(recipientId, title);
+                            });
+                        } catch (Exception error) {
+                            String messageText = error.getMessage() == null ? "Действие не выполнено." : error.getMessage();
+                            runOnUiThread(() -> Toast.makeText(this, messageText, Toast.LENGTH_LONG).show());
+                        }
+                    });
+                }).show();
+    }
+
+    private void showReplyDialog(JSONObject original, String recipientId, String title) {
+        EditText input = new EditText(this);
+        input.setHint("Ваш ответ…");
+        new AlertDialog.Builder(this).setTitle("Ответить на сообщение").setView(input)
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("Отправить", (dialog, which) -> {
+                    String plaintext = input.getText().toString().trim();
+                    String messageId = original.optString("id", original.optString("messageId", ""));
+                    if (plaintext.isEmpty() || messageId.isEmpty()) return;
+                    if (!e2eeReady) {
+                        Toast.makeText(this, "Отправка отключена из-за несовпадения ключей.", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    executor.execute(() -> {
+                        try {
+                            String ownId = currentUser.optString("id", currentUser.optString("userId", ""));
+                            String ownKey = crypto.ensurePublicKey();
+                            String targetKey = api.getPublicKey(recipientId).optString("publicKey", "");
+                            if (targetKey.isEmpty()) throw new IllegalStateException("У собеседника нет ключа шифрования.");
+                            String encrypted = crypto.encryptMessage(plaintext, ownId, ownKey, recipientId, targetKey);
+                            api.replyToMessage(messageId, encrypted);
+                            runOnUiThread(() -> openConversation(recipientId, title));
+                        } catch (Exception error) {
+                            String message = error.getMessage() == null ? "Не удалось ответить." : error.getMessage();
+                            runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
+                        }
+                    });
+                }).show();
     }
 
     private void sendMessage(String recipientId, String title, EditText input, Button sendButton) {
