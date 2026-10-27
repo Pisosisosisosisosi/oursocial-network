@@ -55,16 +55,12 @@ public final class SkylineApiClient {
         return request("POST", "/auth/phone/verify-code", body, false);
     }
 
-    public JSONObject register(String email, String password, String username,
-                              String emailVerificationToken, String phone,
-                              String phoneVerificationToken) throws Exception {
+    /** Registers in the same shared Skyline account store used by the web client. */
+    public JSONObject register(String email, String password, String username) throws Exception {
         JSONObject body = new JSONObject();
         body.put("email", email);
         body.put("password", password);
         body.put("username", username);
-        body.put("verificationToken", emailVerificationToken);
-        body.put("phone", phone);
-        body.put("phoneVerificationToken", phoneVerificationToken);
         return request("POST", "/auth/register", body, false);
     }
 

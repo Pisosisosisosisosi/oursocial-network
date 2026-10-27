@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -136,31 +137,31 @@ public final class MainActivity extends Activity {
         root.setGravity(Gravity.CENTER);
         int horizontal = dp(28);
         root.setPadding(horizontal, dp(24), horizontal, dp(24));
-        root.setBackgroundColor(0xFFF5F8FC);
+        root.setBackgroundColor(0xFF0E1621);
 
         TextView logo = new TextView(this);
         logo.setText("Skyline");
         logo.setTextSize(34);
-        logo.setTextColor(0xFF1877D2);
+        logo.setTextColor(0xFF5EB5F7);
         logo.setGravity(Gravity.CENTER);
         root.addView(logo, matchWrap());
 
         TextView subtitle = new TextView(this);
         subtitle.setText("Войдите в свой аккаунт");
         subtitle.setTextSize(16);
-        subtitle.setTextColor(0xFF586778);
+        subtitle.setTextColor(0xFF8A9AA9);
         subtitle.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams subtitleParams = matchWrap();
         subtitleParams.bottomMargin = dp(28);
         root.addView(subtitle, subtitleParams);
 
-        emailInput = new EditText(this);
+        emailInput = createThemedEditText();
         emailInput.setSingleLine(true);
         emailInput.setInputType(33);
         emailInput.setHint("Электронная почта");
         root.addView(emailInput, matchWrap());
 
-        passwordInput = new EditText(this);
+        passwordInput = createThemedEditText();
         passwordInput.setSingleLine(true);
         passwordInput.setInputType(129);
         passwordInput.setHint("Пароль");
@@ -168,7 +169,7 @@ public final class MainActivity extends Activity {
         passwordParams.topMargin = dp(10);
         root.addView(passwordInput, passwordParams);
 
-        loginButton = new Button(this);
+        loginButton = createThemedButton();
         loginButton.setText("Войти");
         LinearLayout.LayoutParams buttonParams = matchWrap();
         buttonParams.topMargin = dp(18);
@@ -184,14 +185,14 @@ public final class MainActivity extends Activity {
         statusView = new TextView(this);
         statusView.setText("Подключение к Skyline API");
         statusView.setTextSize(14);
-        statusView.setTextColor(0xFF586778);
+        statusView.setTextColor(0xFF8A9AA9);
         statusView.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams statusParams = matchWrap();
         statusParams.topMargin = dp(12);
         root.addView(statusView, statusParams);
 
         loginButton.setOnClickListener(v -> login());
-        Button registerButton = new Button(this);
+        Button registerButton = createThemedButton();
         registerButton.setText("Создать аккаунт");
         LinearLayout.LayoutParams registerParams = matchWrap();
         registerParams.topMargin = dp(6);
@@ -205,12 +206,13 @@ public final class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
         root.setPadding(dp(24), dp(20), dp(24), dp(20));
-        root.setBackgroundColor(0xFFF5F8FC);
+        root.setBackgroundColor(0xFF0E1621);
 
-        TextView title = text("Регистрация Skyline", 28, 0xFF1877D2);
+        TextView title = text("Регистрация Skyline", 28, 0xFF5EB5F7);
         title.setGravity(Gravity.CENTER);
         root.addView(title, matchWrap());
-        TextView subtitle = text("Подтвердите электронную почту и номер телефона", 14, 0xFF586778);
+
+        TextView subtitle = text("Один аккаунт для браузера и Android. Подтверждение не требуется.", 14, 0xFF8A9AA9);
         subtitle.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams subParams = matchWrap();
         subParams.topMargin = dp(6);
@@ -224,44 +226,21 @@ public final class MainActivity extends Activity {
         registerUsernameInput = addRegistrationField(fields, "Имя пользователя (латиница)", 33);
         emailInput = addRegistrationField(fields, "Электронная почта", 33);
         passwordInput = addRegistrationField(fields, "Пароль (не менее 6 символов)", 129);
-        registerPhoneInput = addRegistrationField(fields, "Телефон, например +373...", 3);
-        emailCodeInput = addRegistrationField(fields, "Код из письма", 2);
-        phoneCodeInput = addRegistrationField(fields, "Код из SMS", 2);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        Button sendEmail = new Button(this);
-        sendEmail.setText("Отправить код на почту");
-        fields.addView(sendEmail, matchWrap());
-        sendEmail.setOnClickListener(v -> sendRegistrationEmailCode());
-
-        Button verifyEmail = new Button(this);
-        verifyEmail.setText("Подтвердить почту");
-        fields.addView(verifyEmail, matchWrap());
-        verifyEmail.setOnClickListener(v -> verifyRegistrationEmailCode());
-
-        Button sendPhone = new Button(this);
-        sendPhone.setText("Отправить SMS-код");
-        fields.addView(sendPhone, matchWrap());
-        sendPhone.setOnClickListener(v -> sendRegistrationPhoneCode());
-
-        Button verifyPhone = new Button(this);
-        verifyPhone.setText("Подтвердить телефон");
-        fields.addView(verifyPhone, matchWrap());
-        verifyPhone.setOnClickListener(v -> verifyRegistrationPhoneCode());
-
-        Button create = new Button(this);
-        create.setText("Зарегистрироваться");
+        Button create = createThemedButton();
+        create.setText("Создать аккаунт");
         fields.addView(create, matchWrap());
         create.setOnClickListener(v -> completeRegistration());
 
-        Button back = new Button(this);
+        Button back = createThemedButton();
         back.setText("Назад ко входу");
         fields.addView(back, matchWrap());
         back.setOnClickListener(v -> renderLogin());
 
         statusView = new TextView(this);
-        statusView.setText("Для регистрации нужны подтверждённые email и телефон.");
-        statusView.setTextColor(0xFF586778);
+        statusView.setText("Введите имя, почту и пароль для создания аккаунта.");
+        statusView.setTextColor(0xFF8A9AA9);
         statusView.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams statusParams = matchWrap();
         statusParams.topMargin = dp(8);
@@ -270,7 +249,7 @@ public final class MainActivity extends Activity {
     }
 
     private EditText addRegistrationField(LinearLayout parent, String hint, int inputType) {
-        EditText field = new EditText(this);
+        EditText field = createThemedEditText();
         field.setSingleLine(true);
         field.setInputType(inputType);
         field.setHint(hint);
@@ -357,19 +336,18 @@ public final class MainActivity extends Activity {
         String username = registerUsernameInput.getText().toString().trim();
         String email = emailInput.getText().toString().trim();
         String password = passwordInput.getText().toString();
-        String phone = registerPhoneInput.getText().toString().trim();
         if (!username.matches("[A-Za-z0-9_.-]{3,32}")) {
             statusView.setText("Имя пользователя: 3–32 символа, латиница, цифры, точка, дефис или подчёркивание."); return;
         }
-        if (password.length() < 6) { statusView.setText("Пароль должен содержать минимум 6 символов."); return; }
-        if (emailRegistrationToken == null || phoneRegistrationToken == null) {
-            statusView.setText("Сначала подтвердите email и телефон."); return;
+        if (email.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            statusView.setText("Введите корректный адрес электронной почты."); return;
         }
+        if (password.length() < 6) { statusView.setText("Пароль должен содержать минимум 6 символов."); return; }
         setBusy(true);
-        statusView.setText("Создаём аккаунт…");
+        statusView.setText("Создаём общий аккаунт Skyline…");
         executor.execute(() -> {
             try {
-                JSONObject response = api.register(email, password, username, emailRegistrationToken, phone, phoneRegistrationToken);
+                JSONObject response = api.register(email, password, username);
                 String token = response.optString("token", "");
                 JSONObject user = response.optJSONObject("user");
                 if (token.isEmpty() || user == null) throw new IllegalStateException("Неполный ответ регистрации.");
@@ -460,49 +438,67 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setOrientation(LinearLayout.HORIZONTAL);
-        TextView title = text("Skyline", 25, 0xFF1877D2);
+        header.setPadding(dp(2), dp(2), dp(2), dp(8));
+        Button menuButton = createThemedButton();
+        menuButton.setText("☰");
+        menuButton.setTextSize(21);
+        menuButton.setContentDescription("Открыть меню Skyline");
+        header.addView(menuButton, new LinearLayout.LayoutParams(dp(48), dp(46)));
+        TextView title = text("Skyline", 23, 0xFFE6EEF7);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setPadding(dp(10), 0, 0, 0);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        Button refresh = new Button(this);
-        refresh.setText("Обновить");
+        Button refresh = createThemedButton();
+        refresh.setText("⟳");
+        refresh.setTextSize(23);
+        refresh.setContentDescription("Обновить чаты");
         refresh.setOnClickListener(v -> refreshContacts());
-        header.addView(refresh);
+        header.addView(refresh, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        menuButton.setOnClickListener(v -> {
+            android.widget.PopupMenu menu = new android.widget.PopupMenu(this, menuButton);
+            menu.getMenu().add("Мой профиль").setOnMenuItemClickListener(item -> {
+                Toast.makeText(this, "Вы вошли как " + currentUser.optString("username", currentUser.optString("email", "")), Toast.LENGTH_LONG).show();
+                return true;
+            });
+            menu.getMenu().add("Группы").setOnMenuItemClickListener(item -> { openFeature("groups"); return true; });
+            menu.getMenu().add("Каналы").setOnMenuItemClickListener(item -> { openFeature("channels"); return true; });
+            menu.getMenu().add("Истории").setOnMenuItemClickListener(item -> { openFeature("stories"); return true; });
+            menu.getMenu().add("Сохранённое").setOnMenuItemClickListener(item -> { openFeature("saved"); return true; });
+            menu.getMenu().add("Настройки").setOnMenuItemClickListener(item -> { openFeature("settings"); return true; });
+            menu.getMenu().add("Выйти").setOnMenuItemClickListener(item -> {
+                disconnectRealtime();
+                getSharedPreferences("skyline_session", MODE_PRIVATE).edit().remove("encrypted_token").apply();
+                api.clearSession(); currentUser = null; renderLogin(); return true;
+            });
+            menu.show();
+        });
         screen.addView(header, matchWrap());
-
-        TextView account = text("Вы вошли как " + currentUser.optString("username", currentUser.optString("email", "")), 13, 0xFF586778);
-        LinearLayout.LayoutParams accountParams = matchWrap();
-        accountParams.topMargin = dp(4);
-        accountParams.bottomMargin = dp(12);
-        screen.addView(account, accountParams);
-
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER);
-        String[][] navItems = new String[][] {
-                {"Группы", "groups"}, {"Каналы", "channels"}, {"Истории", "stories"},
-                {"Сохранённое", "saved"}, {"Настройки", "settings"}
-        };
-        for (String[] navItem : navItems) {
-            Button navButton = new Button(this);
-            navButton.setText(navItem[0]);
-            navButton.setTextSize(10);
-            nav.addView(navButton, new LinearLayout.LayoutParams(0, dp(46), 1));
-            navButton.setOnClickListener(v -> openFeature(navItem[1]));
-        }
-        screen.addView(nav, matchWrap());
 
         LinearLayout searchRow = new LinearLayout(this);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
         searchRow.setGravity(Gravity.CENTER_VERTICAL);
-        EditText userSearch = new EditText(this);
+        searchRow.setPadding(dp(12), 0, dp(6), 0);
+        GradientDrawable searchBackground = new GradientDrawable();
+        searchBackground.setColor(0xFF17212B);
+        searchBackground.setCornerRadius(dp(24));
+        searchRow.setBackground(searchBackground);
+        TextView searchIcon = text("⌕", 25, 0xFF8A9AA9);
+        searchRow.addView(searchIcon, new LinearLayout.LayoutParams(dp(28), dp(48)));
+        EditText userSearch = createThemedEditText();
         userSearch.setSingleLine(true);
         userSearch.setInputType(1);
-        userSearch.setHint("Найти пользователя по имени или @username");
-        searchRow.addView(userSearch, new LinearLayout.LayoutParams(0, dp(52), 1));
-        Button searchButton = new Button(this);
+        userSearch.setHint("Поиск людей по имени или @username");
+        userSearch.setTextSize(15);
+        userSearch.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        userSearch.setPadding(dp(6), 0, dp(6), 0);
+        searchRow.addView(userSearch, new LinearLayout.LayoutParams(0, dp(48), 1));
+        Button searchButton = createThemedButton();
         searchButton.setText("Найти");
-        searchRow.addView(searchButton);
-        screen.addView(searchRow, matchWrap());
-
+        searchButton.setTextSize(12);
+        searchRow.addView(searchButton, new LinearLayout.LayoutParams(-2, dp(40)));
+        LinearLayout.LayoutParams searchRowParams = matchWrap();
+        searchRowParams.bottomMargin = dp(10);
+        screen.addView(searchRow, searchRowParams);
         LinearLayout results = new LinearLayout(this);
         results.setOrientation(LinearLayout.VERTICAL);
         searchResultsContainer = results;
@@ -520,7 +516,7 @@ public final class MainActivity extends Activity {
             searchButton.setEnabled(false);
             resultsScroll.setVisibility(View.VISIBLE);
             results.removeAllViews();
-            results.addView(text("Поиск пользователей…", 13, 0xFF586778), matchWrap());
+            results.addView(text("Поиск пользователей…", 13, 0xFF8A9AA9), matchWrap());
             executor.execute(() -> {
                 try {
                     JSONArray found = api.searchUsers(query);
@@ -529,7 +525,7 @@ public final class MainActivity extends Activity {
                         if (searchResultsContainer != results) return;
                         results.removeAllViews();
                         if (found.length() == 0) {
-                            results.addView(text("Пользователи не найдены.", 13, 0xFF586778), matchWrap());
+                            results.addView(text("Пользователи не найдены.", 13, 0xFF8A9AA9), matchWrap());
                             return;
                         }
                         for (int i = 0; i < found.length(); i++) {
@@ -542,10 +538,10 @@ public final class MainActivity extends Activity {
                             LinearLayout resultRow = new LinearLayout(this);
                             resultRow.setOrientation(LinearLayout.HORIZONTAL);
                             resultRow.setGravity(Gravity.CENTER_VERTICAL);
-                            TextView personLabel = text(displayName + (username.isEmpty() ? "" : "\n@" + username), 14, 0xFF263445);
+                            TextView personLabel = text(displayName + (username.isEmpty() ? "" : "\n@" + username), 14, 0xFFE6EEF7);
                             personLabel.setPadding(dp(8), dp(6), dp(8), dp(6));
                             resultRow.addView(personLabel, new LinearLayout.LayoutParams(0, -2, 1));
-                            Button add = new Button(this);
+                            Button add = createThemedButton();
                             add.setText("Добавить");
                             add.setOnClickListener(addView -> {
                                 add.setEnabled(false);
@@ -575,19 +571,19 @@ public final class MainActivity extends Activity {
                         searchButton.setEnabled(true);
                         if (searchResultsContainer == results) {
                             results.removeAllViews();
-                            results.addView(text("Ошибка поиска: " + message, 13, 0xFFB42318), matchWrap());
+                            results.addView(text("Ошибка поиска: " + message, 13, 0xFFFF6B6B), matchWrap());
                         }
                     });
                 }
             });
         });
 
-        if (errorText != null) screen.addView(text(errorText, 13, 0xFFB42318), matchWrap());
+        if (errorText != null) screen.addView(text(errorText, 13, 0xFFFF6B6B), matchWrap());
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         if (contacts.length() == 0) {
-            TextView empty = text("Пока нет личных чатов. Добавьте контакт в веб-версии Skyline.", 15, 0xFF586778);
+            TextView empty = text("Пока нет личных чатов. Добавьте контакт в веб-версии Skyline.", 15, 0xFF8A9AA9);
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(dp(12), dp(28), dp(12), dp(28));
             list.addView(empty, matchWrap());
@@ -603,18 +599,53 @@ public final class MainActivity extends Activity {
                 preview = "🔒 Зашифрованное сообщение";
             }
             if (preview.isEmpty()) preview = "Открыть переписку";
-            TextView item = text(name + "\n@" + contact.optString("username", "") + "\n" + preview, 15, 0xFF263445);
-            item.setPadding(dp(14), dp(14), dp(14), dp(14));
-            item.setBackgroundColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFFF0F4F8);
+            LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.HORIZONTAL);
+            item.setGravity(Gravity.CENTER_VERTICAL);
+            item.setPadding(dp(12), dp(8), dp(12), dp(8));
+            item.setBackgroundColor(0xFF17212B);
+
+            TextView avatar = text(name.trim().isEmpty() ? "S" : name.trim().substring(0, 1).toUpperCase(), 19, 0xFFFFFFFF);
+            avatar.setGravity(Gravity.CENTER);
+            GradientDrawable avatarBackground = new GradientDrawable();
+            avatarBackground.setShape(GradientDrawable.OVAL);
+            int[] avatarColors = new int[] {0xFF527DA3, 0xFF6B8E5A, 0xFF8A6BA8, 0xFFB77955, 0xFF397E83, 0xFFB05C72};
+            avatarBackground.setColor(avatarColors[Math.abs(name.hashCode()) % avatarColors.length]);
+            avatar.setBackground(avatarBackground);
+            item.addView(avatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+            LinearLayout details = new LinearLayout(this);
+            details.setOrientation(LinearLayout.VERTICAL);
+            details.setGravity(Gravity.CENTER_VERTICAL);
+            details.setPadding(dp(12), dp(2), 0, dp(2));
+            TextView nameView = text(name, 16, 0xFFF5F7FA);
+            nameView.setMaxLines(1);
+            nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            details.addView(nameView, matchWrap());
+            TextView previewView = text(preview, 13, 0xFF8A9AA9);
+            previewView.setMaxLines(1);
+            previewView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams previewParams = matchWrap();
+            previewParams.topMargin = dp(3);
+            details.addView(previewView, previewParams);
+            item.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
+
+            View divider = new View(this);
+            divider.setBackgroundColor(0xFF202B36);
+            LinearLayout.LayoutParams itemParams = matchWrap();
+            itemParams.bottomMargin = dp(1);
             item.setOnClickListener(v -> openConversation(id, name));
-            list.addView(item, matchWrap());
+            item.setClickable(true);
+            item.setFocusable(true);
+            list.addView(item, itemParams);
+            list.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
         }
         scroll.addView(list);
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, 0, 1);
         scrollParams.topMargin = dp(8);
         screen.addView(scroll, scrollParams);
 
-        Button logout = new Button(this);
+        Button logout = createThemedButton();
         logout.setText("Выйти");
         logout.setOnClickListener(v -> {
             disconnectRealtime();
@@ -674,23 +705,23 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        Button back = new Button(this);
+        Button back = createThemedButton();
         back.setText("‹ Назад");
         back.setOnClickListener(v -> refreshContacts());
         header.addView(back);
-        TextView heading = text(title, 20, 0xFF1877D2);
+        TextView heading = text(title, 20, 0xFF5EB5F7);
         LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(0, -2, 1);
         headingParams.leftMargin = dp(8);
         header.addView(heading, headingParams);
         screen.addView(header, matchWrap());
 
-        TextView notice = text("Сообщения шифруются на устройстве перед отправкой.", 12, 0xFF586778);
+        TextView notice = text("Сообщения шифруются на устройстве перед отправкой.", 12, 0xFF8A9AA9);
         LinearLayout.LayoutParams noticeParams = matchWrap();
         noticeParams.topMargin = dp(8);
         noticeParams.bottomMargin = dp(8);
         screen.addView(notice, noticeParams);
 
-        typingStatusView = text("", 12, 0xFF586778);
+        typingStatusView = text("", 12, 0xFF8A9AA9);
         typingStatusView.setVisibility(View.GONE);
         LinearLayout.LayoutParams typingParams = matchWrap();
         typingParams.bottomMargin = dp(4);
@@ -698,7 +729,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout messagesContainer = new LinearLayout(this);
         messagesContainer.setOrientation(LinearLayout.VERTICAL);
-        messagesContainer.addView(text("Загрузка сообщений…", 14, 0xFF263445), matchWrap());
+        messagesContainer.addView(text("Загрузка сообщений…", 14, 0xFFE6EEF7), matchWrap());
         ScrollView scroll = new ScrollView(this);
         scroll.addView(messagesContainer);
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -706,7 +737,9 @@ public final class MainActivity extends Activity {
         LinearLayout composer = new LinearLayout(this);
         composer.setOrientation(LinearLayout.HORIZONTAL);
         composer.setGravity(Gravity.CENTER_VERTICAL);
-        EditText messageInput = new EditText(this);
+        composer.setPadding(dp(4), dp(6), dp(4), dp(4));
+        composer.setBackgroundColor(0xFF0E1621);
+        EditText messageInput = createThemedEditText();
         activeMessageInput = messageInput;
         messageInput.setText(draft);
         messageInput.setHint("Сообщение…");
@@ -737,13 +770,13 @@ public final class MainActivity extends Activity {
                 }
             }
         });
-        Button attach = new Button(this);
+        Button attach = createThemedButton();
         attach.setText("＋");
         attach.setContentDescription("Прикрепить изображение");
         attach.setOnClickListener(v -> pickChatImage());
         composer.addView(attach);
         composer.addView(messageInput, new LinearLayout.LayoutParams(0, -2, 1));
-        Button send = new Button(this);
+        Button send = createThemedButton();
         send.setText("Отправить");
         send.setOnClickListener(v -> sendMessage(contactId, title, messageInput, send));
         composer.addView(send);
@@ -804,15 +837,22 @@ public final class MainActivity extends Activity {
                     if (!contactId.equals(activeContactId)) return;
                     messagesContainer.removeAllViews();
                     if (displayRows.isEmpty()) {
-                        messagesContainer.addView(text("Сообщений пока нет.", 14, 0xFF586778), matchWrap());
+                        messagesContainer.addView(text("Сообщений пока нет.", 14, 0xFF8A9AA9), matchWrap());
                     } else {
                         for (int i = 0; i < displayRows.size(); i++) {
                             final JSONObject message = messageItems.get(i);
                             LinearLayout bubble = new LinearLayout(this);
                             bubble.setOrientation(LinearLayout.VERTICAL);
-                            bubble.setPadding(dp(12), dp(10), dp(12), dp(10));
-                            bubble.setBackgroundColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFFEAF2FA);
-                            TextView row = text(displayRows.get(i), 14, 0xFF263445);
+                            bubble.setPadding(dp(12), dp(9), dp(12), dp(9));
+                            String currentUserIdForBubble = currentUser == null ? "" : currentUser.optString("userId", currentUser.optString("id", ""));
+                            boolean ownMessage = currentUserIdForBubble.equals(message.optString("senderId", ""));
+                            GradientDrawable bubbleBackground = new GradientDrawable();
+                            bubbleBackground.setColor(ownMessage ? 0xFF2B5278 : 0xFF182533);
+                            bubbleBackground.setCornerRadii(ownMessage
+                                    ? new float[]{dp(12),dp(12),dp(12),dp(12),dp(3),dp(3),dp(12),dp(12)}
+                                    : new float[]{dp(12),dp(12),dp(12),dp(12),dp(12),dp(12),dp(3),dp(3)});
+                            bubble.setBackground(bubbleBackground);
+                            TextView row = text(displayRows.get(i), 14, 0xFFF5F7FA);
                             bubble.addView(row, matchWrap());
                             String attachment = attachmentPayloads.get(i);
                             if (attachment != null) {
@@ -831,11 +871,11 @@ public final class MainActivity extends Activity {
                                             imageParams.topMargin = dp(8);
                                             bubble.addView(imageView, imageParams);
                                         } else {
-                                            bubble.addView(text("Не удалось декодировать изображение.", 13, 0xFFB42318), matchWrap());
+                                            bubble.addView(text("Не удалось декодировать изображение.", 13, 0xFFFF6B6B), matchWrap());
                                         }
                                     }
                                 } catch (Exception imageError) {
-                                    bubble.addView(text("Не удалось показать изображение.", 13, 0xFFB42318), matchWrap());
+                                    bubble.addView(text("Не удалось показать изображение.", 13, 0xFFFF6B6B), matchWrap());
                                 }
                             }
                             LinearLayout.LayoutParams rowParams = matchWrap();
@@ -853,7 +893,7 @@ public final class MainActivity extends Activity {
                 String message = error.getMessage() == null ? "Не удалось загрузить историю." : error.getMessage();
                 runOnUiThread(() -> {
                     messagesContainer.removeAllViews();
-                    messagesContainer.addView(text("Ошибка загрузки сообщений: " + message, 14, 0xFFB42318), matchWrap());
+                    messagesContainer.addView(text("Ошибка загрузки сообщений: " + message, 14, 0xFFFF6B6B), matchWrap());
                     setBusy(false);
                 });
             }
@@ -900,7 +940,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showReplyDialog(JSONObject original, String recipientId, String title) {
-        EditText input = new EditText(this);
+        EditText input = createThemedEditText();
         input.setHint("Ваш ответ…");
         new AlertDialog.Builder(this).setTitle("Ответить на сообщение").setView(input)
                 .setNegativeButton("Отмена", null)
@@ -1040,32 +1080,32 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        Button back = new Button(this);
+        Button back = createThemedButton();
         back.setText("‹ Чаты");
         back.setOnClickListener(v -> refreshContacts());
         header.addView(back);
-        TextView title = text(featureTitle(feature), 22, 0xFF1877D2);
+        TextView title = text(featureTitle(feature), 22, 0xFF5EB5F7);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         screen.addView(header, matchWrap());
 
         if ("groups".equals(feature) || "channels".equals(feature)) {
-            Button create = new Button(this);
+            Button create = createThemedButton();
             create.setText("＋ Создать");
             create.setOnClickListener(v -> showCreateDialog(feature));
             screen.addView(create, matchWrap());
         } else if ("stories".equals(feature)) {
-            Button createStory = new Button(this);
+            Button createStory = createThemedButton();
             createStory.setText("＋ Добавить историю");
             createStory.setOnClickListener(v -> startStoryCreation());
             screen.addView(createStory, matchWrap());
         }
 
         if (errorText != null) {
-            screen.addView(text("Ошибка: " + errorText, 14, 0xFFB42318), matchWrap());
+            screen.addView(text("Ошибка: " + errorText, 14, 0xFFFF6B6B), matchWrap());
         } else if ("settings".equals(feature)) {
             addSettingToggle(screen, "Тёмная тема", "theme", settings);
             addSettingToggle(screen, "Анимации", "animationsEnabled", settings);
-            TextView note = text("Настройки сохраняются в аккаунте Skyline. Расширенные настройки приватности и устройств будут добавлены отдельными этапами.", 12, 0xFF586778);
+            TextView note = text("Настройки сохраняются в аккаунте Skyline. Расширенные настройки приватности и устройств будут добавлены отдельными этапами.", 12, 0xFF8A9AA9);
             note.setPadding(0, dp(12), 0, 0);
             screen.addView(note, matchWrap());
         } else {
@@ -1076,7 +1116,7 @@ public final class MainActivity extends Activity {
                 String empty = "stories".equals(feature) ? "Активных историй пока нет."
                         : "saved".equals(feature) ? "Сохранённых сообщений пока нет."
                         : "Пока пусто. Используйте кнопку создания, чтобы добавить первый элемент.";
-                list.addView(text(empty, 14, 0xFF586778), matchWrap());
+                list.addView(text(empty, 14, 0xFF8A9AA9), matchWrap());
             }
             for (int i = 0; i < items.length(); i++) {
                 JSONObject item = items.optJSONObject(i);
@@ -1097,9 +1137,9 @@ public final class MainActivity extends Activity {
                             : "stories".equals(feature)
                                 ? item.optString("caption", "История") + (item.optBoolean("viewed") ? " · Просмотрено" : "")
                                 : "saved".equals(feature) ? "Сохранённое сообщение" : "";
-                TextView row = text(name + (detail.isEmpty() ? "" : "\n" + detail), 15, 0xFF263445);
+                TextView row = text(name + (detail.isEmpty() ? "" : "\n" + detail), 15, 0xFFE6EEF7);
                 row.setPadding(dp(12), dp(14), dp(12), dp(14));
-                row.setBackgroundColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFFF0F4F8);
+                row.setBackgroundColor(i % 2 == 0 ? 0xFF17212B : 0xFF202B36);
                 row.setOnClickListener(v -> {
                     if ("groups".equals(feature)) openGroup(selected);
                     else if ("channels".equals(feature)) openChannel(selected);
@@ -1120,7 +1160,7 @@ public final class MainActivity extends Activity {
     }
 
     private void startStoryCreation() {
-        EditText caption = new EditText(this);
+        EditText caption = createThemedEditText();
         caption.setHint("Подпись (необязательно)");
         new AlertDialog.Builder(this)
                 .setTitle("Новая история")
@@ -1212,11 +1252,11 @@ public final class MainActivity extends Activity {
         LinearLayout screen = createScreen();
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
-        Button back = new Button(this);
+        Button back = createThemedButton();
         back.setText("‹ Истории");
         back.setOnClickListener(v -> openFeature("stories"));
         header.addView(back);
-        header.addView(text(story.optString("displayName", story.optString("username", "История")), 20, 0xFF1877D2),
+        header.addView(text(story.optString("displayName", story.optString("username", "История")), 20, 0xFF5EB5F7),
                 new LinearLayout.LayoutParams(0, -2, 1));
         screen.addView(header, matchWrap());
         if ("image".equals(mediaType)) {
@@ -1231,12 +1271,12 @@ public final class MainActivity extends Activity {
                 imageView.setImageBitmap(BitmapFactory.decodeByteArray(bytes, 0, bytes.length));
                 screen.addView(imageView, new LinearLayout.LayoutParams(-1, 0, 1));
             } catch (Exception error) {
-                screen.addView(text("Не удалось показать изображение истории.", 14, 0xFFB42318), matchWrap());
+                screen.addView(text("Не удалось показать изображение истории.", 14, 0xFFFF6B6B), matchWrap());
             }
         } else {
-            screen.addView(text("Видеозаписи историй пока не поддерживаются в Android-клиенте.", 14, 0xFF586778), matchWrap());
+            screen.addView(text("Видеозаписи историй пока не поддерживаются в Android-клиенте.", 14, 0xFF8A9AA9), matchWrap());
         }
-        screen.addView(text(story.optString("caption", ""), 15, 0xFF263445), matchWrap());
+        screen.addView(text(story.optString("caption", ""), 15, 0xFFE6EEF7), matchWrap());
         setContentView(screen);
     }
 
@@ -1255,14 +1295,14 @@ public final class MainActivity extends Activity {
         LinearLayout fields = new LinearLayout(this);
         fields.setOrientation(LinearLayout.VERTICAL);
         fields.setPadding(dp(20), dp(4), dp(20), 0);
-        EditText title = new EditText(this);
+        EditText title = createThemedEditText();
         title.setSingleLine(true);
         title.setHint("Название");
         fields.addView(title, matchWrap());
-        EditText description = new EditText(this);
+        EditText description = createThemedEditText();
         description.setHint("Описание");
         fields.addView(description, matchWrap());
-        EditText visibility = new EditText(this);
+        EditText visibility = createThemedEditText();
         if ("channels".equals(feature)) {
             visibility.setSingleLine(true);
             visibility.setHint("Публичный или private");
@@ -1308,25 +1348,25 @@ public final class MainActivity extends Activity {
         LinearLayout screen = createScreen();
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
-        Button back = new Button(this);
+        Button back = createThemedButton();
         back.setText("‹ Группы");
         back.setOnClickListener(v -> openFeature("groups"));
         header.addView(back);
-        header.addView(text(title, 20, 0xFF1877D2), new LinearLayout.LayoutParams(0, -2, 1));
+        header.addView(text(title, 20, 0xFF5EB5F7), new LinearLayout.LayoutParams(0, -2, 1));
         screen.addView(header, matchWrap());
-        TextView content = text("Загрузка сообщений группы…", 14, 0xFF263445);
+        TextView content = text("Загрузка сообщений группы…", 14, 0xFFE6EEF7);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(content);
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout composer = new LinearLayout(this);
         composer.setOrientation(LinearLayout.HORIZONTAL);
-        EditText input = new EditText(this);
+        EditText input = createThemedEditText();
         input.setHint("Сообщение в группу…");
         input.setMinLines(1);
         input.setMaxLines(4);
         composer.addView(input, new LinearLayout.LayoutParams(0, -2, 1));
-        Button send = new Button(this);
+        Button send = createThemedButton();
         send.setText("Отправить");
         send.setOnClickListener(v -> {
             String plaintext = input.getText().toString().trim();
@@ -1418,21 +1458,21 @@ public final class MainActivity extends Activity {
         LinearLayout screen = createScreen();
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
-        Button back = new Button(this);
+        Button back = createThemedButton();
         back.setText("‹ Каналы");
         back.setOnClickListener(v -> openFeature("channels"));
         header.addView(back);
-        header.addView(text(title, 20, 0xFF1877D2), new LinearLayout.LayoutParams(0, -2, 1));
+        header.addView(text(title, 20, 0xFF5EB5F7), new LinearLayout.LayoutParams(0, -2, 1));
         screen.addView(header, matchWrap());
-        TextView content = text("Загрузка публикаций…", 14, 0xFF263445);
+        TextView content = text("Загрузка публикаций…", 14, 0xFFE6EEF7);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(content);
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout composer = new LinearLayout(this);
-        EditText postInput = new EditText(this);
+        EditText postInput = createThemedEditText();
         postInput.setHint("Новая публикация");
         composer.addView(postInput, new LinearLayout.LayoutParams(0, -2, 1));
-        Button publish = new Button(this);
+        Button publish = createThemedButton();
         publish.setText("Опубликовать");
         publish.setOnClickListener(v -> {
             String value = postInput.getText().toString().trim();
@@ -1481,7 +1521,7 @@ public final class MainActivity extends Activity {
         CheckBox check = new CheckBox(this);
         check.setText(label);
         check.setChecked(initial);
-        check.setTextColor(0xFF263445);
+        check.setTextColor(0xFFE6EEF7);
         check.setOnCheckedChangeListener((button, checked) -> executor.execute(() -> {
             try {
                 JSONObject update = new JSONObject();
@@ -1568,11 +1608,41 @@ public final class MainActivity extends Activity {
         typingStatusView = null;
     }
 
+    private Button createThemedButton() {
+        Button button = new Button(this);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xFF2B5278);
+        background.setCornerRadius(dp(9));
+        button.setBackground(background);
+        button.setTextColor(0xFFF5F7FA);
+        button.setTextSize(14);
+        button.setAllCaps(false);
+        button.setPadding(dp(14), dp(8), dp(14), dp(8));
+        button.setMinHeight(dp(42));
+        button.setElevation(0);
+        return button;
+    }
+
+    private EditText createThemedEditText() {
+        EditText input = new EditText(this);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xFF242F3D);
+        background.setCornerRadius(dp(9));
+        background.setStroke(dp(1), 0xFF303D4C);
+        input.setBackground(background);
+        input.setTextColor(0xFFF5F7FA);
+        input.setHintTextColor(0xFF708499);
+        input.setTextSize(15);
+        input.setPadding(dp(12), dp(10), dp(12), dp(10));
+        input.setSingleLine(false);
+        return input;
+    }
+
     private LinearLayout createScreen() {
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
-        screen.setPadding(dp(16), dp(18), dp(16), dp(12));
-        screen.setBackgroundColor(0xFFF5F8FC);
+        screen.setPadding(dp(12), dp(12), dp(12), dp(10));
+        screen.setBackgroundColor(0xFF0E1621);
         return screen;
     }
 

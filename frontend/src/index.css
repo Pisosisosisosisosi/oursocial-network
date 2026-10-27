@@ -368,3 +368,302 @@ html[data-reduce-motion='true'] *, html[data-reduce-motion='true'] *::before, ht
   transition-duration: .01ms !important;
   scroll-behavior: auto !important;
 }
+
+
+/* Telegram-inspired Skyline workspace skin. Keeps Skyline's own brand and features
+   while using Telegram-like information density, muted surfaces and chat colors. */
+.telegram-workspace {
+  --bg-base: #0e1621;
+  --panel: #17212b;
+  --text-primary: #f5f7fa;
+  --text-secondary: #8a9aa9;
+  --accent: #5eb5f7;
+  --accent-from: #5eb5f7;
+  --accent-to: #3390ec;
+  --border-subtle: rgba(255,255,255,.075);
+  --glow: rgba(94,181,247,.18);
+  --accent-rgb: 94,181,247;
+  --chat-own-message-color: #2b5278;
+  --chat-other-message-color: #182533;
+  background: #0e1621;
+  color: #f5f7fa;
+}
+.telegram-workspace .telegram-workspace__sidebar {
+  background: #17212b;
+  border-color: rgba(255,255,255,.07);
+}
+.telegram-workspace .telegram-workspace__chat-pane {
+  background-color: #0e1621;
+  background-image:
+    radial-gradient(circle at 12px 12px, rgba(94,181,247,.025) 1.2px, transparent 1.4px);
+  background-size: 26px 26px;
+}
+.telegram-workspace input,
+.telegram-workspace textarea {
+  color-scheme: dark;
+}
+.telegram-workspace button:focus-visible,
+.telegram-workspace input:focus-visible,
+.telegram-workspace textarea:focus-visible {
+  outline-color: rgba(94,181,247,.8);
+}
+.telegram-workspace [aria-label="Все переписки"] > button {
+  min-height: 66px;
+  border-radius: 12px;
+  padding: 9px 10px;
+  transition: background-color 140ms ease, transform 140ms ease;
+}
+.telegram-workspace [aria-label="Все переписки"] > button:hover {
+  background: rgba(255,255,255,.045);
+}
+.telegram-workspace [aria-label="Все переписки"] > button:active {
+  transform: scale(.995);
+}
+.telegram-workspace [aria-label="Все переписки"] > button[aria-current="page"],
+.telegram-workspace [aria-label="Все переписки"] > button[data-active="true"] {
+  background: #2b5278;
+}
+.telegram-workspace ::selection {
+  background: rgba(94,181,247,.32);
+}
+@media (max-width: 767px) {
+  .telegram-workspace .telegram-workspace__sidebar { width: 100%; }
+  .telegram-workspace .telegram-workspace__chat-pane { background-size: 22px 22px; }
+}
+
+.telegram-workspace .chat-message-own {
+  background: #2b5278;
+  border-color: rgba(110,190,255,.10);
+  box-shadow: none !important;
+}
+.telegram-workspace .chat-message-other {
+  background: #182533;
+  border-color: rgba(255,255,255,.035);
+  box-shadow: none !important;
+}
+.telegram-workspace .chat-card.chat-active {
+  background: #2b5278;
+  box-shadow: none;
+}
+.telegram-workspace .glass-panel {
+  background: #17212b;
+  border-color: rgba(255,255,255,.06);
+  backdrop-filter: none;
+}
+.telegram-workspace .chat-wallpaper-surface {
+  background-color: #0e1621;
+  background-image:
+    linear-gradient(rgba(14,22,33,.88), rgba(14,22,33,.88)),
+    radial-gradient(circle at 12px 12px, rgba(94,181,247,.035) 1px, transparent 1.2px);
+  background-size: cover, 24px 24px;
+}
+
+
+/* Telegram-inspired full workspace pass: navigation, controls, overlays and composer.
+   Scoped to the messaging workspace so profile and account pages keep their own layout. */
+.telegram-workspace {
+  font-family: Roboto, "Arial", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: normal;
+}
+.telegram-workspace .telegram-workspace__sidebar header {
+  min-height: 58px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-color: rgba(255,255,255,.055);
+}
+.telegram-workspace .telegram-workspace__sidebar input[type="search"],
+.telegram-workspace input:not([type="checkbox"]):not([type="radio"]),
+.telegram-workspace textarea,
+.telegram-workspace select {
+  border-radius: 8px;
+  border-color: rgba(255,255,255,.07);
+  background-color: #242f3d;
+  box-shadow: none;
+}
+.telegram-workspace .telegram-workspace__sidebar input[type="search"] {
+  min-height: 40px;
+  border: 0;
+  background: #242f3d;
+}
+.telegram-workspace input::placeholder,
+.telegram-workspace textarea::placeholder {
+  color: #708499;
+  opacity: 1;
+}
+.telegram-workspace button {
+  -webkit-tap-highlight-color: transparent;
+}
+.telegram-workspace .chat-card,
+.telegram-workspace .chat-list-item {
+  border-radius: 10px;
+  box-shadow: none;
+}
+.telegram-workspace .chat-card:not(.chat-active):hover,
+.telegram-workspace .chat-list-item:not(.chat-active):hover {
+  transform: none;
+  background: rgba(255,255,255,.045);
+}
+.telegram-workspace .chat-card.chat-active,
+.telegram-workspace .chat-list-item.chat-active {
+  background: #2b5278;
+  box-shadow: none;
+}
+.telegram-workspace .chat-message-own,
+.telegram-workspace .chat-message-other,
+.telegram-workspace .chat-message-bubble {
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.telegram-workspace .chat-message-own {
+  background: #2b5278;
+  border-radius: 12px 12px 3px 12px;
+}
+.telegram-workspace .chat-message-other {
+  background: #182533;
+  border-radius: 12px 12px 12px 3px;
+}
+.telegram-workspace .chat-message-bubble {
+  border-radius: 12px;
+}
+.telegram-workspace .chat-wallpaper-surface {
+  background-color: #0e1621;
+  background-image:
+    radial-gradient(circle at 14px 14px, rgba(94,181,247,.025) 1px, transparent 1.3px);
+  background-size: 28px 28px;
+}
+.telegram-workspace .glass-panel,
+.telegram-workspace [role="dialog"],
+.telegram-workspace [data-radix-popper-content-wrapper] > *,
+.telegram-workspace [role="menu"] {
+  background-color: #17212b;
+  border-color: rgba(255,255,255,.08);
+  box-shadow: 0 12px 36px rgba(0,0,0,.28);
+  backdrop-filter: none;
+}
+.telegram-workspace [role="menu"] button,
+.telegram-workspace [role="menuitem"] {
+  border-radius: 7px;
+}
+.telegram-workspace [role="menu"] button:hover,
+.telegram-workspace [role="menuitem"]:hover {
+  background: rgba(94,181,247,.12);
+}
+.telegram-workspace .pinned-strip {
+  background: #17212b;
+  border-color: rgba(255,255,255,.06);
+}
+.telegram-workspace .chat-skeleton {
+  background: linear-gradient(90deg,#182533 25%,#202f3e 50%,#182533 75%);
+  background-size: 200% 100%;
+}
+.telegram-workspace button:focus-visible,
+.telegram-workspace input:focus-visible,
+.telegram-workspace textarea:focus-visible,
+.telegram-workspace select:focus-visible {
+  outline: 2px solid rgba(94,181,247,.65);
+  outline-offset: 1px;
+}
+.telegram-workspace .btn-glow:hover:not(:disabled),
+.telegram-workspace .card-hover:hover {
+  transform: none;
+  box-shadow: none;
+}
+.telegram-workspace ::-webkit-scrollbar { width: 6px; height: 6px; }
+.telegram-workspace ::-webkit-scrollbar-thumb {
+  background: rgba(135,155,175,.32);
+  border-radius: 999px;
+}
+.telegram-workspace ::-webkit-scrollbar-thumb:hover { background: rgba(135,155,175,.5); }
+@media (max-width: 767px) {
+  .telegram-workspace .telegram-workspace__sidebar header { padding-inline: 14px; }
+  .telegram-workspace .chat-message-own,
+  .telegram-workspace .chat-message-other { max-width: min(88%, 520px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .telegram-workspace .chat-card,
+  .telegram-workspace .chat-list-item,
+  .telegram-workspace button { transition-duration: .01ms !important; }
+}
+
+
+/* Final Telegram-like interaction polish: compact toolbars, flat surfaces, readable chat rows. */
+.telegram-workspace {
+  --panel: #17212b;
+  --bg-base: #0e1621;
+  --text-primary: #f5f7fa;
+  --text-secondary: #8a9aa9;
+  --accent: #5eb5f7;
+  --accent-from: #5eb5f7;
+  --accent-to: #3390ec;
+}
+.telegram-workspace .telegram-workspace__sidebar,
+.telegram-workspace .telegram-workspace__chat-pane {
+  min-height: 0;
+}
+.telegram-workspace .telegram-workspace__sidebar {
+  border-right: 1px solid rgba(0,0,0,.18);
+}
+.telegram-workspace .telegram-workspace__sidebar button,
+.telegram-workspace .telegram-workspace__chat-pane button {
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+.telegram-workspace .telegram-workspace__sidebar button:active,
+.telegram-workspace .telegram-workspace__chat-pane button:active {
+  transform: scale(.985);
+}
+.telegram-workspace .telegram-workspace__chat-pane header,
+.telegram-workspace .telegram-workspace__chat-pane [data-chat-header] {
+  background: #17212b;
+  border-bottom: 1px solid rgba(0,0,0,.18);
+}
+.telegram-workspace .telegram-workspace__chat-pane input,
+.telegram-workspace .telegram-workspace__chat-pane textarea {
+  background: #242f3d;
+  border: 0;
+  border-radius: 22px;
+  min-height: 42px;
+  padding-left: 15px;
+  padding-right: 15px;
+}
+.telegram-workspace .telegram-workspace__chat-pane textarea {
+  border-radius: 18px;
+  resize: none;
+}
+.telegram-workspace .telegram-workspace__chat-pane .chat-message-own,
+.telegram-workspace .telegram-workspace__chat-pane .chat-message-other,
+.telegram-workspace .telegram-workspace__chat-pane .chat-message-bubble {
+  overflow-wrap: anywhere;
+  line-height: 1.42;
+}
+.telegram-workspace .telegram-workspace__chat-pane .chat-message-own {
+  background: #2b5278;
+  border-radius: 12px 12px 3px 12px;
+}
+.telegram-workspace .telegram-workspace__chat-pane .chat-message-other {
+  background: #182533;
+  border-radius: 12px 12px 12px 3px;
+}
+.telegram-workspace .telegram-workspace__sidebar [aria-label="Все переписки"] {
+  padding: 4px;
+}
+.telegram-workspace .telegram-workspace__sidebar [aria-label="Все переписки"] > button {
+  min-height: 68px;
+  margin: 1px 0;
+}
+.telegram-workspace .telegram-workspace__sidebar [aria-label="Все переписки"] > button:focus-visible {
+  outline-offset: -2px;
+}
+.telegram-workspace .telegram-workspace__chat-pane [role="dialog"],
+.telegram-workspace .telegram-workspace__sidebar [role="dialog"] {
+  border-radius: 12px;
+}
+@media (max-width: 767px) {
+  .telegram-workspace .telegram-workspace__sidebar {
+    border-right: 0;
+  }
+  .telegram-workspace .telegram-workspace__chat-pane input,
+  .telegram-workspace .telegram-workspace__chat-pane textarea {
+    font-size: 16px;
+  }
+}
