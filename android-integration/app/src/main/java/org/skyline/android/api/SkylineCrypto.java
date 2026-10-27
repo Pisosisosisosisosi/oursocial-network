@@ -222,9 +222,17 @@ public final class SkylineCrypto {
     }
 
     private byte[] encryptAtRest(byte[] clear) throws Exception {
+        // Android Keystore keys with randomizedEncryptionRequired=true must
+        // generate the GCM IV themselves. Supplying GCMParameterSpec here
+        // throws "Caller-provided IV not permitted" on login/registration.
         SecretKey key = storageKey();
-        byte[] iv = randomBytes(12);
-        byte[] encrypted = aesEncrypt(key, iv, clear);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        byte[] iv = cipher.getIV();
+        if (iv == null || iv.length != 12) {
+            throw new IllegalStateException("Android Keystore did not generate a valid AES-GCM IV");
+        }
+        byte[] encrypted = cipher.doFinal(clear);
         byte[] packed = new byte[iv.length + encrypted.length];
         System.arraycopy(iv, 0, packed, 0, iv.length);
         System.arraycopy(encrypted, 0, packed, iv.length, encrypted.length);
