@@ -189,6 +189,35 @@ public final class SkylineApiClient {
         return items == null ? new JSONArray() : items;
     }
 
+    public void reactToMessage(String messageId, String emoji) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("emoji", emoji);
+        request("POST", "/messages/" + java.net.URLEncoder.encode(messageId, "UTF-8") + "/reactions", body, true);
+    }
+
+    public void pinMessage(String messageId, boolean pinned) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("pinned", pinned);
+        request("POST", "/messages/" + java.net.URLEncoder.encode(messageId, "UTF-8") + "/pin", body, true);
+    }
+
+    public void deleteMessageForAll(String messageId) throws Exception {
+        request("POST", "/messages/" + java.net.URLEncoder.encode(messageId, "UTF-8") + "/delete-for-all", new JSONObject(), true);
+    }
+
+    public void saveMessage(String messageId) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("messageId", messageId);
+        request("POST", "/saved-messages", body, true);
+    }
+
+    public void replyToMessage(String messageId, String encryptedText) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("text", encryptedText);
+        body.put("type", "text");
+        request("POST", "/messages/" + java.net.URLEncoder.encode(messageId, "UTF-8") + "/reply", body, true);
+    }
+
     public JSONObject request(String method, String path, JSONObject body, boolean authenticated) throws Exception {
         HttpURLConnection connection = null;
         try {
