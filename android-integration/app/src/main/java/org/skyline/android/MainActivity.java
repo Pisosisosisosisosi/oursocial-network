@@ -45,6 +45,12 @@ public final class MainActivity extends Activity {
     private SkylineCrypto crypto;
     private EditText emailInput;
     private EditText passwordInput;
+    private EditText registerUsernameInput;
+    private EditText registerPhoneInput;
+    private EditText emailCodeInput;
+    private EditText phoneCodeInput;
+    private String emailRegistrationToken;
+    private String phoneRegistrationToken;
     private TextView statusView;
     private Button loginButton;
     private ProgressBar progress;
@@ -184,7 +190,216 @@ public final class MainActivity extends Activity {
         root.addView(statusView, statusParams);
 
         loginButton.setOnClickListener(v -> login());
+        Button registerButton = new Button(this);
+        registerButton.setText("Создать аккаунт");
+        LinearLayout.LayoutParams registerParams = matchWrap();
+        registerParams.topMargin = dp(6);
+        root.addView(registerButton, registerParams);
+        registerButton.setOnClickListener(v -> renderRegister());
         setContentView(root);
+    }
+
+    private void renderRegister() {
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER);
+        root.setPadding(dp(24), dp(20), dp(24), dp(20));
+        root.setBackgroundColor(0xFFF5F8FC);
+
+        TextView title = text("Регистрация Skyline", 28, 0xFF1877D2);
+        title.setGravity(Gravity.CENTER);
+        root.addView(title, matchWrap());
+        TextView subtitle = text("Подтвердите электронную почту и номер телефона", 14, 0xFF586778);
+        subtitle.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams subParams = matchWrap();
+        subParams.topMargin = dp(6);
+        subParams.bottomMargin = dp(12);
+        root.addView(subtitle, subParams);
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout fields = new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(fields);
+        registerUsernameInput = addRegistrationField(fields, "Имя пользователя (латиница)", 33);
+        emailInput = addRegistrationField(fields, "Электронная почта", 33);
+        passwordInput = addRegistrationField(fields, "Пароль (не менее 6 символов)", 129);
+        registerPhoneInput = addRegistrationField(fields, "Телефон, например +373...", 3);
+        emailCodeInput = addRegistrationField(fields, "Код из письма", 2);
+        phoneCodeInput = addRegistrationField(fields, "Код из SMS", 2);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        Button sendEmail = new Button(this);
+        sendEmail.setText("Отправить код на почту");
+        fields.addView(sendEmail, matchWrap());
+        sendEmail.setOnClickListener(v -> sendRegistrationEmailCode());
+
+        Button verifyEmail = new Button(this);
+        verifyEmail.setText("Подтвердить почту");
+        fields.addView(verifyEmail, matchWrap());
+        verifyEmail.setOnClickListener(v -> verifyRegistrationEmailCode());
+
+        Button sendPhone = new Button(this);
+        sendPhone.setText("Отправить SMS-код");
+        fields.addView(sendPhone, matchWrap());
+        sendPhone.setOnClickListener(v -> sendRegistrationPhoneCode());
+
+        Button verifyPhone = new Button(this);
+        verifyPhone.setText("Подтвердить телефон");
+        fields.addView(verifyPhone, matchWrap());
+        verifyPhone.setOnClickListener(v -> verifyRegistrationPhoneCode());
+
+        Button create = new Button(this);
+        create.setText("Зарегистрироваться");
+        fields.addView(create, matchWrap());
+        create.setOnClickListener(v -> completeRegistration());
+
+        Button back = new Button(this);
+        back.setText("Назад ко входу");
+        fields.addView(back, matchWrap());
+        back.setOnClickListener(v -> renderLogin());
+
+        statusView = new TextView(this);
+        statusView.setText("Для регистрации нужны подтверждённые email и телефон.");
+        statusView.setTextColor(0xFF586778);
+        statusView.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams statusParams = matchWrap();
+        statusParams.topMargin = dp(8);
+        root.addView(statusView, statusParams);
+        setContentView(root);
+    }
+
+    private EditText addRegistrationField(LinearLayout parent, String hint, int inputType) {
+        EditText field = new EditText(this);
+        field.setSingleLine(true);
+        field.setInputType(inputType);
+        field.setHint(hint);
+        LinearLayout.LayoutParams params = matchWrap();
+        params.topMargin = dp(4);
+        params.bottomMargin = dp(4);
+        parent.addView(field, params);
+        return field;
+    }
+
+    private void sendRegistrationEmailCode() {
+        String email = emailInput.getText().toString().trim();
+        if (email.isEmpty()) { statusView.setText("Введите электронную почту."); return; }
+        setBusy(true);
+        statusView.setText("Отправляем письмо…");
+        executor.execute(() -> {
+            try {
+                api.sendEmailCode(email);
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Письмо отправлено. Проверьте входящие и спам."); });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось отправить письмо." : error.getMessage();
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Ошибка: " + message); });
+            }
+        });
+    }
+
+    private void verifyRegistrationEmailCode() {
+        String email = emailInput.getText().toString().trim();
+        String code = emailCodeInput.getText().toString().trim();
+        if (email.isEmpty() || code.isEmpty()) { statusView.setText("Введите email и код из письма."); return; }
+        setBusy(true);
+        statusView.setText("Проверяем email…");
+        executor.execute(() -> {
+            try {
+                JSONObject response = api.verifyEmailCode(email, code);
+                String token = response.optString("registrationToken", "");
+                if (token.isEmpty()) throw new IllegalStateException("API не вернул токен подтверждения email.");
+                emailRegistrationToken = token;
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Email подтверждён."); });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось подтвердить email." : error.getMessage();
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Ошибка: " + message); });
+            }
+        });
+    }
+
+    private void sendRegistrationPhoneCode() {
+        String phone = registerPhoneInput.getText().toString().trim();
+        if (phone.isEmpty()) { statusView.setText("Введите номер в международном формате."); return; }
+        setBusy(true);
+        statusView.setText("Запрашиваем SMS…");
+        executor.execute(() -> {
+            try {
+                api.sendPhoneCode(phone);
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Если номер доступен для регистрации, SMS будет отправлено."); });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось отправить SMS." : error.getMessage();
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Ошибка SMS: " + message); });
+            }
+        });
+    }
+
+    private void verifyRegistrationPhoneCode() {
+        String phone = registerPhoneInput.getText().toString().trim();
+        String code = phoneCodeInput.getText().toString().trim();
+        if (phone.isEmpty() || code.isEmpty()) { statusView.setText("Введите телефон и код из SMS."); return; }
+        setBusy(true);
+        statusView.setText("Проверяем телефон…");
+        executor.execute(() -> {
+            try {
+                JSONObject response = api.verifyPhoneCode(phone, code);
+                String token = response.optString("phoneVerificationToken", "");
+                if (token.isEmpty()) throw new IllegalStateException("API не вернул токен подтверждения телефона.");
+                phoneRegistrationToken = token;
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Телефон подтверждён."); });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось подтвердить телефон." : error.getMessage();
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Ошибка SMS: " + message); });
+            }
+        });
+    }
+
+    private void completeRegistration() {
+        String username = registerUsernameInput.getText().toString().trim();
+        String email = emailInput.getText().toString().trim();
+        String password = passwordInput.getText().toString();
+        String phone = registerPhoneInput.getText().toString().trim();
+        if (!username.matches("[A-Za-z0-9_.-]{3,32}")) {
+            statusView.setText("Имя пользователя: 3–32 символа, латиница, цифры, точка, дефис или подчёркивание."); return;
+        }
+        if (password.length() < 6) { statusView.setText("Пароль должен содержать минимум 6 символов."); return; }
+        if (emailRegistrationToken == null || phoneRegistrationToken == null) {
+            statusView.setText("Сначала подтвердите email и телефон."); return;
+        }
+        setBusy(true);
+        statusView.setText("Создаём аккаунт…");
+        executor.execute(() -> {
+            try {
+                JSONObject response = api.register(email, password, username, emailRegistrationToken, phone, phoneRegistrationToken);
+                String token = response.optString("token", "");
+                JSONObject user = response.optJSONObject("user");
+                if (token.isEmpty() || user == null) throw new IllegalStateException("Неполный ответ регистрации.");
+                api.setAccessToken(token);
+                getSharedPreferences("skyline_session", MODE_PRIVATE).edit()
+                        .putString("encrypted_token", crypto.protectLocalSecret(token)).apply();
+                String publicKey = crypto.ensurePublicKey();
+                boolean keyReady = false;
+                String warning = null;
+                try {
+                    JSONObject serverKey = api.getMyPublicKey();
+                    keyReady = publicKey.equals(serverKey.optString("publicKey", ""));
+                    if (!keyReady) warning = "Ключ шифрования отличается от ключа сервера. E2EE отправка отключена.";
+                } catch (SkylineApiClient.SkylineApiException keyError) {
+                    if (keyError.getStatusCode() == 404) { api.uploadPublicKey(publicKey); keyReady = true; }
+                    else throw keyError;
+                }
+                JSONArray contacts = api.getContacts();
+                final boolean cryptoReady = keyReady;
+                final String cryptoWarning = warning;
+                runOnUiThread(() -> {
+                    currentUser = user;
+                    e2eeReady = cryptoReady;
+                    connectRealtime();
+                    renderContacts(contacts, cryptoWarning);
+                });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось создать аккаунт." : error.getMessage();
+                runOnUiThread(() -> { setBusy(false); statusView.setText("Ошибка регистрации: " + message); });
+            }
+        });
     }
 
     private void login() {
