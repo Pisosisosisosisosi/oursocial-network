@@ -368,3 +368,62 @@ html[data-reduce-motion='true'] *, html[data-reduce-motion='true'] *::before, ht
   transition-duration: .01ms !important;
   scroll-behavior: auto !important;
 }
+
+
+/* Telegram-inspired Skyline workspace skin. Keeps Skyline's own brand and features
+   while using Telegram-like information density, muted surfaces and chat colors. */
+.telegram-workspace {
+  --bg-base: #0e1621;
+  --panel: #17212b;
+  --text-primary: #f5f7fa;
+  --text-secondary: #8a9aa9;
+  --accent: #5eb5f7;
+  --accent-from: #5eb5f7;
+  --accent-to: #3390ec;
+  --border-subtle: rgba(255,255,255,.075);
+  --glow: rgba(94,181,247,.18);
+  background: #0e1621;
+  color: #f5f7fa;
+}
+.telegram-workspace .telegram-workspace__sidebar {
+  background: #17212b;
+  border-color: rgba(255,255,255,.07);
+}
+.telegram-workspace .telegram-workspace__chat-pane {
+  background-color: #0e1621;
+  background-image:
+    radial-gradient(circle at 12px 12px, rgba(94,181,247,.025) 1.2px, transparent 1.4px);
+  background-size: 26px 26px;
+}
+.telegram-workspace input,
+.telegram-workspace textarea {
+  color-scheme: dark;
+}
+.telegram-workspace button:focus-visible,
+.telegram-workspace input:focus-visible,
+.telegram-workspace textarea:focus-visible {
+  outline-color: rgba(94,181,247,.8);
+}
+.telegram-workspace [aria-label="Все переписки"] > button {
+  min-height: 66px;
+  border-radius: 12px;
+  padding: 9px 10px;
+  transition: background-color 140ms ease, transform 140ms ease;
+}
+.telegram-workspace [aria-label="Все переписки"] > button:hover {
+  background: rgba(255,255,255,.045);
+}
+.telegram-workspace [aria-label="Все переписки"] > button:active {
+  transform: scale(.995);
+}
+.telegram-workspace [aria-label="Все переписки"] > button[aria-current="page"],
+.telegram-workspace [aria-label="Все переписки"] > button[data-active="true"] {
+  background: #2b5278;
+}
+.telegram-workspace ::selection {
+  background: rgba(94,181,247,.32);
+}
+@media (max-width: 767px) {
+  .telegram-workspace .telegram-workspace__sidebar { width: 100%; }
+  .telegram-workspace .telegram-workspace__chat-pane { background-size: 22px 22px; }
+}
