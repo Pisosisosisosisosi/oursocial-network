@@ -211,7 +211,8 @@ public final class MainActivity extends Activity {
         TextView title = text("Регистрация Skyline", 28, 0xFF5EB5F7);
         title.setGravity(Gravity.CENTER);
         root.addView(title, matchWrap());
-        TextView subtitle = text("Подтвердите электронную почту и номер телефона", 14, 0xFF8A9AA9);
+
+        TextView subtitle = text("Один аккаунт для браузера и Android. Подтверждение не требуется.", 14, 0xFF8A9AA9);
         subtitle.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams subParams = matchWrap();
         subParams.topMargin = dp(6);
@@ -225,33 +226,10 @@ public final class MainActivity extends Activity {
         registerUsernameInput = addRegistrationField(fields, "Имя пользователя (латиница)", 33);
         emailInput = addRegistrationField(fields, "Электронная почта", 33);
         passwordInput = addRegistrationField(fields, "Пароль (не менее 6 символов)", 129);
-        registerPhoneInput = addRegistrationField(fields, "Телефон, например +373...", 3);
-        emailCodeInput = addRegistrationField(fields, "Код из письма", 2);
-        phoneCodeInput = addRegistrationField(fields, "Код из SMS", 2);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        Button sendEmail = createThemedButton();
-        sendEmail.setText("Отправить код на почту");
-        fields.addView(sendEmail, matchWrap());
-        sendEmail.setOnClickListener(v -> sendRegistrationEmailCode());
-
-        Button verifyEmail = createThemedButton();
-        verifyEmail.setText("Подтвердить почту");
-        fields.addView(verifyEmail, matchWrap());
-        verifyEmail.setOnClickListener(v -> verifyRegistrationEmailCode());
-
-        Button sendPhone = createThemedButton();
-        sendPhone.setText("Отправить SMS-код");
-        fields.addView(sendPhone, matchWrap());
-        sendPhone.setOnClickListener(v -> sendRegistrationPhoneCode());
-
-        Button verifyPhone = createThemedButton();
-        verifyPhone.setText("Подтвердить телефон");
-        fields.addView(verifyPhone, matchWrap());
-        verifyPhone.setOnClickListener(v -> verifyRegistrationPhoneCode());
-
         Button create = createThemedButton();
-        create.setText("Зарегистрироваться");
+        create.setText("Создать аккаунт");
         fields.addView(create, matchWrap());
         create.setOnClickListener(v -> completeRegistration());
 
@@ -261,7 +239,7 @@ public final class MainActivity extends Activity {
         back.setOnClickListener(v -> renderLogin());
 
         statusView = new TextView(this);
-        statusView.setText("Для регистрации нужны подтверждённые email и телефон.");
+        statusView.setText("Введите имя, почту и пароль для создания аккаунта.");
         statusView.setTextColor(0xFF8A9AA9);
         statusView.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams statusParams = matchWrap();
@@ -358,19 +336,18 @@ public final class MainActivity extends Activity {
         String username = registerUsernameInput.getText().toString().trim();
         String email = emailInput.getText().toString().trim();
         String password = passwordInput.getText().toString();
-        String phone = registerPhoneInput.getText().toString().trim();
         if (!username.matches("[A-Za-z0-9_.-]{3,32}")) {
             statusView.setText("Имя пользователя: 3–32 символа, латиница, цифры, точка, дефис или подчёркивание."); return;
         }
-        if (password.length() < 6) { statusView.setText("Пароль должен содержать минимум 6 символов."); return; }
-        if (emailRegistrationToken == null || phoneRegistrationToken == null) {
-            statusView.setText("Сначала подтвердите email и телефон."); return;
+        if (email.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            statusView.setText("Введите корректный адрес электронной почты."); return;
         }
+        if (password.length() < 6) { statusView.setText("Пароль должен содержать минимум 6 символов."); return; }
         setBusy(true);
-        statusView.setText("Создаём аккаунт…");
+        statusView.setText("Создаём общий аккаунт Skyline…");
         executor.execute(() -> {
             try {
-                JSONObject response = api.register(email, password, username, emailRegistrationToken, phone, phoneRegistrationToken);
+                JSONObject response = api.register(email, password, username);
                 String token = response.optString("token", "");
                 JSONObject user = response.optJSONObject("user");
                 if (token.isEmpty() || user == null) throw new IllegalStateException("Неполный ответ регистрации.");
