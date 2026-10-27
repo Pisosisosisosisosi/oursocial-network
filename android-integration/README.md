@@ -10,6 +10,7 @@ This folder now contains a **minimal standalone Android app prototype** and the 
 - Bearer JWT authorization and HTTP error details.
 - Android Internet permission and a GitHub Actions build workflow.
 - Socket.IO Java adapter with JWT auth, reconnection, chat join/leave, typing, and generic event listeners/emits.
+- Initial `message_changed` listener in the Android activity to refresh an open conversation or the chat list when the server emits updates.
 
 ## Build locally
 
@@ -30,7 +31,7 @@ The first build requires network access to resolve Gradle and Android Gradle Plu
 ## Next integration stages
 
 1. Replace the prototype login flow with Skyline registration, email verification, session restore and secure token storage.
-2. Add Socket.IO Java integration and map Skyline's actual event names and payloads.
+2. Verify the wired `message_changed` listener against a running server, then map remaining Skyline realtime event names and payloads.
 3. Replace Telegram's MTProto dialog/message/contact/group/channel data sources with Skyline REST and Socket.IO. Telegram's MTProto protocol is not compatible with Skyline's API.
 4. Expand the initial chat list/history screens into complete messaging UI, then media uploads, voice messages, replies, edits/deletes, reactions, read receipts, groups/channels, notifications and calls according to server support.
 5. Verify compatible cryptographic formats before enabling end-to-end encryption; do not claim E2EE parity until interoperability tests pass.
@@ -40,5 +41,6 @@ The first build requires network access to resolve Gradle and Android Gradle Plu
 
 - The prototype keeps the token in memory only; it does not persist it. Production session storage must use Android Keystore-backed encrypted storage.
 - API calls are blocking and are run on a background executor, not the UI thread.
+- Realtime event handling is wired but has not been tested against a live server in this environment.
 - This is not yet a modified Telegram APK, and it has not been device-tested in this environment.
 - The upstream Telegram Android repository is GPL-2.0. If we distribute a derivative build, preserve required notices and comply with source publication obligations. Do not use Telegram branding in a way that implies this is an official Telegram app.
