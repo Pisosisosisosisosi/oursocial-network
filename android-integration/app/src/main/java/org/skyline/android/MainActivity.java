@@ -1,10 +1,12 @@
 package org.skyline.android;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -181,6 +183,22 @@ public final class MainActivity extends Activity {
         accountParams.topMargin = dp(4);
         accountParams.bottomMargin = dp(12);
         screen.addView(account, accountParams);
+
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setGravity(Gravity.CENTER);
+        String[][] navItems = new String[][] {
+                {"Группы", "groups"}, {"Каналы", "channels"}, {"Истории", "stories"},
+                {"Сохранённое", "saved"}, {"Настройки", "settings"}
+        };
+        for (String[] navItem : navItems) {
+            Button navButton = new Button(this);
+            navButton.setText(navItem[0]);
+            navButton.setTextSize(10);
+            nav.addView(navButton, new LinearLayout.LayoutParams(0, dp(46), 1));
+            navButton.setOnClickListener(v -> openFeature(navItem[1]));
+        }
+        screen.addView(nav, matchWrap());
 
         LinearLayout searchRow = new LinearLayout(this);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -474,6 +492,297 @@ public final class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void openFeature(String feature) {
+        activeContactId = null;
+        activeConversationTitle = null;
+        activeMessageInput = null;
+        searchResultsContainer = null;
+        searchResultsScroll = null;
+        setBusy(true);
+        executor.execute(() -> {
+            try {
+                JSONArray items;
+                switch (feature) {
+                    case "groups": items = api.getGroups(); break;
+                    case "channels": items = api.getChannels(); break;
+                    case "stories": items = api.getStories(); break;
+                    case "saved": items = api.getSavedMessages(); break;
+                    default: items = new JSONArray(); break;
+                }
+                JSONObject settings = "settings".equals(feature) ? api.getSettings() : null;
+                runOnUiThread(() -> renderFeature(feature, items, settings, null));
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось загрузить раздел." : error.getMessage();
+                runOnUiThread(() -> renderFeature(feature, new JSONArray(), null, message));
+            }
+        });
+    }
+
+    private void renderFeature(String feature, JSONArray items, JSONObject settings, String errorText) {
+        LinearLayout screen = createScreen();
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        Button back = new Button(this);
+        back.setText("‹ Чаты");
+        back.setOnClickListener(v -> refreshContacts());
+        header.addView(back);
+        TextView title = text(featureTitle(feature), 22, 0xFF1877D2);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        screen.addView(header, matchWrap());
+
+        if ("groups".equals(feature) || "channels".equals(feature)) {
+            Button create = new Button(this);
+            create.setText("＋ Создать");
+            create.setOnClickListener(v -> showCreateDialog(feature));
+            screen.addView(create, matchWrap());
+        }
+
+        if (errorText != null) {
+            screen.addView(text("Ошибка: " + errorText, 14, 0xFFB42318), matchWrap());
+        } else if ("settings".equals(feature)) {
+            addSettingToggle(screen, "Тёмная тема", "theme", settings);
+            addSettingToggle(screen, "Анимации", "animationsEnabled", settings);
+            TextView note = text("Настройки сохраняются в аккаунте Skyline. Расширенные настройки приватности и устройств будут добавлены отдельными этапами.", 12, 0xFF586778);
+            note.setPadding(0, dp(12), 0, 0);
+            screen.addView(note, matchWrap());
+        } else {
+            ScrollView scroll = new ScrollView(this);
+            LinearLayout list = new LinearLayout(this);
+            list.setOrientation(LinearLayout.VERTICAL);
+            if (items.length() == 0) {
+                String empty = "stories".equals(feature) ? "Активных историй пока нет."
+                        : "saved".equals(feature) ? "Сохранённых сообщений пока нет."
+                        : "Пока пусто. Используйте кнопку создания, чтобы добавить первый элемент.";
+                list.addView(text(empty, 14, 0xFF586778), matchWrap());
+            }
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) continue;
+                final JSONObject selected = item;
+                String id = item.optString("id", item.optString("savedId", ""));
+                String name = "groups".equals(feature) || "channels".equals(feature)
+                        ? item.optString("title", "Без названия")
+                        : "stories".equals(feature)
+                            ? item.optString("displayName", item.optString("username", "История"))
+                            : item.optJSONObject("message") == null ? "Сохранённое сообщение"
+                                : item.optJSONObject("message").optString("text", "Сохранённое сообщение");
+                if (name.startsWith("skyline-e2e:") || name.startsWith("oursocial-e2e:")) name = "🔒 Зашифрованное сообщение";
+                String detail = "groups".equals(feature)
+                        ? item.optString("memberCount", item.optJSONArray("members") == null ? "" : String.valueOf(item.optJSONArray("members").length())) + " участников"
+                        : "channels".equals(feature)
+                            ? item.optString("visibility", "Канал") + (item.optString("description", "").isEmpty() ? "" : " · " + item.optString("description"))
+                            : "stories".equals(feature)
+                                ? item.optString("caption", "История") + (item.optBoolean("viewed") ? " · Просмотрено" : "")
+                                : "saved".equals(feature) ? "Сохранённое сообщение" : "";
+                TextView row = text(name + (detail.isEmpty() ? "" : "\n" + detail), 15, 0xFF263445);
+                row.setPadding(dp(12), dp(14), dp(12), dp(14));
+                row.setBackgroundColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFFF0F4F8);
+                row.setOnClickListener(v -> {
+                    if ("groups".equals(feature)) openGroup(selected);
+                    else if ("channels".equals(feature)) openChannel(selected);
+                    else if ("stories".equals(feature)) {
+                        String storyId = selected.optString("id", "");
+                        if (!storyId.isEmpty()) executor.execute(() -> {
+                            try { api.viewStory(storyId); } catch (Exception ignored) {}
+                        });
+                        String mediaType = selected.optString("mediaType", "image");
+                        Toast.makeText(this, "История (" + mediaType + "): " + selected.optString("caption", "без подписи") + "\nПросмотр медиа доступен в веб-версии.", Toast.LENGTH_LONG).show();
+                    } else if ("saved".equals(feature)) {
+                        JSONObject msg = selected.optJSONObject("message");
+                        String value = msg == null ? "" : msg.optString("text", "");
+                        Toast.makeText(this, value.startsWith("skyline-e2e:") ? "Сохранённое сообщение зашифровано и пока не поддерживается этим экраном." : value, Toast.LENGTH_LONG).show();
+                    }
+                });
+                list.addView(row, matchWrap());
+            }
+            scroll.addView(list);
+            screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        }
+        setContentView(screen);
+        setBusy(false);
+    }
+
+    private String featureTitle(String feature) {
+        switch (feature) {
+            case "groups": return "Группы";
+            case "channels": return "Каналы";
+            case "stories": return "Истории";
+            case "saved": return "Сохранённое";
+            case "settings": return "Настройки";
+            default: return "Skyline";
+        }
+    }
+
+    private void showCreateDialog(String feature) {
+        LinearLayout fields = new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
+        fields.setPadding(dp(20), dp(4), dp(20), 0);
+        EditText title = new EditText(this);
+        title.setSingleLine(true);
+        title.setHint("Название");
+        fields.addView(title, matchWrap());
+        EditText description = new EditText(this);
+        description.setHint("Описание");
+        fields.addView(description, matchWrap());
+        EditText visibility = new EditText(this);
+        if ("channels".equals(feature)) {
+            visibility.setSingleLine(true);
+            visibility.setHint("Публичный или private");
+            visibility.setText("public");
+            fields.addView(visibility, matchWrap());
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("groups".equals(feature) ? "Создать группу" : "Создать канал")
+                .setView(fields)
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("Создать", (dialog, which) -> {
+                    String name = title.getText().toString().trim();
+                    if (name.length() < 2) {
+                        Toast.makeText(this, "Название должно содержать минимум 2 символа.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    executor.execute(() -> {
+                        try {
+                            if ("groups".equals(feature)) api.createGroup(name, description.getText().toString(), new JSONArray());
+                            else {
+                                String vis = visibility.getText().toString().trim().equalsIgnoreCase("private") ? "private" : "public";
+                                api.createChannel(name, description.getText().toString(), vis);
+                            }
+                            runOnUiThread(() -> {
+                                Toast.makeText(this, "Создано.", Toast.LENGTH_SHORT).show();
+                                openFeature(feature);
+                            });
+                        } catch (Exception error) {
+                            String message = error.getMessage() == null ? "Не удалось создать." : error.getMessage();
+                            runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
+                        }
+                    });
+                }).show();
+    }
+
+    private void openGroup(JSONObject group) {
+        String groupId = group.optString("id", "");
+        String title = group.optString("title", "Группа");
+        LinearLayout screen = createScreen();
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        Button back = new Button(this);
+        back.setText("‹ Группы");
+        back.setOnClickListener(v -> openFeature("groups"));
+        header.addView(back);
+        header.addView(text(title, 20, 0xFF1877D2), new LinearLayout.LayoutParams(0, -2, 1));
+        screen.addView(header, matchWrap());
+        TextView content = text("Загрузка сообщений группы…", 14, 0xFF263445);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content);
+        screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        setContentView(screen);
+        executor.execute(() -> {
+            try {
+                JSONArray messages = api.getGroupMessages(groupId);
+                StringBuilder output = new StringBuilder();
+                for (int i = 0; i < messages.length(); i++) {
+                    JSONObject m = messages.optJSONObject(i);
+                    if (m == null) continue;
+                    if (output.length() > 0) output.append("\n\n");
+                    String body = m.optString("text", "");
+                    output.append(m.optString("senderId", "Участник")).append(": ")
+                            .append(body.startsWith("skyline-e2e:") ? "🔒 Зашифрованное сообщение группы" : body);
+                }
+                if (output.length() == 0) output.append("Сообщений пока нет. Отправка групповых E2EE-сообщений появится после реализации управления групповыми ключами.");
+                String rendered = output.toString();
+                runOnUiThread(() -> content.setText(rendered));
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Ошибка загрузки сообщений." : error.getMessage();
+                runOnUiThread(() -> content.setText(message));
+            }
+        });
+    }
+
+    private void openChannel(JSONObject channel) {
+        String channelId = channel.optString("id", "");
+        String title = channel.optString("title", "Канал");
+        LinearLayout screen = createScreen();
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        Button back = new Button(this);
+        back.setText("‹ Каналы");
+        back.setOnClickListener(v -> openFeature("channels"));
+        header.addView(back);
+        header.addView(text(title, 20, 0xFF1877D2), new LinearLayout.LayoutParams(0, -2, 1));
+        screen.addView(header, matchWrap());
+        TextView content = text("Загрузка публикаций…", 14, 0xFF263445);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content);
+        screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout composer = new LinearLayout(this);
+        EditText postInput = new EditText(this);
+        postInput.setHint("Новая публикация");
+        composer.addView(postInput, new LinearLayout.LayoutParams(0, -2, 1));
+        Button publish = new Button(this);
+        publish.setText("Опубликовать");
+        publish.setOnClickListener(v -> {
+            String value = postInput.getText().toString().trim();
+            if (value.isEmpty()) return;
+            publish.setEnabled(false);
+            executor.execute(() -> {
+                try {
+                    api.createChannelPost(channelId, value);
+                    runOnUiThread(() -> openChannel(channel));
+                } catch (Exception error) {
+                    String message = error.getMessage() == null ? "Не удалось опубликовать." : error.getMessage();
+                    runOnUiThread(() -> {
+                        publish.setEnabled(true);
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+                    });
+                }
+            });
+        });
+        composer.addView(publish);
+        screen.addView(composer, matchWrap());
+        setContentView(screen);
+        executor.execute(() -> {
+            try {
+                JSONArray posts = api.getChannelPosts(channelId);
+                StringBuilder output = new StringBuilder();
+                for (int i = 0; i < posts.length(); i++) {
+                    JSONObject post = posts.optJSONObject(i);
+                    if (post == null) continue;
+                    if (output.length() > 0) output.append("\n\n");
+                    output.append(post.optString("text", "📎 Вложение"));
+                }
+                if (output.length() == 0) output.append("Публикаций пока нет.");
+                String rendered = output.toString();
+                runOnUiThread(() -> content.setText(rendered));
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Ошибка загрузки канала." : error.getMessage();
+                runOnUiThread(() -> content.setText(message));
+            }
+        });
+    }
+
+    private void addSettingToggle(LinearLayout screen, String label, String key, JSONObject settings) {
+        boolean initial = "theme".equals(key)
+                ? "light".equals(settings == null ? "dark" : settings.optString("theme", "dark"))
+                : settings != null && settings.optBoolean(key, true);
+        CheckBox check = new CheckBox(this);
+        check.setText(label);
+        check.setChecked(initial);
+        check.setTextColor(0xFF263445);
+        check.setOnCheckedChangeListener((button, checked) -> executor.execute(() -> {
+            try {
+                JSONObject update = new JSONObject();
+                update.put(key, "theme".equals(key) ? (checked ? "light" : "dark") : checked);
+                api.saveSettings(update);
+                runOnUiThread(() -> Toast.makeText(this, "Настройки сохранены.", Toast.LENGTH_SHORT).show());
+            } catch (Exception error) {
+                runOnUiThread(() -> Toast.makeText(this, "Не удалось сохранить настройку.", Toast.LENGTH_SHORT).show());
+            }
+        }));
+        screen.addView(check, matchWrap());
     }
 
     private void connectRealtime() {
