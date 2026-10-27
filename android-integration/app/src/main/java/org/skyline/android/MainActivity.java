@@ -34,6 +34,7 @@ public final class MainActivity extends Activity {
     private JSONObject currentUser;
     private String activeContactId;
     private String activeConversationTitle;
+    private EditText activeMessageInput;
     private SkylineRealtimeClient realtime;
     private Emitter.Listener messageChangedListener;
     private boolean e2eeReady;
@@ -219,6 +220,7 @@ public final class MainActivity extends Activity {
             e2eeReady = false;
             activeContactId = null;
             activeConversationTitle = null;
+            activeMessageInput = null;
             renderLogin();
         });
         screen.addView(logout, matchWrap());
@@ -227,6 +229,11 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshContacts() {
+        // Leaving the conversation screen must also clear the active chat reference;
+        // otherwise realtime events can unexpectedly reopen a chat over the list.
+        activeContactId = null;
+        activeConversationTitle = null;
+        activeMessageInput = null;
         setBusy(true);
         executor.execute(() -> {
             try {
@@ -240,6 +247,10 @@ public final class MainActivity extends Activity {
     }
 
     private void openConversation(String contactId, String title) {
+        // Realtime refreshes rebuild the screen. Preserve the current draft when
+        // refreshing the same conversation so incoming events don't erase typing.
+        String draft = contactId.equals(activeContactId) && activeMessageInput != null
+                ? activeMessageInput.getText().toString() : "";
         activeContactId = contactId;
         activeConversationTitle = title;
         LinearLayout screen = createScreen();
@@ -271,6 +282,8 @@ public final class MainActivity extends Activity {
         composer.setOrientation(LinearLayout.HORIZONTAL);
         composer.setGravity(Gravity.CENTER_VERTICAL);
         EditText messageInput = new EditText(this);
+        activeMessageInput = messageInput;
+        messageInput.setText(draft);
         messageInput.setHint("Сообщение…");
         messageInput.setMinLines(1);
         messageInput.setMaxLines(4);
