@@ -9,6 +9,7 @@ This folder now contains a **minimal standalone Android app prototype** and the 
 - HTTP bridge for POST /auth/login, GET /auth/me, and GET /users/search?q=...
 - Bearer JWT authorization and HTTP error details.
 - Android Internet permission and a GitHub Actions build workflow.
+- Socket.IO Java adapter with JWT auth, reconnection, chat join/leave, typing, and generic event listeners/emits.
 
 ## Build locally
 
@@ -24,7 +25,7 @@ The first build requires network access to resolve Gradle and Android Gradle Plu
 - Login: POST /auth/login with an email and password; response contains token and user.
 - Current-user profile: GET /auth/me with Authorization: Bearer token.
 - User search: GET /users/search?q=query.
-- Realtime: Socket.IO at the configured API origin, authenticated with auth: { token } in the web client. The Android Socket.IO integration is not yet implemented.
+- Realtime: Socket.IO at the configured API origin, authenticated with auth: { token }. A Java adapter is included; it still needs to be wired into chat screens and verified against a running server.
 
 ## Next integration stages
 
