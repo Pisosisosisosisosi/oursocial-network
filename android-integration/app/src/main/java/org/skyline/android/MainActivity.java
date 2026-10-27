@@ -766,7 +766,7 @@ public final class MainActivity extends Activity {
 
     private void addSettingToggle(LinearLayout screen, String label, String key, JSONObject settings) {
         boolean initial = "theme".equals(key)
-                ? "light".equals(settings == null ? "dark" : settings.optString("theme", "dark"))
+                ? "dark".equals(settings == null ? "dark" : settings.optString("theme", "dark"))
                 : settings != null && settings.optBoolean(key, true);
         CheckBox check = new CheckBox(this);
         check.setText(label);
@@ -775,7 +775,7 @@ public final class MainActivity extends Activity {
         check.setOnCheckedChangeListener((button, checked) -> executor.execute(() -> {
             try {
                 JSONObject update = new JSONObject();
-                update.put(key, "theme".equals(key) ? (checked ? "light" : "dark") : checked);
+                update.put(key, "theme".equals(key) ? (checked ? "dark" : "light") : checked);
                 api.saveSettings(update);
                 runOnUiThread(() -> Toast.makeText(this, "Настройки сохранены.", Toast.LENGTH_SHORT).show());
             } catch (Exception error) {
