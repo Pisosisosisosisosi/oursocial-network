@@ -39,6 +39,7 @@ import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int PICK_STORY_IMAGE = 901;
+    private static final int PICK_CHAT_IMAGE = 902;
     private String pendingStoryCaption = "";
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final SkylineApiClient api = new SkylineApiClient();
@@ -736,6 +737,11 @@ public final class MainActivity extends Activity {
                 }
             }
         });
+        Button attach = new Button(this);
+        attach.setText("＋");
+        attach.setContentDescription("Прикрепить изображение");
+        attach.setOnClickListener(v -> pickChatImage());
+        composer.addView(attach);
         composer.addView(messageInput, new LinearLayout.LayoutParams(0, -2, 1));
         Button send = new Button(this);
         send.setText("Отправить");
@@ -875,6 +881,48 @@ public final class MainActivity extends Activity {
                 }).show();
     }
 
+    private void pickChatImage() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        startActivityForResult(intent, PICK_CHAT_IMAGE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PICK_CHAT_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        final Uri uri = data.getData();
+        final String recipientId = activeContactId;
+        final String title = activeConversationTitle;
+        if (recipientId == null || currentUser == null) { Toast.makeText(this, "Сначала откройте личный чат.", Toast.LENGTH_SHORT).show(); return; }
+        executor.execute(() -> {
+            try {
+                String mime = getContentResolver().getType(uri);
+                if (mime == null || !mime.startsWith("image/")) throw new IllegalArgumentException("Выберите файл изображения.");
+                byte[] bytes;
+                try (InputStream stream = getContentResolver().openInputStream(uri); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                    if (stream == null) throw new IllegalStateException("Не удалось открыть изображение.");
+                    byte[] buffer = new byte[8192]; int count;
+                    while ((count = stream.read(buffer)) != -1) { if (output.size() + count > 1200000) throw new IllegalArgumentException("Изображение слишком большое. Максимум 1,2 МБ."); output.write(buffer, 0, count); }
+                    bytes = output.toByteArray();
+                }
+                if (bytes.length == 0) throw new IllegalArgumentException("Файл пустой.");
+                String senderId = currentUser.optString("id", currentUser.optString("userId", ""));
+                String ownPublicKey = crypto.ensurePublicKey();
+                String recipientPublicKey = api.getPublicKey(recipientId).optString("publicKey", "");
+                if (senderId.isEmpty() || recipientPublicKey.isEmpty()) throw new IllegalStateException("У одного из участников нет ключа шифрования.");
+                String filename = "image";
+                try (android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                    if (cursor != null) { int column = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME); if (column >= 0 && cursor.moveToFirst()) { String value = cursor.getString(column); if (value != null && !value.trim().isEmpty()) filename = value.replace("\\n", "").replace("\\r", ""); } }
+                } catch (Exception ignored) { }
+                String payload = "skyline-attachment:v1\\n" + mime + "\\n" + filename + "\\n" + Base64.encodeToString(bytes, Base64.NO_WRAP);
+                String encrypted = crypto.encryptMessage(payload, senderId, ownPublicKey, recipientId, recipientPublicKey);
+                api.sendAttachment(recipientId, "image", encrypted);
+                runOnUiThread(() -> { Toast.makeText(this, "Зашифрованное изображение отправлено.", Toast.LENGTH_SHORT).show(); if (recipientId.equals(activeContactId)) openConversation(recipientId, title == null ? "Чат" : title); });
+            } catch (Exception error) { String message = error.getMessage() == null ? "Не удалось отправить изображение." : error.getMessage(); runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show()); }
+        });
+    }
     private void sendMessage(String recipientId, String title, EditText input, Button sendButton) {
         String plainText = input.getText().toString().trim();
         if (plainText.isEmpty()) return;
