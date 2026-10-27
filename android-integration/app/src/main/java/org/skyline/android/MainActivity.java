@@ -36,6 +36,7 @@ public final class MainActivity extends Activity {
     private String activeConversationTitle;
     private SkylineRealtimeClient realtime;
     private Emitter.Listener messageChangedListener;
+    private boolean e2eeReady;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -123,12 +124,30 @@ public final class MainActivity extends Activity {
                 JSONObject user = response.optJSONObject("user");
                 if (user == null) throw new IllegalStateException("В ответе Skyline API отсутствуют данные пользователя");
                 String publicKey = crypto.ensurePublicKey();
-                api.uploadPublicKey(publicKey);
+                boolean keyReady = false;
+                String keyWarning = null;
+                try {
+                    JSONObject serverKey = api.getMyPublicKey();
+                    keyReady = publicKey.equals(serverKey.optString("publicKey", ""));
+                    if (!keyReady) {
+                        keyWarning = "Ключ шифрования аккаунта уже зарегистрирован на другом устройстве. Вход выполнен, но отправка E2EE-сообщений отключена, чтобы не перезаписать ключ и не потерять доступ к старым сообщениям.";
+                    }
+                } catch (SkylineApiClient.SkylineApiException keyError) {
+                    if (keyError.getStatusCode() == 404) {
+                        api.uploadPublicKey(publicKey);
+                        keyReady = true;
+                    } else {
+                        throw keyError;
+                    }
+                }
                 JSONArray contacts = api.getContacts();
+                final boolean cryptoReady = keyReady;
+                final String cryptoWarning = keyWarning;
                 runOnUiThread(() -> {
                     currentUser = user;
+                    e2eeReady = cryptoReady;
                     connectRealtime();
-                    renderContacts(contacts, null);
+                    renderContacts(contacts, cryptoWarning);
                 });
             } catch (Exception error) {
                 String message = error.getMessage() == null ? "Не удалось подключиться к API." : error.getMessage();
@@ -197,6 +216,7 @@ public final class MainActivity extends Activity {
             disconnectRealtime();
             api.clearSession();
             currentUser = null;
+            e2eeReady = false;
             activeContactId = null;
             activeConversationTitle = null;
             renderLogin();
@@ -313,6 +333,10 @@ public final class MainActivity extends Activity {
         String plainText = input.getText().toString().trim();
         if (plainText.isEmpty()) return;
         if (currentUser == null) return;
+        if (!e2eeReady) {
+            input.setError("E2EE-ключ этого аккаунта принадлежит другому устройству; безопасная синхронизация ключей ещё не реализована.");
+            return;
+        }
         String senderId = currentUser.optString("id", currentUser.optString("userId", ""));
         if (senderId.isEmpty()) {
             input.setError("Не удалось определить ваш аккаунт.");
