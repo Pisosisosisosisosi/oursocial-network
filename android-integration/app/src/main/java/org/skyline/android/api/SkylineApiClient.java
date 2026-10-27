@@ -50,6 +50,24 @@ public final class SkylineApiClient {
         return items == null ? new JSONArray() : items;
     }
 
+    public JSONObject getPublicKey(String userId) throws Exception {
+        return request("GET", "/keys/" + java.net.URLEncoder.encode(userId, "UTF-8"), null, true);
+    }
+
+    public void uploadPublicKey(String publicKey) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("publicKey", publicKey);
+        request("POST", "/keys/upload", body, true);
+    }
+
+    public JSONObject sendTextMessage(String receiverId, String encryptedText) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("receiverId", receiverId);
+        body.put("text", encryptedText);
+        body.put("type", "text");
+        return request("POST", "/messages", body, true);
+    }
+
     /** Returns the current user's personal chats, including recent-message previews. */
     public JSONArray getContacts() throws Exception {
         JSONObject response = request("GET", "/contacts", null, true);
