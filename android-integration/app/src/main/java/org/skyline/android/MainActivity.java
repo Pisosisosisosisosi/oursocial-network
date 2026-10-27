@@ -758,25 +758,46 @@ public final class MainActivity extends Activity {
                 JSONArray messages = api.getMessages(contactId);
                 ArrayList<JSONObject> messageItems = new ArrayList<>();
                 ArrayList<String> displayRows = new ArrayList<>();
+                ArrayList<String> attachmentPayloads = new ArrayList<>();
                 for (int i = 0; i < messages.length(); i++) {
                     JSONObject message = messages.optJSONObject(i);
                     if (message == null) continue;
                     String currentUserId = currentUser == null ? "" : currentUser.optString("userId", currentUser.optString("id", ""));
                     boolean own = !currentUserId.isEmpty() && currentUserId.equals(message.optString("senderId", ""));
                     String sender = own ? "Вы" : title;
+                    String type = message.optString("type", "text");
                     String body = message.optString("text", "");
-                    if (message.optBoolean("deletedForAll", false)) body = "Это сообщение удалено";
-                    else if (body.startsWith("skyline-e2e:v4:")) {
+                    String attachmentPayload = null;
+                    if (message.optBoolean("deletedForAll", false)) {
+                        body = "Это сообщение удалено";
+                    } else if (!"text".equals(type)) {
+                        String encryptedFile = message.optString("fileData", "");
+                        if (encryptedFile.startsWith("skyline-e2e:v4:")) {
+                            try {
+                                String decrypted = crypto.decryptMessage(encryptedFile, currentUserId);
+                                if (decrypted.startsWith("skyline-attachment:v1\n")) {
+                                    attachmentPayload = decrypted;
+                                    String[] parts = decrypted.split("\n", 4);
+                                    body = parts.length >= 3 ? "📷 " + parts[2] : "📷 Изображение";
+                                } else {
+                                    body = "📎 Вложение (неподдерживаемый формат)";
+                                }
+                            } catch (Exception decryptError) {
+                                body = "🔒 Не удалось расшифровать вложение на этом устройстве";
+                            }
+                        } else {
+                            body = "📎 Вложение";
+                        }
+                    } else if (body.startsWith("skyline-e2e:v4:")) {
                         try { body = crypto.decryptMessage(body, currentUserId); }
                         catch (Exception decryptError) { body = "🔒 Не удалось расшифровать сообщение на этом устройстве"; }
                     } else if (body.startsWith("skyline-e2e:") || body.startsWith("oursocial-e2e:")) {
                         body = "🔒 Сообщение использует старый формат шифрования, пока не поддерживаемый Android";
-                    } else if (!"text".equals(message.optString("type", "text"))) {
-                        body = "📎 Вложение";
                     }
                     String createdAt = message.optString("createdAt", "");
                     if (createdAt.length() > 16) createdAt = createdAt.substring(0, 16).replace('T', ' ');
                     displayRows.add((message.optBoolean("pinned", false) ? "📌 " : "") + sender + (createdAt.isEmpty() ? "" : " · " + createdAt) + "\n" + body);
+                    attachmentPayloads.add(attachmentPayload);
                     messageItems.add(message);
                 }
                 runOnUiThread(() -> {
@@ -787,13 +808,40 @@ public final class MainActivity extends Activity {
                     } else {
                         for (int i = 0; i < displayRows.size(); i++) {
                             final JSONObject message = messageItems.get(i);
+                            LinearLayout bubble = new LinearLayout(this);
+                            bubble.setOrientation(LinearLayout.VERTICAL);
+                            bubble.setPadding(dp(12), dp(10), dp(12), dp(10));
+                            bubble.setBackgroundColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFFEAF2FA);
                             TextView row = text(displayRows.get(i), 14, 0xFF263445);
-                            row.setPadding(dp(12), dp(10), dp(12), dp(10));
-                            row.setBackgroundColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFFEAF2FA);
+                            bubble.addView(row, matchWrap());
+                            String attachment = attachmentPayloads.get(i);
+                            if (attachment != null) {
+                                try {
+                                    String[] parts = attachment.split("\n", 4);
+                                    if (parts.length == 4) {
+                                        byte[] imageBytes = Base64.decode(parts[3], Base64.DEFAULT);
+                                        Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+                                        if (bitmap != null) {
+                                            ImageView imageView = new ImageView(this);
+                                            imageView.setImageBitmap(bitmap);
+                                            imageView.setAdjustViewBounds(true);
+                                            imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                                            imageView.setMaxHeight(dp(320));
+                                            LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(-1, -2);
+                                            imageParams.topMargin = dp(8);
+                                            bubble.addView(imageView, imageParams);
+                                        } else {
+                                            bubble.addView(text("Не удалось декодировать изображение.", 13, 0xFFB42318), matchWrap());
+                                        }
+                                    }
+                                } catch (Exception imageError) {
+                                    bubble.addView(text("Не удалось показать изображение.", 13, 0xFFB42318), matchWrap());
+                                }
+                            }
                             LinearLayout.LayoutParams rowParams = matchWrap();
                             rowParams.bottomMargin = dp(5);
-                            messagesContainer.addView(row, rowParams);
-                            row.setOnLongClickListener(v -> {
+                            messagesContainer.addView(bubble, rowParams);
+                            bubble.setOnLongClickListener(v -> {
                                 showMessageActions(message, contactId, title);
                                 return true;
                             });
@@ -888,7 +936,7 @@ public final class MainActivity extends Activity {
         startActivityForResult(intent, PICK_CHAT_IMAGE);
     }
 
-    private void sendChatImageResult(Intent data) {final Uri uri = data.getData();
+    private void sendChatImageResult(Intent data) {\n        final Uri uri = data.getData();
         final String recipientId = activeContactId;
         final String title = activeConversationTitle;
         if (recipientId == null || currentUser == null) { Toast.makeText(this, "Сначала откройте личный чат.", Toast.LENGTH_SHORT).show(); return; }
