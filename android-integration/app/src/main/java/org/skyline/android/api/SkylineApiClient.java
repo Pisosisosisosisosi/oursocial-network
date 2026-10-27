@@ -72,6 +72,14 @@ public final class SkylineApiClient {
         return request("POST", "/messages", body, true);
     }
 
+    public void addContact(String userId, String nickname) throws Exception {
+        if (userId == null || userId.trim().isEmpty()) throw new IllegalArgumentException("A user ID is required");
+        JSONObject body = new JSONObject();
+        body.put("userId", userId);
+        body.put("nickname", nickname == null || nickname.trim().isEmpty() ? "Пользователь" : nickname.trim());
+        request("PUT", "/contacts", body, true);
+    }
+
     /** Returns the current user's personal chats, including recent-message previews. */
     public JSONArray getContacts() throws Exception {
         JSONObject response = request("GET", "/contacts", null, true);
