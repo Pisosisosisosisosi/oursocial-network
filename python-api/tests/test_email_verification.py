@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 from bson import ObjectId
 from fastapi import HTTPException
-from pydantic import ValidationError
 
 import main
 
