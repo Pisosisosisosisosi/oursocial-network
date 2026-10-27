@@ -260,9 +260,25 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   const chatSettingsMenuRef = useRef<HTMLDivElement>(null);
   const chatSettingsButtonRef = useRef<HTMLButtonElement>(null);
   const [recordingVoice, setRecordingVoice] = useState(false);
+  const [recordedVoice, setRecordedVoice] = useState<File | null>(null);
+  const [recordedVoiceUrl, setRecordedVoiceUrl] = useState<string | null>(null);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
   const voiceRecordingCancelledRef = useRef(false);
+
+  useEffect(() => {
+    if (!recordedVoice) {
+      setRecordedVoiceUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(recordedVoice);
+    setRecordedVoiceUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [recordedVoice]);
+
+  useEffect(() => {
+    setRecordedVoice(null);
+  }, [activeChat?.id]);
 
   useEffect(() => {
     if (!chatSettingsOpen) return;
@@ -1058,24 +1074,24 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
   };
 
   const sendAttachmentFile = async (file: File) => {
-    if (!activeChat || sending) return;
-    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return; }
+    if (!activeChat || sending) return false;
+    if (!canSendEncryptedMessages(e2eeStatus)) { showToast('Отправка приостановлена: сначала восстановите ключ переписки на этом устройстве.', 'error'); return false; }
     const targetChat = activeChat;
     const replyTarget = replyingMessage;
     if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
-      setChatError('Можно отправить JPG, PNG, GIF, WebP, PDF, TXT, CSV или ZIP.');
+      setChatError('Можно отправить JPG, PNG, GIF, WebP, PDF, TXT, CSV, ZIP или аудио.');
       showToast('Неподдерживаемый формат файла.', 'error');
-      return;
+      return false;
     }
     if (file.size > 2 * 1024 * 1024) {
       setChatError('Размер вложения не должен превышать 2 МБ.');
       showToast('Размер вложения не должен превышать 2 МБ.', 'error');
-      return;
+      return false;
     }
     if (!file.size) {
       setChatError('Нельзя отправить пустой файл.');
       showToast('Нельзя отправить пустой файл.', 'error');
-      return;
+      return false;
     }
 
     setSending(true);
@@ -1120,15 +1136,22 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
         setReplyingMessage(null);
       }
       showToast('Файл отправлен.', 'success');
+      return true;
     } catch (error) {
       console.error('Ошибка отправки вложения:', error);
       if (activeChatIdRef.current === String(targetChat.id)) {
         setChatError('Не удалось отправить файл. Проверьте его формат и размер.');
         showToast('Не удалось отправить файл. Проверьте формат и размер.', 'error');
       }
+      return false;
     } finally {
       setSending(false);
     }
+  };
+
+  const sendRecordedVoice = async () => {
+    if (!recordedVoice || sending) return;
+    if (await sendAttachmentFile(recordedVoice)) setRecordedVoice(null);
   };
 
   const loadQuickReplies = async () => {
@@ -1263,7 +1286,8 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
         voiceChunksRef.current = [];
         if (!blob.size) return;
         const extension = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
-        void sendAttachmentFile(new File([blob], `voice-message.${extension}`, { type }));
+        setRecordedVoice(new File([blob], `voice-message.${extension}`, { type }));
+        showToast('Голосовое готово. Прослушайте запись и отправьте, когда будете готовы.', 'info');
       };
       voiceRecorderRef.current = recorder;
       recorder.start();
@@ -1284,6 +1308,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
     const recorder = voiceRecorderRef.current;
     voiceRecordingCancelledRef.current = true;
     voiceChunksRef.current = [];
+    setRecordedVoice(null);
     voiceRecorderRef.current = null;
     setRecordingVoice(false);
     if (recorder && recorder.state !== 'inactive') {
@@ -2025,6 +2050,18 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                   </button>
                 </div>
               )}
+               {recordedVoice && (
+                 <div className="mb-2 flex flex-col gap-3 rounded-2xl border border-accent/20 bg-slate-950/70 p-3 sm:flex-row sm:items-center">
+                   <div className="min-w-0 flex-1">
+                     <p className="mb-2 text-xs font-semibold text-t-primary">Предпросмотр голосового сообщения</p>
+                     {recordedVoiceUrl && <audio controls preload="metadata" src={recordedVoiceUrl} className="h-9 w-full max-w-full" aria-label="Прослушать записанное голосовое сообщение" />}
+                   </div>
+                   <div className="flex shrink-0 items-center justify-end gap-2">
+                     <button type="button" onClick={() => setRecordedVoice(null)} disabled={sending} className="rounded-xl px-3 py-2 text-xs text-rose-300 transition hover:bg-rose-400/10 disabled:opacity-50">Удалить</button>
+                     <button type="button" onClick={() => void sendRecordedVoice()} disabled={sending} className="rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-50">{sending ? 'Отправка…' : 'Отправить'}</button>
+                   </div>
+                 </div>
+               )}
                <form ref={messageFormRef} onSubmit={handleSend} className="glass-panel p-1.5 sm:p-2 rounded-2xl flex items-end gap-1 sm:gap-2 shadow-2xl focus-within:ring-2 focus-within:ring-accent/30 transition-all">
                  <div className="relative">
                    <button type="button" onClick={() => setShowEmojiPicker((v) => !v)} className={`p-2.5 rounded-xl transition-all ${showEmojiPicker ? 'text-accent bg-accent/10' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title="Эмодзи" aria-label="Эмодзи" aria-expanded={showEmojiPicker}>
@@ -2045,7 +2082,7 @@ export default function Chats({ embedded = false }: { embedded?: boolean } = {})
                   </div>
                   <button type="button" onClick={() => setScheduleDialogOpen(true)} disabled={sending || !text.trim()} title="Запланировать отправку" aria-label="Запланировать отправку" className="p-2.5 rounded-xl text-t-secondary hover:text-accent hover:bg-accent/10 transition-all disabled:opacity-50"><CalendarClock size={18} /></button>
                   {recordingVoice && <button type="button" onClick={cancelVoiceRecording} className="p-2.5 rounded-xl text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 transition-all" title="Отменить запись голосового сообщения" aria-label="Отменить запись голосового сообщения"><X size={18} /></button>}
-                  <button type="button" onClick={() => { if (recordingVoice) stopVoiceRecording(); else void startVoiceRecording(); }} disabled={sending} className={`p-2.5 rounded-xl transition-all disabled:opacity-50 ${recordingVoice ? 'animate-pulse bg-rose-500/15 text-rose-300' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title={recordingVoice ? 'Остановить и отправить голосовое' : 'Записать голосовое сообщение'} aria-label={recordingVoice ? 'Отправить голосовое сообщение' : 'Записать голосовое сообщение'}><Mic size={18} /></button>
+                  <button type="button" onClick={() => { if (recordingVoice) stopVoiceRecording(); else void startVoiceRecording(); }} disabled={sending || !!recordedVoice} className={`p-2.5 rounded-xl transition-all disabled:opacity-50 ${recordingVoice ? 'animate-pulse bg-rose-500/15 text-rose-300' : 'text-t-secondary hover:text-slate-200 hover:bg-slate-800/80'}`} title={recordingVoice ? 'Завершить запись и прослушать' : 'Записать голосовое сообщение'} aria-label={recordingVoice ? 'Завершить запись' : 'Записать голосовое сообщение'}><Mic size={18} /></button>
                   <textarea
                     ref={textInputRef}
                     value={text}
