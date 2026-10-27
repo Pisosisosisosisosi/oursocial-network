@@ -37,6 +37,7 @@ public final class MainActivity extends Activity {
     private String activeConversationTitle;
     private EditText activeMessageInput;
     private LinearLayout searchResultsContainer;
+    private ScrollView searchResultsScroll;
     private SkylineRealtimeClient realtime;
     private Emitter.Listener messageChangedListener;
     private boolean e2eeReady;
@@ -197,7 +198,11 @@ public final class MainActivity extends Activity {
         LinearLayout results = new LinearLayout(this);
         results.setOrientation(LinearLayout.VERTICAL);
         searchResultsContainer = results;
-        screen.addView(results, matchWrap());
+        ScrollView resultsScroll = new ScrollView(this);
+        searchResultsScroll = resultsScroll;
+        resultsScroll.setVisibility(View.GONE);
+        resultsScroll.addView(results);
+        screen.addView(resultsScroll, new LinearLayout.LayoutParams(-1, dp(180)));
         searchButton.setOnClickListener(v -> {
             String query = userSearch.getText().toString().trim();
             if (query.replace("@", "").trim().length() < 2) {
@@ -205,6 +210,7 @@ public final class MainActivity extends Activity {
                 return;
             }
             searchButton.setEnabled(false);
+            resultsScroll.setVisibility(View.VISIBLE);
             results.removeAllViews();
             results.addView(text("Поиск пользователей…", 13, 0xFF586778), matchWrap());
             executor.execute(() -> {
@@ -324,6 +330,7 @@ public final class MainActivity extends Activity {
         activeConversationTitle = null;
         activeMessageInput = null;
         searchResultsContainer = null;
+        searchResultsScroll = null;
         setBusy(true);
         executor.execute(() -> {
             try {
