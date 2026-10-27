@@ -24,7 +24,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final SkylineApiClient api = new SkylineApiClient();
-    private final SkylineCrypto crypto = new SkylineCrypto(this);
+    private SkylineCrypto crypto;
     private EditText emailInput;
     private EditText passwordInput;
     private TextView statusView;
@@ -40,6 +40,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        crypto = new SkylineCrypto(this);
         renderLogin();
     }
 
@@ -314,7 +315,7 @@ public final class MainActivity extends Activity {
         if (currentUser == null) return;
         String senderId = currentUser.optString("id", currentUser.optString("userId", ""));
         if (senderId.isEmpty()) {
-            statusView = null;
+            input.setError("Не удалось определить ваш аккаунт.");
             return;
         }
         sendButton.setEnabled(false);
