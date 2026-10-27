@@ -102,6 +102,85 @@ public final class SkylineApiClient {
         return items == null ? new JSONArray() : items;
     }
 
+    public JSONArray getGroups() throws Exception {
+        return getArray("/groups");
+    }
+
+    public JSONObject createGroup(String title, String description, JSONArray memberIds) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("title", title);
+        body.put("description", description == null ? "" : description);
+        body.put("memberIds", memberIds == null ? new JSONArray() : memberIds);
+        return request("POST", "/groups", body, true);
+    }
+
+    public JSONArray getGroupMessages(String groupId) throws Exception {
+        return getArray("/groups/" + java.net.URLEncoder.encode(groupId, "UTF-8") + "/messages?limit=50");
+    }
+
+    public JSONArray getChannels() throws Exception {
+        return getArray("/channels/");
+    }
+
+    public JSONObject createChannel(String title, String description, String visibility) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("title", title);
+        body.put("description", description == null ? "" : description);
+        body.put("visibility", "private".equals(visibility) ? "private" : "public");
+        return request("POST", "/channels/", body, true);
+    }
+
+    public JSONArray getChannelPosts(String channelId) throws Exception {
+        return getArray("/channels/" + java.net.URLEncoder.encode(channelId, "UTF-8") + "/posts?limit=50");
+    }
+
+    public JSONObject createChannelPost(String channelId, String text) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("text", text);
+        return request("POST", "/channels/" + java.net.URLEncoder.encode(channelId, "UTF-8") + "/posts", body, true);
+    }
+
+    public JSONArray getStories() throws Exception {
+        JSONArray stories = request("GET", "/stories", null, true).optJSONArray("stories");
+        return stories == null ? new JSONArray() : stories;
+    }
+
+    public JSONObject createStory(String mediaType, String mediaData, String caption) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("mediaType", mediaType);
+        body.put("mediaData", mediaData);
+        body.put("caption", caption == null ? "" : caption);
+        return request("POST", "/stories", body, true);
+    }
+
+    public void viewStory(String storyId) throws Exception {
+        request("POST", "/stories/" + java.net.URLEncoder.encode(storyId, "UTF-8") + "/view", new JSONObject(), true);
+    }
+
+    public JSONArray getSavedMessages() throws Exception {
+        JSONArray items = request("GET", "/saved-messages?limit=50", null, true).optJSONArray("items");
+        return items == null ? new JSONArray() : items;
+    }
+
+    public JSONArray getScheduledMessages() throws Exception {
+        JSONArray items = request("GET", "/scheduled-messages", null, true).optJSONArray("items");
+        return items == null ? new JSONArray() : items;
+    }
+
+    public JSONObject getSettings() throws Exception {
+        return request("GET", "/settings", null, true);
+    }
+
+    public void saveSettings(JSONObject settings) throws Exception {
+        request("POST", "/settings", settings == null ? new JSONObject() : settings, true);
+    }
+
+    private JSONArray getArray(String path) throws Exception {
+        JSONObject response = request("GET", path, null, true);
+        JSONArray items = response.optJSONArray("items");
+        return items == null ? new JSONArray() : items;
+    }
+
     public JSONObject request(String method, String path, JSONObject body, boolean authenticated) throws Exception {
         HttpURLConnection connection = null;
         try {
