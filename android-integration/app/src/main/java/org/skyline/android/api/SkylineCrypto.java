@@ -149,6 +149,17 @@ public final class SkylineCrypto {
         java.util.Arrays.fill(sharedSecret, (byte) 0);
     }
 
+    public String protectLocalSecret(String value) throws Exception {
+        if (value == null) return "";
+        return Base64.encodeToString(encryptAtRest(value.getBytes(StandardCharsets.UTF_8)), Base64.NO_WRAP);
+    }
+
+    public String unprotectLocalSecret(String value) throws Exception {
+        if (value == null || value.isEmpty()) return "";
+        byte[] packed = Base64.decode(value, Base64.NO_WRAP);
+        return new String(decryptAtRest(packed), StandardCharsets.UTF_8);
+    }
+
     private PrivateKey loadPrivateKey() throws Exception {
         String stored = prefs().getString(PRIVATE_KEY_PREF, null);
         if (stored == null) throw new IllegalStateException("Ключ шифрования не создан на этом устройстве");
