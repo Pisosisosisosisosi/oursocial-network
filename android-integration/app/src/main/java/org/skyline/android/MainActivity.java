@@ -604,11 +604,43 @@ public final class MainActivity extends Activity {
                 preview = "🔒 Зашифрованное сообщение";
             }
             if (preview.isEmpty()) preview = "Открыть переписку";
-            TextView item = text(name + "\n@" + contact.optString("username", "") + "\n" + preview, 15, 0xFFE6EEF7);
-            item.setPadding(dp(14), dp(14), dp(14), dp(14));
-            item.setBackgroundColor(i % 2 == 0 ? 0xFF17212B : 0xFF202B36);
+            LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.HORIZONTAL);
+            item.setGravity(Gravity.CENTER_VERTICAL);
+            item.setPadding(dp(10), dp(9), dp(12), dp(9));
+            item.setBackgroundColor(0xFF0E1621);
+
+            TextView avatar = text(name.trim().isEmpty() ? "S" : name.trim().substring(0, 1).toUpperCase(), 19, 0xFFFFFFFF);
+            avatar.setGravity(Gravity.CENTER);
+            GradientDrawable avatarBackground = new GradientDrawable();
+            avatarBackground.setShape(GradientDrawable.OVAL);
+            avatarBackground.setColor(0xFF2B5278);
+            avatar.setBackground(avatarBackground);
+            item.addView(avatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+            LinearLayout details = new LinearLayout(this);
+            details.setOrientation(LinearLayout.VERTICAL);
+            details.setGravity(Gravity.CENTER_VERTICAL);
+            details.setPadding(dp(12), dp(2), 0, dp(2));
+            TextView nameView = text(name, 16, 0xFFF5F7FA);
+            nameView.setMaxLines(1);
+            nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            details.addView(nameView, matchWrap());
+            TextView previewView = text(preview, 13, 0xFF8A9AA9);
+            previewView.setMaxLines(1);
+            previewView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams previewParams = matchWrap();
+            previewParams.topMargin = dp(3);
+            details.addView(previewView, previewParams);
+            item.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
+
+            View divider = new View(this);
+            divider.setBackgroundColor(0xFF202B36);
+            LinearLayout.LayoutParams itemParams = matchWrap();
+            itemParams.bottomMargin = dp(1);
             item.setOnClickListener(v -> openConversation(id, name));
-            list.addView(item, matchWrap());
+            list.addView(item, itemParams);
+            list.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
         }
         scroll.addView(list);
         LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(-1, 0, 1);
@@ -707,6 +739,8 @@ public final class MainActivity extends Activity {
         LinearLayout composer = new LinearLayout(this);
         composer.setOrientation(LinearLayout.HORIZONTAL);
         composer.setGravity(Gravity.CENTER_VERTICAL);
+        composer.setPadding(dp(4), dp(6), dp(4), dp(4));
+        composer.setBackgroundColor(0xFF0E1621);
         EditText messageInput = createThemedEditText();
         activeMessageInput = messageInput;
         messageInput.setText(draft);
@@ -811,9 +845,16 @@ public final class MainActivity extends Activity {
                             final JSONObject message = messageItems.get(i);
                             LinearLayout bubble = new LinearLayout(this);
                             bubble.setOrientation(LinearLayout.VERTICAL);
-                            bubble.setPadding(dp(12), dp(10), dp(12), dp(10));
-                            bubble.setBackgroundColor(i % 2 == 0 ? 0xFF17212B : 0xFF243747);
-                            TextView row = text(displayRows.get(i), 14, 0xFFE6EEF7);
+                            bubble.setPadding(dp(12), dp(9), dp(12), dp(9));
+                            String currentUserIdForBubble = currentUser == null ? "" : currentUser.optString("userId", currentUser.optString("id", ""));
+                            boolean ownMessage = currentUserIdForBubble.equals(message.optString("senderId", ""));
+                            GradientDrawable bubbleBackground = new GradientDrawable();
+                            bubbleBackground.setColor(ownMessage ? 0xFF2B5278 : 0xFF182533);
+                            bubbleBackground.setCornerRadii(ownMessage
+                                    ? new float[]{dp(12),dp(12),dp(12),dp(12),dp(3),dp(3),dp(12),dp(12)}
+                                    : new float[]{dp(12),dp(12),dp(12),dp(12),dp(12),dp(12),dp(3),dp(3)});
+                            bubble.setBackground(bubbleBackground);
+                            TextView row = text(displayRows.get(i), 14, 0xFFF5F7FA);
                             bubble.addView(row, matchWrap());
                             String attachment = attachmentPayloads.get(i);
                             if (attachment != null) {
