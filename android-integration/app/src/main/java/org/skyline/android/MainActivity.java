@@ -2,10 +2,15 @@ package org.skyline.android;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -16,6 +21,9 @@ import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import android.util.Base64;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import org.skyline.android.api.SkylineApiClient;
 import org.skyline.android.api.SkylineRealtimeClient;
 import org.skyline.android.api.SkylineCrypto;
@@ -25,6 +33,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
+    private static final int PICK_STORY_IMAGE = 901;
+    private String pendingStoryCaption = "";
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final SkylineApiClient api = new SkylineApiClient();
     private SkylineCrypto crypto;
@@ -599,6 +609,11 @@ public final class MainActivity extends Activity {
             create.setText("＋ Создать");
             create.setOnClickListener(v -> showCreateDialog(feature));
             screen.addView(create, matchWrap());
+        } else if ("stories".equals(feature)) {
+            Button createStory = new Button(this);
+            createStory.setText("＋ Добавить историю");
+            createStory.setOnClickListener(v -> startStoryCreation());
+            screen.addView(createStory, matchWrap());
         }
 
         if (errorText != null) {
@@ -644,14 +659,8 @@ public final class MainActivity extends Activity {
                 row.setOnClickListener(v -> {
                     if ("groups".equals(feature)) openGroup(selected);
                     else if ("channels".equals(feature)) openChannel(selected);
-                    else if ("stories".equals(feature)) {
-                        String storyId = selected.optString("id", "");
-                        if (!storyId.isEmpty()) executor.execute(() -> {
-                            try { api.viewStory(storyId); } catch (Exception ignored) {}
-                        });
-                        String mediaType = selected.optString("mediaType", "image");
-                        Toast.makeText(this, "История (" + mediaType + "): " + selected.optString("caption", "без подписи") + "\nПросмотр медиа доступен в веб-версии.", Toast.LENGTH_LONG).show();
-                    } else if ("saved".equals(feature)) {
+                    else if ("stories".equals(feature)) openStory(selected);
+                    else if ("saved".equals(feature)) {
                         JSONObject msg = selected.optJSONObject("message");
                         String value = msg == null ? "" : msg.optString("text", "");
                         Toast.makeText(this, value.startsWith("skyline-e2e:") ? "Сохранённое сообщение зашифровано и пока не поддерживается этим экраном." : value, Toast.LENGTH_LONG).show();
@@ -664,6 +673,123 @@ public final class MainActivity extends Activity {
         }
         setContentView(screen);
         setBusy(false);
+    }
+
+    private void startStoryCreation() {
+        EditText caption = new EditText(this);
+        caption.setHint("Подпись (необязательно)");
+        new AlertDialog.Builder(this)
+                .setTitle("Новая история")
+                .setMessage("Выберите изображение. История будет доступна 24 часа.")
+                .setView(caption)
+                .setNegativeButton("Отмена", null)
+                .setPositiveButton("Выбрать изображение", (dialog, which) -> {
+                    pendingStoryCaption = caption.getText().toString().trim();
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.setType("image/*");
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    startActivityForResult(Intent.createChooser(intent, "Выберите изображение"), PICK_STORY_IMAGE);
+                }).show();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PICK_STORY_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        setBusy(true);
+        executor.execute(() -> {
+            try {
+                String dataUrl = encodeStoryImage(uri);
+                api.createStory("image", dataUrl, pendingStoryCaption);
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    Toast.makeText(this, "История опубликована на 24 часа.", Toast.LENGTH_SHORT).show();
+                    openFeature("stories");
+                });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось загрузить изображение." : error.getMessage();
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    new AlertDialog.Builder(this).setTitle("Ошибка публикации").setMessage(message).setPositiveButton("OK", null).show();
+                });
+            }
+        });
+    }
+
+    private String encodeStoryImage(Uri uri) throws Exception {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        try (InputStream input = getContentResolver().openInputStream(uri)) {
+            if (input == null) throw new IllegalStateException("Не удалось открыть изображение.");
+            BitmapFactory.decodeStream(input, null, bounds);
+        }
+        int sample = 1;
+        while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > 1600) sample *= 2;
+        Bitmap bitmap;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sample;
+        try (InputStream input = getContentResolver().openInputStream(uri)) {
+            if (input == null) throw new IllegalStateException("Не удалось прочитать изображение.");
+            bitmap = BitmapFactory.decodeStream(input, null, options);
+        }
+        if (bitmap == null) throw new IllegalArgumentException("Этот формат изображения не поддерживается.");
+        int max = Math.max(bitmap.getWidth(), bitmap.getHeight());
+        if (max > 1280) {
+            float scale = 1280f / max;
+            Bitmap resized = Bitmap.createScaledBitmap(bitmap, Math.max(1, Math.round(bitmap.getWidth() * scale)),
+                    Math.max(1, Math.round(bitmap.getHeight() * scale)), true);
+            if (resized != bitmap) bitmap.recycle();
+            bitmap = resized;
+        }
+        byte[] compressed = null;
+        for (int quality = 82; quality >= 42; quality -= 10) {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, output);
+            compressed = output.toByteArray();
+            if (compressed.length <= 900_000) break;
+        }
+        bitmap.recycle();
+        if (compressed == null || compressed.length > 1_000_000)
+            throw new IllegalArgumentException("Изображение слишком большое даже после сжатия. Выберите другое.");
+        return "data:image/jpeg;base64," + Base64.encodeToString(compressed, Base64.NO_WRAP);
+    }
+
+    private void openStory(JSONObject story) {
+        String storyId = story.optString("id", "");
+        String mediaType = story.optString("mediaType", "image");
+        executor.execute(() -> {
+            try { if (!storyId.isEmpty()) api.viewStory(storyId); } catch (Exception ignored) {}
+        });
+        LinearLayout screen = createScreen();
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        Button back = new Button(this);
+        back.setText("‹ Истории");
+        back.setOnClickListener(v -> openFeature("stories"));
+        header.addView(back);
+        header.addView(text(story.optString("displayName", story.optString("username", "История")), 20, 0xFF1877D2),
+                new LinearLayout.LayoutParams(0, -2, 1));
+        screen.addView(header, matchWrap());
+        if ("image".equals(mediaType)) {
+            try {
+                String mediaData = story.optString("mediaData", "");
+                int comma = mediaData.indexOf(',');
+                if (comma >= 0) mediaData = mediaData.substring(comma + 1);
+                byte[] bytes = Base64.decode(mediaData, Base64.DEFAULT);
+                ImageView imageView = new ImageView(this);
+                imageView.setAdjustViewBounds(true);
+                imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                imageView.setImageBitmap(BitmapFactory.decodeByteArray(bytes, 0, bytes.length));
+                screen.addView(imageView, new LinearLayout.LayoutParams(-1, 0, 1));
+            } catch (Exception error) {
+                screen.addView(text("Не удалось показать изображение истории.", 14, 0xFFB42318), matchWrap());
+            }
+        } else {
+            screen.addView(text("Видеозаписи историй пока не поддерживаются в Android-клиенте.", 14, 0xFF586778), matchWrap());
+        }
+        screen.addView(text(story.optString("caption", ""), 15, 0xFF263445), matchWrap());
+        setContentView(screen);
     }
 
     private String featureTitle(String feature) {
