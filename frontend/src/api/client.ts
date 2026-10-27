@@ -57,8 +57,8 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  register: (email: string, password: string, username: string, verificationToken: string) =>
-    api.post<AuthResponse>('/auth/register', { email, password, username, verificationToken }),
+  register: (email: string, password: string, username: string, displayName: string, phone: string) =>
+    api.post<AuthResponse>('/auth/register', { email, password, username, displayName, phone }),
   sendEmailCode: (email: string) =>
     api.post<{
       status: string;
