@@ -241,7 +241,8 @@ public final class MainActivity extends Activity {
                 for (int i = 0; i < messages.length(); i++) {
                     JSONObject message = messages.optJSONObject(i);
                     if (message == null) continue;
-                    boolean own = currentUser != null && currentUser.optString("id", "").equals(message.optString("senderId", ""));
+                    String currentUserId = currentUser == null ? "" : currentUser.optString("userId", currentUser.optString("id", ""));
+                    boolean own = !currentUserId.isEmpty() && currentUserId.equals(message.optString("senderId", ""));
                     String sender = own ? "Вы" : title;
                     String body = message.optString("text", "");
                     if (body.startsWith("skyline-e2e:") || body.startsWith("oursocial-e2e:")) {
