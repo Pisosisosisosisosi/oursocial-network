@@ -5,6 +5,9 @@ This directory contains a **standalone native Android prototype** for Skyline. I
 ## Included now
 
 - Native Skyline sign-in screen, personal chat list/history, user search by username/display name, and add-contact flow.
+- Android navigation for groups, channels, stories, saved messages, and account appearance settings.
+- Create groups and public/private channels; view group history and channel posts; publish text posts where the current account has channel-owner permission.
+- Read stories and mark them as viewed; view saved-message entries and persist theme/animation preferences through the API.
 - REST API bridge for login, user search, adding contacts, message history, public-key lookup/registration, and sending encrypted text messages.
 - Socket.IO client authenticated with the Skyline JWT and a `message_changed` listener to refresh the active conversation or chat list.
 - Initial Skyline v4 E2EE implementation: P-256 ECDH, HKDF-SHA256, AES-GCM, and an Android Keystore AES key used to encrypt the locally stored PKCS#8 private key.
@@ -45,6 +48,8 @@ The APK is generated at:
 
 - No registration/email verification or persisted login session yet.
 - No safe cross-device private-key recovery/sync.
-- No group/channel UI, attachments, voice messages, message editing/deletion/reactions, calls, or push notifications.
+- Group/channel browsing and creation are present, but group E2EE sending and complete member/admin management are not implemented. Channel publishing is text-only in this Android prototype.
+- Stories can be browsed and marked viewed, but story upload/media playback is not yet implemented in Android. Saved messages can be browsed, but saving/forwarding/reacting/editing/deleting messages from Android is not yet implemented.
+- No attachment picker, voice-message recording/playback, calls, push notifications, chat folders, bot UI, or full privacy/session management yet.
 - No real-device or live-server integration test has been performed in this environment. CI confirms compilation and APK packaging only; it does not prove that authentication, live API responses, realtime events, or cross-client cryptography work end to end.
 - Before a public release, add automated API/crypto interoperability tests, test on physical devices, configure application signing and release build variants, and review GPL-2.0 obligations if distributing any derivative of Telegram code. Do not imply that Skyline is an official Telegram app.
