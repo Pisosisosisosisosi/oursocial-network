@@ -2,9 +2,7 @@ package org.skyline.android.api;
 
 import org.json.JSONObject;
 
-import java.net.URLEncoder;
 import java.util.Collections;
-import java.util.Map;
 
 import io.socket.client.IO;
 import io.socket.client.Socket;
