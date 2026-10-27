@@ -94,7 +94,7 @@ class SendPhoneCodeRequest(BaseModel):
 
 class VerifyPhoneCodeRequest(BaseModel):
     phone: str = Field(min_length=8, max_length=24)
-    code: str = Field(pattern=r"^\\d{4,8}$")
+    code: str = Field(pattern=r"^\d{4,8}$")
 
     @field_validator("phone")
     @classmethod
