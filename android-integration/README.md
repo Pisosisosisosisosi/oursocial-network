@@ -1,46 +1,50 @@
 # Skyline Android integration prototype
 
-This folder now contains a **minimal standalone Android app prototype** and the first Skyline API bridge. It is not yet the full Telegram Android client: Telegram's screens and MTProto data layer have not been ported/replaced.
+This directory contains a **standalone native Android prototype** for Skyline. It is a separate Android client that talks to the existing Skyline API; it is not a modified Telegram APK, and Telegram's UI or MTProto protocol has not been transplanted.
 
-## Included in this PR
+## Included now
 
-- Gradle Android application module (app).
-- Launcher activity with a basic Skyline sign-in screen.
-- HTTP bridge for POST /auth/login, GET /auth/me, GET /users/search?q=..., GET /contacts, and GET /messages/{user_id}.
-- Bearer JWT authorization and HTTP error details.
-- Android Internet permission and a GitHub Actions build workflow.
-- Socket.IO Java adapter with JWT auth, reconnection, chat join/leave, typing, and generic event listeners/emits.
-- Initial `message_changed` listener in the Android activity to refresh an open conversation or the chat list when the server emits updates.
+- Native Skyline sign-in screen and personal chat list/history.
+- REST API bridge for login, contacts, message history, public-key lookup/registration, and sending encrypted text messages.
+- Socket.IO client authenticated with the Skyline JWT and a `message_changed` listener to refresh the active conversation or chat list.
+- Initial Skyline v4 E2EE implementation: P-256 ECDH, HKDF-SHA256, AES-GCM, and an Android Keystore AES key used to encrypt the locally stored PKCS#8 private key.
+- A key-safety check at login: if the server already has a different public key for the account, the app does not overwrite it and disables encrypted sending. This avoids silently breaking access to existing encrypted conversations.
+- GitHub Actions build with a downloadable debug APK artifact.
+
+## Download a test APK
+
+1. Open [Android prototype build runs](https://github.com/Pisosisosisosisosi/oursocial-network/actions/workflows/android-build.yml).
+2. Open the latest successful run for branch `feat/android-skyline-api-bridge`.
+3. Under **Artifacts**, download `skyline-android-debug-apk`.
+4. Extract the ZIP and install the included APK on an Android device. Android may ask you to allow installation from the browser/file manager used to open it.
+
+The debug artifact is temporary and expires after 14 days. It is for testing, not a signed production release.
 
 ## Build locally
 
-Install Android Studio and Android SDK 35, then open the android-integration/ directory as a Gradle project. Run the assembleDebug task or use:
+Install Android Studio and Android SDK 35, then open `android-integration/` as a Gradle project. You can also run:
 
     gradle -p android-integration assembleDebug
 
-The first build requires network access to resolve Gradle and Android Gradle Plugin dependencies. The APK, if the build succeeds, is generated under android-integration/app/build/outputs/apk/debug/.
+The APK is generated at:
 
-## Current Skyline API assumptions
+    android-integration/app/build/outputs/apk/debug/app-debug.apk
 
-- API origin: https://oursocial-python.onrender.com (the same default origin configured in the web frontend).
-- Login: POST /auth/login with an email and password; response contains token and user.
-- Current-user profile: GET /auth/me with Authorization: Bearer token.
-- User search: GET /users/search?q=query.
-- Realtime: Socket.IO at the configured API origin, authenticated with auth: { token }. A Java adapter is included; it still needs to be wired into chat screens and verified against a running server.
+## API and crypto notes
 
-## Next integration stages
+- Default API origin: `https://oursocial-python.onrender.com`.
+- Login: `POST /auth/login` with email/password; response contains `token` and `user`.
+- Contacts: `GET /contacts`; personal history: `GET /messages/{user_id}?limit=50`.
+- Key registration/lookup: `POST /keys/upload`, `GET /keys/me`, and `GET /keys/{user_id}`.
+- Sending text: `POST /messages` with `receiverId`, `text` (encrypted envelope), and `type: "text"`.
+- v4 envelopes are shaped to match the web implementation's `skyline-e2e:v4:` format. The implementation has been compiled but still needs cross-client test vectors and live testing with real accounts/devices before it can be treated as interoperable.
+- A single server public key is associated with each account. Android currently generates a device-local key and does not yet import/restore the web client's private key. Therefore, an account that already has a different registered key will sign in but cannot send E2EE messages from Android until a safe key migration/recovery workflow exists.
+- Old v2/v3 encrypted message formats are not decrypted by this prototype.
 
-1. Replace the prototype login flow with Skyline registration, email verification, session restore and secure token storage.
-2. Verify the wired `message_changed` listener against a running server, then map remaining Skyline realtime event names and payloads.
-3. Replace Telegram's MTProto dialog/message/contact/group/channel data sources with Skyline REST and Socket.IO. Telegram's MTProto protocol is not compatible with Skyline's API.
-4. Expand the initial chat list/history screens into complete messaging UI, then media uploads, voice messages, replies, edits/deletes, reactions, read receipts, groups/channels, notifications and calls according to server support.
-5. Verify compatible cryptographic formats before enabling end-to-end encryption; do not claim E2EE parity until interoperability tests pass.
-6. Create Skyline-specific Firebase configuration, application signing and release settings before publishing.
+## Known limitations
 
-## Security and limitations
-
-- The prototype keeps the token in memory only; it does not persist it. Production session storage must use Android Keystore-backed encrypted storage.
-- API calls are blocking and are run on a background executor, not the UI thread.
-- Realtime event handling is wired but has not been tested against a live server in this environment.
-- This is not yet a modified Telegram APK, and it has not been device-tested in this environment.
-- The upstream Telegram Android repository is GPL-2.0. If we distribute a derivative build, preserve required notices and comply with source publication obligations. Do not use Telegram branding in a way that implies this is an official Telegram app.
+- No registration/email verification or persisted login session yet.
+- No safe cross-device private-key recovery/sync.
+- No group/channel UI, attachments, voice messages, message editing/deletion/reactions, calls, or push notifications.
+- No real-device or live-server integration test has been performed in this environment. CI confirms compilation and APK packaging only; it does not prove that authentication, live API responses, realtime events, or cross-client cryptography work end to end.
+- Before a public release, add automated API/crypto interoperability tests, test on physical devices, configure application signing and release build variants, and review GPL-2.0 obligations if distributing any derivative of Telegram code. Do not imply that Skyline is an official Telegram app.
