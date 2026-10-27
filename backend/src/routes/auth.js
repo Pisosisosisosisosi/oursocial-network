@@ -41,10 +41,10 @@ router.post('/register', async (req, res, next) => {
 
     const cleanUsername = String(username).trim().toLowerCase();
     const cleanEmail = String(email).trim().toLowerCase();
-    const cleanPhone = String(phone).trim().replace(/[\\s().-]/g, '');
+    const cleanPhone = String(phone).trim().replace(/[\s().-]/g, '');
     const cleanDisplayName = String(displayName || name).trim();
 
-    if (!/^\\+?[0-9]{7,15}$/.test(cleanPhone)) {
+    if (!/^\+?[0-9]{7,15}$/.test(cleanPhone)) {
       return res.status(400).json({ error: 'Enter a valid phone number' });
     }
     if (!cleanDisplayName || cleanDisplayName.length > 64) {
