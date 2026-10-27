@@ -936,7 +936,8 @@ public final class MainActivity extends Activity {
         startActivityForResult(intent, PICK_CHAT_IMAGE);
     }
 
-    private void sendChatImageResult(Intent data) {\n        final Uri uri = data.getData();
+    private void sendChatImageResult(Intent data) {
+        final Uri uri = data.getData();
         final String recipientId = activeContactId;
         final String title = activeConversationTitle;
         if (recipientId == null || currentUser == null) { Toast.makeText(this, "Сначала откройте личный чат.", Toast.LENGTH_SHORT).show(); return; }
