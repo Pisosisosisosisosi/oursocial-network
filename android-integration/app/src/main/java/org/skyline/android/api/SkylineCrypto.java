@@ -85,6 +85,33 @@ public final class SkylineCrypto {
         return PREFIX + envelope;
     }
 
+    /** Encrypts one payload for every member of a group; every recipient must be included. */
+    public String encryptMessageForRecipients(String plaintext, JSONObject publicKeysByUserId) throws Exception {
+        if (plaintext == null || plaintext.trim().isEmpty()) throw new IllegalArgumentException("Сообщение пустое");
+        if (publicKeysByUserId == null || publicKeysByUserId.length() == 0)
+            throw new IllegalArgumentException("В группе нет доступных ключей шифрования");
+        byte[] rawContentKey = new byte[32];
+        byte[] payloadIv = randomBytes(12);
+        new SecureRandom().nextBytes(rawContentKey);
+        SecretKey contentKey = new SecretKeySpec(rawContentKey, "AES");
+        byte[] ciphertext = aesEncrypt(contentKey, payloadIv, plaintext.getBytes(StandardCharsets.UTF_8));
+        JSONObject recipients = new JSONObject();
+        Iterator<String> ids = publicKeysByUserId.keys();
+        while (ids.hasNext()) {
+            String userId = ids.next();
+            String publicJwk = publicKeysByUserId.optString(userId, "");
+            if (userId.trim().isEmpty() || publicJwk.isEmpty())
+                throw new IllegalStateException("У каждого участника группы должен быть зарегистрирован ключ шифрования");
+            addRecipient(recipients, userId, publicJwk, rawContentKey);
+        }
+        JSONObject envelope = new JSONObject();
+        envelope.put("iv", b64(payloadIv));
+        envelope.put("ciphertext", b64(ciphertext));
+        envelope.put("recipients", recipients);
+        java.util.Arrays.fill(rawContentKey, (byte) 0);
+        return PREFIX + envelope;
+    }
+
     public String decryptMessage(String encoded, String userId) throws Exception {
         if (encoded == null || !encoded.startsWith(PREFIX)) return encoded == null ? "" : encoded;
         JSONObject envelope = new JSONObject(encoded.substring(PREFIX.length()));
