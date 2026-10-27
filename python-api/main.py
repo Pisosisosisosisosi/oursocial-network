@@ -130,7 +130,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
-    verificationToken: str = Field(min_length=32, max_length=256)
+    displayName: str = Field(min_length=1, max_length=64)
+    phone: str = Field(min_length=7, max_length=24)
 
 
 class SendEmailCodeRequest(BaseModel):
@@ -479,32 +480,37 @@ def readiness():
 @app.post("/auth/register")
 def register(payload: RegisterRequest):
     users = users_collection()
-    email = str(payload.email).lower()
-    username = payload.username.lower()
+    email = str(payload.email).strip().lower()
+    username = payload.username.strip().lower()
+    display_name = payload.displayName.strip()
+    phone = re.sub(r"[\s().-]", "", payload.phone.strip())
 
-    if users.find_one({"username": {"$regex": f"^{re.escape(username)}$", "$options": "i"}}):
-        raise HTTPException(status_code=409, detail="Username already taken")
+    if not display_name:
+        raise HTTPException(status_code=422, detail="Введите ник.")
+    if not re.fullmatch(r"\+?[0-9]{7,15}", phone):
+        raise HTTPException(status_code=422, detail="Введите корректный номер телефона.")
 
-    registration_token_hash = hashlib.sha256(payload.verificationToken.encode()).hexdigest()
-    verified_email_token = verified_email_tokens_collection().find_one_and_delete({
-        "email": email,
-        "tokenHash": registration_token_hash,
-        "expiresAt": {"$gt": datetime.now(timezone.utc)},
+    existing = users.find_one({
+        "$or": [
+            {"username": {"$regex": f"^{re.escape(username)}$", "$options": "i"}},
+            {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}},
+            {"phone": phone},
+        ]
     })
-    if not verified_email_token:
-        raise HTTPException(status_code=400, detail="Подтвердите email перед регистрацией.")
-    if users.find_one({"email": email}):
-        raise HTTPException(
-            status_code=400,
-            detail="Не удалось создать аккаунт. Проверьте данные и попробуйте снова.",
-        )
+    if existing:
+        if str(existing.get("username", "")).lower() == username:
+            raise HTTPException(status_code=409, detail="Юзернейм уже занят.")
+        if str(existing.get("email", "")).lower() == email:
+            raise HTTPException(status_code=409, detail="Эта почта уже используется.")
+        raise HTTPException(status_code=409, detail="Этот номер телефона уже используется.")
 
     created_at = datetime.now(timezone.utc)
     doc = {
         "email": email,
+        "phone": phone,
         "username": username,
-        "displayName": username,
-        "isEmailVerified": True,
+        "displayName": display_name,
+        "isEmailVerified": False,
         "passwordHash": hash_password(payload.password),
         "avatarUrl": "",
         "bio": "",
@@ -518,21 +524,21 @@ def register(payload: RegisterRequest):
         "coinsBalance": 0,
         "contacts": [],
         "createdAt": created_at,
-        "lastSeen": datetime.now(timezone.utc),
+        "lastSeen": created_at,
     }
     result = users.insert_one(doc)
     user_id = str(result.inserted_id)
-
-    token = create_token(user_id, email, payload.username)
+    token = create_token(user_id, email, username)
 
     return {
         "token": token,
         "user": {
             "id": user_id,
             "email": email,
-            "username": payload.username,
-            "displayName": payload.username,
-            "isEmailVerified": True,
+            "phone": phone,
+            "username": username,
+            "displayName": display_name,
+            "isEmailVerified": False,
             "isPremium": False,
             "premiumUntil": None,
             "coinsBalance": 0,
