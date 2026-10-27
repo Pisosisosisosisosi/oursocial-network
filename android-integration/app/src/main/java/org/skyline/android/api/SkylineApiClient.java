@@ -29,6 +29,45 @@ public final class SkylineApiClient {
     public String getAccessToken() { return accessToken; }
     public void clearSession() { accessToken = null; }
 
+    public JSONObject sendEmailCode(String email) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("email", email);
+        return request("POST", "/auth/send-email-code", body, false);
+    }
+
+    public JSONObject verifyEmailCode(String email, String code) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("email", email);
+        body.put("code", code);
+        return request("POST", "/auth/verify-email-code", body, false);
+    }
+
+    public JSONObject sendPhoneCode(String phone) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("phone", phone);
+        return request("POST", "/auth/phone/send-code", body, false);
+    }
+
+    public JSONObject verifyPhoneCode(String phone, String code) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("phone", phone);
+        body.put("code", code);
+        return request("POST", "/auth/phone/verify-code", body, false);
+    }
+
+    public JSONObject register(String email, String password, String username,
+                              String emailVerificationToken, String phone,
+                              String phoneVerificationToken) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("email", email);
+        body.put("password", password);
+        body.put("username", username);
+        body.put("verificationToken", emailVerificationToken);
+        body.put("phone", phone);
+        body.put("phoneVerificationToken", phoneVerificationToken);
+        return request("POST", "/auth/register", body, false);
+    }
+
     public JSONObject login(String email, String password) throws Exception {
         JSONObject body = new JSONObject();
         body.put("email", email);
