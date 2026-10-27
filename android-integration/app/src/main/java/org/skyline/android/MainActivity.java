@@ -15,6 +15,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.skyline.android.api.SkylineApiClient;
 import org.skyline.android.api.SkylineRealtimeClient;
+import org.skyline.android.api.SkylineCrypto;
 import io.socket.emitter.Emitter;
 
 import java.util.concurrent.ExecutorService;
@@ -23,6 +24,7 @@ import java.util.concurrent.Executors;
 public final class MainActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final SkylineApiClient api = new SkylineApiClient();
+    private final SkylineCrypto crypto = new SkylineCrypto(this);
     private EditText emailInput;
     private EditText passwordInput;
     private TextView statusView;
@@ -119,6 +121,8 @@ public final class MainActivity extends Activity {
                 JSONObject response = api.login(email, password);
                 JSONObject user = response.optJSONObject("user");
                 if (user == null) throw new IllegalStateException("В ответе Skyline API отсутствуют данные пользователя");
+                String publicKey = crypto.ensurePublicKey();
+                api.uploadPublicKey(publicKey);
                 JSONArray contacts = api.getContacts();
                 runOnUiThread(() -> {
                     currentUser = user;
@@ -231,7 +235,7 @@ public final class MainActivity extends Activity {
         header.addView(heading, headingParams);
         screen.addView(header, matchWrap());
 
-        TextView notice = text("История загружается с сервера. Для отправки сообщений требуется подключить совместимый E2EE-модуль Skyline.", 12, 0xFF586778);
+        TextView notice = text("Сообщения шифруются на устройстве перед отправкой.", 12, 0xFF586778);
         LinearLayout.LayoutParams noticeParams = matchWrap();
         noticeParams.topMargin = dp(8);
         noticeParams.bottomMargin = dp(8);
@@ -241,6 +245,23 @@ public final class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(messagesView);
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        LinearLayout composer = new LinearLayout(this);
+        composer.setOrientation(LinearLayout.HORIZONTAL);
+        composer.setGravity(Gravity.CENTER_VERTICAL);
+        EditText messageInput = new EditText(this);
+        messageInput.setHint("Сообщение…");
+        messageInput.setMinLines(1);
+        messageInput.setMaxLines(4);
+        composer.addView(messageInput, new LinearLayout.LayoutParams(0, -2, 1));
+        Button send = new Button(this);
+        send.setText("Отправить");
+        send.setOnClickListener(v -> sendMessage(contactId, title, messageInput, send));
+        composer.addView(send);
+        LinearLayout.LayoutParams composerParams = matchWrap();
+        composerParams.topMargin = dp(6);
+        screen.addView(composer, composerParams);
+
         setContentView(screen);
         setBusy(true);
         executor.execute(() -> {
@@ -254,8 +275,14 @@ public final class MainActivity extends Activity {
                     boolean own = !currentUserId.isEmpty() && currentUserId.equals(message.optString("senderId", ""));
                     String sender = own ? "Вы" : title;
                     String body = message.optString("text", "");
-                    if (body.startsWith("skyline-e2e:") || body.startsWith("oursocial-e2e:")) {
-                        body = "🔒 Зашифрованное сообщение (расшифровка на Android ещё не подключена)";
+                    if (body.startsWith("skyline-e2e:v4:")) {
+                        try {
+                            body = crypto.decryptMessage(body, currentUserId);
+                        } catch (Exception decryptError) {
+                            body = "🔒 Не удалось расшифровать сообщение на этом устройстве";
+                        }
+                    } else if (body.startsWith("skyline-e2e:") || body.startsWith("oursocial-e2e:")) {
+                        body = "🔒 Сообщение использует старый формат шифрования, пока не поддерживаемый Android";
                     } else if (!"text".equals(message.optString("type", "text"))) {
                         body = "📎 Вложение";
                     }
@@ -276,6 +303,39 @@ public final class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     messagesView.setText("Ошибка загрузки сообщений: " + message);
                     setBusy(false);
+                });
+            }
+        });
+    }
+
+    private void sendMessage(String recipientId, String title, EditText input, Button sendButton) {
+        String plainText = input.getText().toString().trim();
+        if (plainText.isEmpty()) return;
+        if (currentUser == null) return;
+        String senderId = currentUser.optString("id", currentUser.optString("userId", ""));
+        if (senderId.isEmpty()) {
+            statusView = null;
+            return;
+        }
+        sendButton.setEnabled(false);
+        executor.execute(() -> {
+            try {
+                String ownPublicKey = crypto.ensurePublicKey();
+                JSONObject recipientKey = api.getPublicKey(recipientId);
+                String recipientPublicKey = recipientKey.optString("publicKey", "");
+                if (recipientPublicKey.isEmpty()) throw new IllegalStateException("У собеседника ещё нет ключа шифрования. Попросите его войти в Skyline на устройстве.");
+                String encrypted = crypto.encryptMessage(plainText, senderId, ownPublicKey, recipientId, recipientPublicKey);
+                api.sendTextMessage(recipientId, encrypted);
+                runOnUiThread(() -> {
+                    input.setText("");
+                    sendButton.setEnabled(true);
+                    openConversation(recipientId, title);
+                });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Не удалось отправить сообщение." : error.getMessage();
+                runOnUiThread(() -> {
+                    sendButton.setEnabled(true);
+                    input.setError(message);
                 });
             }
         });
