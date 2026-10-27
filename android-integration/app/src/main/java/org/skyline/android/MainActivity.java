@@ -7,6 +7,8 @@ import android.net.Uri;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -18,6 +20,8 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.text.Editable;
+import android.text.TextWatcher;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -55,6 +59,11 @@ public final class MainActivity extends Activity {
     private ScrollView searchResultsScroll;
     private SkylineRealtimeClient realtime;
     private Emitter.Listener messageChangedListener;
+    private Emitter.Listener typingListener;
+    private TextView typingStatusView;
+    private final Handler typingHandler = new Handler(Looper.getMainLooper());
+    private Runnable typingStopRunnable;
+    private boolean isTypingToContact;
     private boolean e2eeReady;
 
     @Override
@@ -458,6 +467,12 @@ public final class MainActivity extends Activity {
         noticeParams.bottomMargin = dp(8);
         screen.addView(notice, noticeParams);
 
+        typingStatusView = text("", 12, 0xFF586778);
+        typingStatusView.setVisibility(View.GONE);
+        LinearLayout.LayoutParams typingParams = matchWrap();
+        typingParams.bottomMargin = dp(4);
+        screen.addView(typingStatusView, typingParams);
+
         LinearLayout messagesContainer = new LinearLayout(this);
         messagesContainer.setOrientation(LinearLayout.VERTICAL);
         messagesContainer.addView(text("Загрузка сообщений…", 14, 0xFF263445), matchWrap());
@@ -474,6 +489,31 @@ public final class MainActivity extends Activity {
         messageInput.setHint("Сообщение…");
         messageInput.setMinLines(1);
         messageInput.setMaxLines(4);
+        messageInput.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
+            @Override public void afterTextChanged(Editable editable) {
+                if (realtime == null) return;
+                boolean hasText = editable != null && editable.toString().trim().length() > 0;
+                if (hasText && !isTypingToContact) {
+                    realtime.setTyping(contactId, true);
+                    isTypingToContact = true;
+                }
+                if (typingStopRunnable != null) typingHandler.removeCallbacks(typingStopRunnable);
+                if (hasText) {
+                    typingStopRunnable = () -> {
+                        if (contactId.equals(activeContactId) && isTypingToContact && realtime != null) {
+                            realtime.setTyping(contactId, false);
+                            isTypingToContact = false;
+                        }
+                    };
+                    typingHandler.postDelayed(typingStopRunnable, 1800);
+                } else if (isTypingToContact) {
+                    realtime.setTyping(contactId, false);
+                    isTypingToContact = false;
+                }
+            }
+        });
         composer.addView(messageInput, new LinearLayout.LayoutParams(0, -2, 1));
         Button send = new Button(this);
         send.setText("Отправить");
@@ -1161,6 +1201,19 @@ public final class MainActivity extends Activity {
                 });
             };
             realtime.on("message_changed", messageChangedListener);
+            typingListener = args -> {
+                if (args == null || args.length == 0 || !(args[0] instanceof JSONObject)) return;
+                JSONObject event = (JSONObject) args[0];
+                runOnUiThread(() -> {
+                    if (typingStatusView == null || activeContactId == null) return;
+                    String typingUserId = event.optString("userId", "");
+                    if (!activeContactId.equals(typingUserId)) return;
+                    boolean typing = event.optBoolean("isTyping", false);
+                    typingStatusView.setText(typing ? event.optString("username", "Собеседник") + " печатает…" : "");
+                    typingStatusView.setVisibility(typing ? View.VISIBLE : View.GONE);
+                });
+            };
+            realtime.on("user_typing", typingListener);
             realtime.connect();
         } catch (Exception error) {
             // REST chat/history remain available if the realtime endpoint is unavailable.
@@ -1172,10 +1225,16 @@ public final class MainActivity extends Activity {
     private void disconnectRealtime() {
         if (realtime != null) {
             if (messageChangedListener != null) realtime.off("message_changed", messageChangedListener);
+            if (typingListener != null) realtime.off("user_typing", typingListener);
             realtime.disconnect();
             realtime = null;
         }
         messageChangedListener = null;
+        typingListener = null;
+        if (typingStopRunnable != null) typingHandler.removeCallbacks(typingStopRunnable);
+        typingStopRunnable = null;
+        isTypingToContact = false;
+        typingStatusView = null;
     }
 
     private LinearLayout createScreen() {
