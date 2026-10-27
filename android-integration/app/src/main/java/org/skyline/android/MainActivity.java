@@ -438,49 +438,69 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setOrientation(LinearLayout.HORIZONTAL);
-        TextView title = text("Skyline", 25, 0xFF5EB5F7);
+        header.setPadding(dp(2), dp(2), dp(2), dp(8));
+        Button menuButton = createThemedButton();
+        menuButton.setText("☰");
+        menuButton.setTextSize(21);
+        menuButton.setContentDescription("Открыть меню Skyline");
+        header.addView(menuButton, new LinearLayout.LayoutParams(dp(48), dp(46)));
+        TextView title = text("Skyline", 23, 0xFFE6EEF7);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setPadding(dp(10), 0, 0, 0);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         Button refresh = createThemedButton();
-        refresh.setText("Обновить");
+        refresh.setText("⟳");
+        refresh.setTextSize(23);
+        refresh.setContentDescription("Обновить чаты");
         refresh.setOnClickListener(v -> refreshContacts());
-        header.addView(refresh);
+        header.addView(refresh, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        menuButton.setOnClickListener(v -> {
+            android.widget.PopupMenu menu = new android.widget.PopupMenu(this, menuButton);
+            menu.getMenu().add("Мой профиль").setOnMenuItemClickListener(item -> {
+                Toast.makeText(this, "Вы вошли как " + currentUser.optString("username", currentUser.optString("email", "")), Toast.LENGTH_LONG).show();
+                return true;
+            });
+            menu.getMenu().add("Контакты и поиск").setOnMenuItemClickListener(item -> { userSearch.requestFocus();
+                ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(userSearch, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT); return true; });
+            menu.getMenu().add("Группы").setOnMenuItemClickListener(item -> { openFeature("groups"); return true; });
+            menu.getMenu().add("Каналы").setOnMenuItemClickListener(item -> { openFeature("channels"); return true; });
+            menu.getMenu().add("Истории").setOnMenuItemClickListener(item -> { openFeature("stories"); return true; });
+            menu.getMenu().add("Сохранённое").setOnMenuItemClickListener(item -> { openFeature("saved"); return true; });
+            menu.getMenu().add("Настройки").setOnMenuItemClickListener(item -> { openFeature("settings"); return true; });
+            menu.getMenu().add("Выйти").setOnMenuItemClickListener(item -> {
+                disconnectRealtime();
+                getSharedPreferences("skyline_session", MODE_PRIVATE).edit().remove("encrypted_token").apply();
+                api.clearSession(); currentUser = null; renderLogin(); return true;
+            });
+            menu.show();
+        });
         screen.addView(header, matchWrap());
-
-        TextView account = text("Вы вошли как " + currentUser.optString("username", currentUser.optString("email", "")), 13, 0xFF8A9AA9);
-        LinearLayout.LayoutParams accountParams = matchWrap();
-        accountParams.topMargin = dp(4);
-        accountParams.bottomMargin = dp(12);
-        screen.addView(account, accountParams);
-
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER);
-        String[][] navItems = new String[][] {
-                {"Группы", "groups"}, {"Каналы", "channels"}, {"Истории", "stories"},
-                {"Сохранённое", "saved"}, {"Настройки", "settings"}
-        };
-        for (String[] navItem : navItems) {
-            Button navButton = createThemedButton();
-            navButton.setText(navItem[0]);
-            navButton.setTextSize(10);
-            nav.addView(navButton, new LinearLayout.LayoutParams(0, dp(46), 1));
-            navButton.setOnClickListener(v -> openFeature(navItem[1]));
-        }
-        screen.addView(nav, matchWrap());
 
         LinearLayout searchRow = new LinearLayout(this);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
         searchRow.setGravity(Gravity.CENTER_VERTICAL);
+        searchRow.setPadding(dp(12), 0, dp(6), 0);
+        GradientDrawable searchBackground = new GradientDrawable();
+        searchBackground.setColor(0xFF17212B);
+        searchBackground.setCornerRadius(dp(24));
+        searchRow.setBackground(searchBackground);
+        TextView searchIcon = text("⌕", 25, 0xFF8A9AA9);
+        searchRow.addView(searchIcon, new LinearLayout.LayoutParams(dp(28), dp(48)));
         EditText userSearch = createThemedEditText();
         userSearch.setSingleLine(true);
         userSearch.setInputType(1);
-        userSearch.setHint("Найти пользователя по имени или @username");
-        searchRow.addView(userSearch, new LinearLayout.LayoutParams(0, dp(52), 1));
+        userSearch.setHint("Поиск людей по имени или @username");
+        userSearch.setTextSize(15);
+        userSearch.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        userSearch.setPadding(dp(6), 0, dp(6), 0);
+        searchRow.addView(userSearch, new LinearLayout.LayoutParams(0, dp(48), 1));
         Button searchButton = createThemedButton();
         searchButton.setText("Найти");
-        searchRow.addView(searchButton);
-        screen.addView(searchRow, matchWrap());
-
+        searchButton.setTextSize(12);
+        searchRow.addView(searchButton, new LinearLayout.LayoutParams(-2, dp(40)));
+        LinearLayout.LayoutParams searchRowParams = matchWrap();
+        searchRowParams.bottomMargin = dp(10);
+        screen.addView(searchRow, searchRowParams);
         LinearLayout results = new LinearLayout(this);
         results.setOrientation(LinearLayout.VERTICAL);
         searchResultsContainer = results;
@@ -584,14 +604,15 @@ public final class MainActivity extends Activity {
             LinearLayout item = new LinearLayout(this);
             item.setOrientation(LinearLayout.HORIZONTAL);
             item.setGravity(Gravity.CENTER_VERTICAL);
-            item.setPadding(dp(10), dp(9), dp(12), dp(9));
-            item.setBackgroundColor(0xFF0E1621);
+            item.setPadding(dp(12), dp(8), dp(12), dp(8));
+            item.setBackgroundColor(0xFF17212B);
 
             TextView avatar = text(name.trim().isEmpty() ? "S" : name.trim().substring(0, 1).toUpperCase(), 19, 0xFFFFFFFF);
             avatar.setGravity(Gravity.CENTER);
             GradientDrawable avatarBackground = new GradientDrawable();
             avatarBackground.setShape(GradientDrawable.OVAL);
-            avatarBackground.setColor(0xFF2B5278);
+            int[] avatarColors = new int[] {0xFF527DA3, 0xFF6B8E5A, 0xFF8A6BA8, 0xFFB77955, 0xFF397E83, 0xFFB05C72};
+            avatarBackground.setColor(avatarColors[Math.abs(name.hashCode()) % avatarColors.length]);
             avatar.setBackground(avatarBackground);
             item.addView(avatar, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
@@ -616,6 +637,8 @@ public final class MainActivity extends Activity {
             LinearLayout.LayoutParams itemParams = matchWrap();
             itemParams.bottomMargin = dp(1);
             item.setOnClickListener(v -> openConversation(id, name));
+            item.setClickable(true);
+            item.setFocusable(true);
             list.addView(item, itemParams);
             list.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
         }
