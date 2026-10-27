@@ -46,7 +46,7 @@ The APK is generated at:
 
 ## Known limitations
 
-- No registration/email verification or persisted login session yet.
+- Registration/email verification is not yet available in the Android UI. Login sessions are persisted locally with the token encrypted using an Android Keystore AES key; session restoration is implemented, but needs live-device validation.
 - No safe cross-device private-key recovery/sync.
 - Group/channel browsing and creation are present. Group text sending now builds a v4 E2EE envelope for every current member; it fails closed if any member lacks a public key. Complete member/admin management is not implemented. Channel publishing is text-only in this Android prototype.
 - Stories can be browsed and marked viewed, but story upload/media playback is not yet implemented in Android. Saved messages can be browsed, but saving/forwarding/reacting/editing/deleting messages from Android is not yet implemented.
