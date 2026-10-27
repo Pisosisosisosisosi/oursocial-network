@@ -50,6 +50,10 @@ public final class SkylineApiClient {
         return items == null ? new JSONArray() : items;
     }
 
+    public JSONObject getMyPublicKey() throws Exception {
+        return request("GET", "/keys/me", null, true);
+    }
+
     public JSONObject getPublicKey(String userId) throws Exception {
         return request("GET", "/keys/" + java.net.URLEncoder.encode(userId, "UTF-8"), null, true);
     }
