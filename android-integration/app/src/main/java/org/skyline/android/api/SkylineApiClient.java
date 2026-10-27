@@ -114,6 +114,14 @@ public final class SkylineApiClient {
         return request("POST", "/groups", body, true);
     }
 
+    public JSONObject sendGroupMessage(String groupId, String encryptedText) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("text", encryptedText);
+        body.put("type", "text");
+        body.put("mentionUserIds", new JSONArray());
+        return request("POST", "/groups/" + java.net.URLEncoder.encode(groupId, "UTF-8") + "/messages", body, true);
+    }
+
     public JSONArray getGroupMessages(String groupId) throws Exception {
         return getArray("/groups/" + java.net.URLEncoder.encode(groupId, "UTF-8") + "/messages?limit=50");
     }
