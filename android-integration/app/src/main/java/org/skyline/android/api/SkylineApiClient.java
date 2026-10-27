@@ -56,15 +56,13 @@ public final class SkylineApiClient {
     }
 
     public JSONObject register(String email, String password, String username,
-                              String emailVerificationToken, String phone,
-                              String phoneVerificationToken) throws Exception {
+                              String displayName, String phone) throws Exception {
         JSONObject body = new JSONObject();
         body.put("email", email);
         body.put("password", password);
         body.put("username", username);
-        body.put("verificationToken", emailVerificationToken);
+        body.put("displayName", displayName);
         body.put("phone", phone);
-        body.put("phoneVerificationToken", phoneVerificationToken);
         return request("POST", "/auth/register", body, false);
     }
 
