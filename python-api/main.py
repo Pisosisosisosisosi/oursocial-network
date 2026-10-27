@@ -902,6 +902,7 @@ def me(current=Depends(get_current_user)):
     return {
         "id": str(user["_id"]),
         "email": user["email"],
+        "phone": user.get("phone", ""),
         "isEmailVerified": user.get("isEmailVerified", False),
         "username": user["username"],
         "displayName": user.get("displayName", user["username"]),
