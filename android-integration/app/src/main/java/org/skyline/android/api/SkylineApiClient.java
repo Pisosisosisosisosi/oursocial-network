@@ -76,7 +76,9 @@ public final class SkylineApiClient {
         if (userId == null || userId.trim().isEmpty()) throw new IllegalArgumentException("A user ID is required");
         JSONObject body = new JSONObject();
         body.put("userId", userId);
-        body.put("nickname", nickname == null || nickname.trim().isEmpty() ? "Пользователь" : nickname.trim());
+        String safeNickname = nickname == null || nickname.trim().isEmpty() ? "Пользователь" : nickname.trim();
+        if (safeNickname.length() > 40) safeNickname = safeNickname.substring(0, 40);
+        body.put("nickname", safeNickname);
         request("PUT", "/contacts", body, true);
     }
 
