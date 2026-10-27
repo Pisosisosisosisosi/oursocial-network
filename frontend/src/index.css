@@ -382,6 +382,9 @@ html[data-reduce-motion='true'] *, html[data-reduce-motion='true'] *::before, ht
   --accent-to: #3390ec;
   --border-subtle: rgba(255,255,255,.075);
   --glow: rgba(94,181,247,.18);
+  --accent-rgb: 94,181,247;
+  --chat-own-message-color: #2b5278;
+  --chat-other-message-color: #182533;
   background: #0e1621;
   color: #f5f7fa;
 }
@@ -426,4 +429,31 @@ html[data-reduce-motion='true'] *, html[data-reduce-motion='true'] *::before, ht
 @media (max-width: 767px) {
   .telegram-workspace .telegram-workspace__sidebar { width: 100%; }
   .telegram-workspace .telegram-workspace__chat-pane { background-size: 22px 22px; }
+}
+
+.telegram-workspace .chat-message-own {
+  background: #2b5278;
+  border-color: rgba(110,190,255,.10);
+  box-shadow: none !important;
+}
+.telegram-workspace .chat-message-other {
+  background: #182533;
+  border-color: rgba(255,255,255,.035);
+  box-shadow: none !important;
+}
+.telegram-workspace .chat-card.chat-active {
+  background: #2b5278;
+  box-shadow: none;
+}
+.telegram-workspace .glass-panel {
+  background: #17212b;
+  border-color: rgba(255,255,255,.06);
+  backdrop-filter: none;
+}
+.telegram-workspace .chat-wallpaper-surface {
+  background-color: #0e1621;
+  background-image:
+    linear-gradient(rgba(14,22,33,.88), rgba(14,22,33,.88)),
+    radial-gradient(circle at 12px 12px, rgba(94,181,247,.035) 1px, transparent 1.2px);
+  background-size: cover, 24px 24px;
 }
