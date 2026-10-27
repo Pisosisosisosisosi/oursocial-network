@@ -10,6 +10,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -35,6 +36,7 @@ public final class MainActivity extends Activity {
     private String activeContactId;
     private String activeConversationTitle;
     private EditText activeMessageInput;
+    private LinearLayout searchResultsContainer;
     private SkylineRealtimeClient realtime;
     private Emitter.Listener messageChangedListener;
     private boolean e2eeReady;
@@ -178,6 +180,93 @@ public final class MainActivity extends Activity {
         accountParams.topMargin = dp(4);
         accountParams.bottomMargin = dp(12);
         screen.addView(account, accountParams);
+
+        LinearLayout searchRow = new LinearLayout(this);
+        searchRow.setOrientation(LinearLayout.HORIZONTAL);
+        searchRow.setGravity(Gravity.CENTER_VERTICAL);
+        EditText userSearch = new EditText(this);
+        userSearch.setSingleLine(true);
+        userSearch.setInputType(1);
+        userSearch.setHint("Найти пользователя по имени или @username");
+        searchRow.addView(userSearch, new LinearLayout.LayoutParams(0, dp(52), 1));
+        Button searchButton = new Button(this);
+        searchButton.setText("Найти");
+        searchRow.addView(searchButton);
+        screen.addView(searchRow, matchWrap());
+
+        LinearLayout results = new LinearLayout(this);
+        results.setOrientation(LinearLayout.VERTICAL);
+        searchResultsContainer = results;
+        screen.addView(results, matchWrap());
+        searchButton.setOnClickListener(v -> {
+            String query = userSearch.getText().toString().trim();
+            if (query.replace("@", "").trim().length() < 2) {
+                Toast.makeText(this, "Введите не менее двух символов для поиска.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            searchButton.setEnabled(false);
+            results.removeAllViews();
+            results.addView(text("Поиск пользователей…", 13, 0xFF586778), matchWrap());
+            executor.execute(() -> {
+                try {
+                    JSONArray found = api.searchUsers(query);
+                    runOnUiThread(() -> {
+                        searchButton.setEnabled(true);
+                        if (searchResultsContainer != results) return;
+                        results.removeAllViews();
+                        if (found.length() == 0) {
+                            results.addView(text("Пользователи не найдены.", 13, 0xFF586778), matchWrap());
+                            return;
+                        }
+                        for (int i = 0; i < found.length(); i++) {
+                            JSONObject person = found.optJSONObject(i);
+                            if (person == null) continue;
+                            String personId = person.optString("id", "");
+                            if (personId.isEmpty()) continue;
+                            String username = person.optString("username", "");
+                            String displayName = person.optString("displayName", username.isEmpty() ? "Пользователь" : username);
+                            LinearLayout resultRow = new LinearLayout(this);
+                            resultRow.setOrientation(LinearLayout.HORIZONTAL);
+                            resultRow.setGravity(Gravity.CENTER_VERTICAL);
+                            TextView personLabel = text(displayName + (username.isEmpty() ? "" : "\\n@" + username), 14, 0xFF263445);
+                            personLabel.setPadding(dp(8), dp(6), dp(8), dp(6));
+                            resultRow.addView(personLabel, new LinearLayout.LayoutParams(0, -2, 1));
+                            Button add = new Button(this);
+                            add.setText("Добавить");
+                            add.setOnClickListener(addView -> {
+                                add.setEnabled(false);
+                                executor.execute(() -> {
+                                    try {
+                                        api.addContact(personId, displayName);
+                                        runOnUiThread(() -> {
+                                            Toast.makeText(this, "Контакт добавлен.", Toast.LENGTH_SHORT).show();
+                                            refreshContacts();
+                                        });
+                                    } catch (Exception addError) {
+                                        String message = addError.getMessage() == null ? "Не удалось добавить контакт." : addError.getMessage();
+                                        runOnUiThread(() -> {
+                                            add.setEnabled(true);
+                                            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+                                        });
+                                    }
+                                });
+                            });
+                            resultRow.addView(add);
+                            results.addView(resultRow, matchWrap());
+                        }
+                    });
+                } catch (Exception searchError) {
+                    String message = searchError.getMessage() == null ? "Не удалось выполнить поиск." : searchError.getMessage();
+                    runOnUiThread(() -> {
+                        searchButton.setEnabled(true);
+                        if (searchResultsContainer == results) {
+                            results.removeAllViews();
+                            results.addView(text("Ошибка поиска: " + message, 13, 0xFFB42318), matchWrap());
+                        }
+                    });
+                }
+            });
+        });
 
         if (errorText != null) screen.addView(text(errorText, 13, 0xFFB42318), matchWrap());
         ScrollView scroll = new ScrollView(this);
