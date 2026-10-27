@@ -46,6 +46,7 @@ import socketio as socketio_server
 from channels import router as channels_router, channel_by_id, get_member, require_read_access
 from premium import router as premium_router, serialize_premium
 from group_management import router as group_management_router
+from phone_verification import router as phone_verification_router
 
 app = FastAPI(title="Our Social Network API")
 MESSAGE_RATE_LIMIT = 5
@@ -122,6 +123,7 @@ app.add_middleware(
 app.include_router(channels_router)
 app.include_router(premium_router)
 app.include_router(group_management_router)
+app.include_router(phone_verification_router)
 
 
 # ---------- Модели ----------
@@ -131,6 +133,10 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     username: str = Field(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_.-]+$")
     verificationToken: str = Field(min_length=32, max_length=256)
+    # Optional during migration so currently released web/Android clients keep working.
+    # New clients must supply both values; legacy accounts are migrated separately.
+    phone: str | None = Field(default=None, min_length=8, max_length=24)
+    phoneVerificationToken: str | None = Field(default=None, min_length=32, max_length=128)
 
 
 class SendEmailCodeRequest(BaseModel):
@@ -495,13 +501,34 @@ def register(payload: RegisterRequest):
         raise HTTPException(status_code=400, detail="Подтвердите email перед регистрацией.")
     if users.find_one({"email": email}):
         raise HTTPException(
-            status_code=400,
-            detail="Не удалось создать аккаунт. Проверьте данные и попробуйте снова.",
+            status_code=409,
+            detail="Этот адрес электронной почты уже используется.",
         )
+
+    phone = None
+    if payload.phone is not None or payload.phoneVerificationToken is not None:
+        if not payload.phone or not payload.phoneVerificationToken:
+            raise HTTPException(status_code=400, detail="Подтвердите номер телефона перед регистрацией.")
+        # Import the same normalization rule used by the phone-verification endpoints.
+        from phone_verification import normalize_phone
+        phone = normalize_phone(payload.phone)
+        if users.find_one({"phone": phone}, {"_id": 1}):
+            raise HTTPException(status_code=409, detail="Этот номер телефона уже используется.")
+
+        phone_token_hash = hashlib.sha256(payload.phoneVerificationToken.encode("utf-8")).hexdigest()
+        phone_tokens = get_db()["verified_phone_tokens"]
+        phone_token = phone_tokens.find_one_and_delete({
+            "phone": phone,
+            "tokenHash": phone_token_hash,
+            "expiresAt": {"$gt": datetime.now(timezone.utc)},
+        })
+        if not phone_token:
+            raise HTTPException(status_code=400, detail="Подтвердите номер телефона перед регистрацией.")
 
     created_at = datetime.now(timezone.utc)
     doc = {
         "email": email,
+        "phone": phone,
         "username": username,
         "displayName": username,
         "isEmailVerified": True,
@@ -530,6 +557,7 @@ def register(payload: RegisterRequest):
         "user": {
             "id": user_id,
             "email": email,
+            "phone": phone,
             "username": payload.username,
             "displayName": payload.username,
             "isEmailVerified": True,
