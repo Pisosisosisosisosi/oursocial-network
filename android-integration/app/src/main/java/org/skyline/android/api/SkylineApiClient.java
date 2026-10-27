@@ -111,6 +111,20 @@ public final class SkylineApiClient {
         return request("POST", "/messages", body, true);
     }
 
+    /** Sends an encrypted attachment envelope; clear media data is never sent to the API. */
+    public JSONObject sendAttachment(String receiverId, String type, String encryptedPayload) throws Exception {
+        if (!"image".equals(type) && !"file".equals(type)) throw new IllegalArgumentException("Unsupported attachment type");
+        if (encryptedPayload == null || !encryptedPayload.startsWith("skyline-e2e:v4:")) {
+            throw new IllegalArgumentException("Attachment must be encrypted with Skyline E2EE v4");
+        }
+        JSONObject body = new JSONObject();
+        body.put("receiverId", receiverId);
+        body.put("text", "");
+        body.put("type", type);
+        body.put("fileData", encryptedPayload);
+        return request("POST", "/messages", body, true);
+    }
+
     public void addContact(String userId, String nickname) throws Exception {
         if (userId == null || userId.trim().isEmpty()) throw new IllegalArgumentException("A user ID is required");
         JSONObject body = new JSONObject();
