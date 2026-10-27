@@ -228,7 +228,7 @@ public final class MainActivity extends Activity {
                             LinearLayout resultRow = new LinearLayout(this);
                             resultRow.setOrientation(LinearLayout.HORIZONTAL);
                             resultRow.setGravity(Gravity.CENTER_VERTICAL);
-                            TextView personLabel = text(displayName + (username.isEmpty() ? "" : "\\n@" + username), 14, 0xFF263445);
+                            TextView personLabel = text(displayName + (username.isEmpty() ? "" : "\n@" + username), 14, 0xFF263445);
                             personLabel.setPadding(dp(8), dp(6), dp(8), dp(6));
                             resultRow.addView(personLabel, new LinearLayout.LayoutParams(0, -2, 1));
                             Button add = new Button(this);
@@ -323,6 +323,7 @@ public final class MainActivity extends Activity {
         activeContactId = null;
         activeConversationTitle = null;
         activeMessageInput = null;
+        searchResultsContainer = null;
         setBusy(true);
         executor.execute(() -> {
             try {
